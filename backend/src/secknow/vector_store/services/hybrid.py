@@ -28,6 +28,8 @@ class HybridRetriever:
         top_k: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[SearchHit]:
+        if top_k <= 0:
+            return []
         dense_hits = self.dense_store.search(
             zone_id=zone_id,
             query_vec=query_vec,
@@ -38,6 +40,7 @@ class HybridRetriever:
             zone_id=zone_id,
             query=query,
             top_k=max(top_k * 5, top_k),
+            filters=filters,
         )
         return self._rrf_fuse(dense_hits, sparse_hits, top_k=top_k)
 

@@ -16,7 +16,7 @@ from secknow.vector_store.models import (
     ZoneId,
     generate_chunk_id,
 )
-from secknow.vector_store.stores.base import VectorStore
+from secknow.vector_store.stores.base import VectorStore, normalize_search_filters
 
 
 class QdrantVectorStore(VectorStore):
@@ -114,6 +114,8 @@ class QdrantVectorStore(VectorStore):
         filters: dict[str, Any] | None = None,
     ) -> list[SearchHit]:
         assert_zone(zone_id)
+        if top_k <= 0:
+            return []
         query_filter = self._build_query_filter(filters)
         response = self.client.query_points(
             collection_name=self._collection_name(zone_id),
@@ -129,8 +131,9 @@ class QdrantVectorStore(VectorStore):
         for point in points:
             payload = dict(point.payload or {})
             text = str(payload.pop("text", ""))
-            chunk_id = str(payload.get("chunk_id", point.id))
-            doc_id = str(payload.get("doc_id", ""))
+            chunk_id = str(payload.pop("chunk_id", point.id))
+            doc_id = str(payload.pop("doc_id", ""))
+            payload.pop("zone_id", None)
             score = float(getattr(point, "score", 0.0))
             hits.append(
                 SearchHit(
@@ -154,6 +157,35 @@ class QdrantVectorStore(VectorStore):
             points_selector=self.qm.PointIdsList(
                 points=[self._point_id(chunk_id) for chunk_id in chunk_ids]
             ),
+            wait=True,
+        )
+        return DeleteResult(
+            zone_id=zone_id,
+            requested=len(chunk_ids),
+            deleted=len(chunk_ids),
+            chunk_ids=chunk_ids,
+        )
+
+    def delete_by_doc_id(self, zone_id: ZoneId, doc_id: str) -> DeleteResult:
+        assert_zone(zone_id)
+        if not doc_id:
+            return DeleteResult(zone_id=zone_id, requested=0, deleted=0, chunk_ids=[])
+
+        doc_filter = self.qm.Filter(
+            must=[
+                self.qm.FieldCondition(
+                    key="doc_id",
+                    match=self.qm.MatchValue(value=doc_id),
+                )
+            ]
+        )
+        chunk_ids = self._list_chunk_ids(zone_id=zone_id, scroll_filter=doc_filter)
+        if not chunk_ids:
+            return DeleteResult(zone_id=zone_id, requested=0, deleted=0, chunk_ids=[])
+
+        self.client.delete(
+            collection_name=self._collection_name(zone_id),
+            points_selector=doc_filter,
             wait=True,
         )
         return DeleteResult(
@@ -232,8 +264,15 @@ class QdrantVectorStore(VectorStore):
             for row in records:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+        knowledge_count = sum(
+            1
+            for row in records
+            if row.get("payload", {}).get("record_type") == "knowledge"
+        )
         baseline_count = sum(
-            1 for row in records if row.get("payload", {}).get("record_type") == "baseline"
+            1
+            for row in records
+            if row.get("payload", {}).get("record_type") == "baseline"
         )
         manifest = ExportManifest(
             zone_id=zone_id,
@@ -244,7 +283,7 @@ class QdrantVectorStore(VectorStore):
             normalized=True,
             chunk_strategy=self.chunk_strategy,
             build_time=utc_now_iso(),
-            record_count=len(records),
+            record_count=knowledge_count,
             baseline_count=baseline_count,
         )
         manifest_path.write_text(
@@ -253,10 +292,12 @@ class QdrantVectorStore(VectorStore):
         )
         return {
             "zone_id": zone_id,
+            "engine": "qdrant",
             "target_dir": str(zone_dir),
             "records_file": str(records_path),
             "manifest_file": str(manifest_path),
-            "record_count": len(records),
+            "record_count": knowledge_count,
+            "baseline_count": baseline_count,
         }
 
     def _collection_name(self, zone_id: ZoneId) -> str:
@@ -285,24 +326,45 @@ class QdrantVectorStore(VectorStore):
         return str(uuid.uuid5(uuid.NAMESPACE_URL, chunk_id))
 
     def _build_query_filter(self, filters: dict[str, Any] | None) -> Any:
+        normalized_filters = normalize_search_filters(filters)
         conditions = []
-        if not filters or "record_type" not in filters:
+        for key, value in normalized_filters.items():
             conditions.append(
                 self.qm.FieldCondition(
-                    key="record_type", match=self.qm.MatchValue(value="knowledge")
+                    key=key,
+                    match=self.qm.MatchValue(value=value),
                 )
             )
-        for key, value in (filters or {}).items():
-            if isinstance(value, (str, int, float, bool)):
-                conditions.append(
-                    self.qm.FieldCondition(
-                        key=key,
-                        match=self.qm.MatchValue(value=value),
-                    )
-                )
         if not conditions:
             return None
         return self.qm.Filter(must=conditions)
+
+    def _list_chunk_ids(
+        self,
+        zone_id: ZoneId,
+        filters: dict[str, Any] | None = None,
+        scroll_filter: Any | None = None,
+    ) -> list[str]:
+        chunk_ids: list[str] = []
+        offset: Any = None
+        filter_obj = scroll_filter if scroll_filter is not None else self._build_query_filter(filters)
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self._collection_name(zone_id),
+                scroll_filter=filter_obj,
+                with_payload=True,
+                with_vectors=False,
+                limit=256,
+                offset=offset,
+            )
+            for point in points:
+                payload = dict(point.payload or {})
+                chunk_id = payload.get("chunk_id")
+                if chunk_id:
+                    chunk_ids.append(str(chunk_id))
+            if offset is None:
+                break
+        return chunk_ids
 
     def _extract_embedding_dim(self, records: list[dict[str, Any]]) -> int:
         if not records:

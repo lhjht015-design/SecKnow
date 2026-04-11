@@ -20,7 +20,7 @@ from secknow.vector_store.models import (
     ZoneId,
     generate_chunk_id,
 )
-from secknow.vector_store.stores.base import VectorStore
+from secknow.vector_store.stores.base import VectorStore, normalize_search_filters
 
 try:
     import faiss
@@ -30,16 +30,6 @@ except ImportError:  # pragma: no cover - 依赖运行环境
 
 class FaissSqliteVectorStore(VectorStore):
     """离线向量存储后端（SQLite 元数据 + FAISS ANN 索引）。"""
-
-    _FILTERABLE_FIELDS = {
-        "doc_id",
-        "filename",
-        "source_path",
-        "extension",
-        "file_type",
-        "language",
-        "record_type",
-    }
 
     def __init__(
         self,
@@ -194,11 +184,21 @@ class FaissSqliteVectorStore(VectorStore):
         filters: dict[str, Any] | None = None,
     ) -> list[SearchHit]:
         assert_zone(zone_id)
+        if top_k <= 0:
+            return []
         if len(query_vec) != self.embedding_dim:
             raise ValueError(
                 f"Query vector dim mismatch: expected {self.embedding_dim}, got {len(query_vec)}"
             )
         self.ensure_zone(zone_id, self.embedding_dim)
+        normalized_filters = normalize_search_filters(filters)
+        if normalized_filters.get("record_type") != "knowledge":
+            return self._search_rows_exact(
+                zone_id=zone_id,
+                query_vec=query_vec,
+                top_k=top_k,
+                filters=normalized_filters,
+            )
         index = self._load_zone_index(zone_id)
         if index.ntotal == 0:
             return []
@@ -211,7 +211,7 @@ class FaissSqliteVectorStore(VectorStore):
         if not candidate_ids:
             return []
 
-        rows = self._fetch_rows_by_ids(zone_id, candidate_ids, filters)
+        rows = self._fetch_rows_by_ids(zone_id, candidate_ids, normalized_filters)
         row_map = {int(row["id"]): row for row in rows}
 
         hits: list[SearchHit] = []
@@ -219,20 +219,6 @@ class FaissSqliteVectorStore(VectorStore):
             row = row_map.get(int(idx))
             if row is None:
                 continue
-            metadata = {
-                "filename": row["filename"],
-                "source_path": row["source_path"],
-                "extension": row["extension"],
-                "chunk_index": row["chunk_index"],
-                "chunk_count": row["chunk_count"],
-                "char_len": row["char_len"],
-                "content_hash": row["content_hash"],
-                "mtime": row["mtime"],
-                "size_bytes": row["size_bytes"],
-                "file_type": row["file_type"],
-                "language": row["language"],
-                "record_type": row["record_type"],
-            }
             hits.append(
                 SearchHit(
                     chunk_id=row["chunk_id"],
@@ -240,7 +226,7 @@ class FaissSqliteVectorStore(VectorStore):
                     zone_id=zone_id,
                     score=float(score),
                     text=row["text"],
-                    metadata=metadata,
+                    metadata=_public_metadata(row),
                 )
             )
             if len(hits) >= top_k:
@@ -262,6 +248,48 @@ class FaissSqliteVectorStore(VectorStore):
                 WHERE zone_id = ? AND chunk_id IN ({placeholders})
                 """,
                 (now, zone_id, *chunk_ids),
+            )
+            conn.commit()
+        self._rebuild_zone_index(zone_id)
+        deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        return DeleteResult(
+            zone_id=zone_id,
+            requested=len(chunk_ids),
+            deleted=deleted,
+            chunk_ids=chunk_ids,
+        )
+
+    def delete_by_doc_id(self, zone_id: ZoneId, doc_id: str) -> DeleteResult:
+        assert_zone(zone_id)
+        if not doc_id:
+            return DeleteResult(zone_id=zone_id, requested=0, deleted=0, chunk_ids=[])
+
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT chunk_id
+                FROM chunks
+                WHERE zone_id = ? AND doc_id = ? AND is_deleted = 0
+                ORDER BY id ASC
+                """,
+                (zone_id, doc_id),
+            ).fetchall()
+            if not rows:
+                return DeleteResult(
+                    zone_id=zone_id,
+                    requested=0,
+                    deleted=0,
+                    chunk_ids=[],
+                )
+            chunk_ids = [str(row["chunk_id"]) for row in rows]
+            cursor = conn.execute(
+                """
+                UPDATE chunks
+                SET is_deleted = 1, updated_at = ?
+                WHERE zone_id = ? AND doc_id = ? AND is_deleted = 0
+                """,
+                (now, zone_id, doc_id),
             )
             conn.commit()
         self._rebuild_zone_index(zone_id)
@@ -374,11 +402,14 @@ class FaissSqliteVectorStore(VectorStore):
 
         return {
             "zone_id": zone_id,
+            "engine": "faiss+sqlite",
             "target_dir": str(zone_dir),
             "sqlite_file": str(sqlite_out_path),
             "faiss_file": str(index_out_path),
             "manifest_file": str(manifest_path),
             "checksums_file": str(checksums_path),
+            "record_count": counts["knowledge"],
+            "baseline_count": counts["baseline"],
         }
 
     def _fetch_rows_by_ids(
@@ -387,24 +418,70 @@ class FaissSqliteVectorStore(VectorStore):
         candidate_ids: list[int],
         filters: dict[str, Any] | None = None,
     ) -> list[sqlite3.Row]:
+        normalized_filters = normalize_search_filters(filters)
         placeholders = ",".join(["?"] * len(candidate_ids))
         params: list[Any] = [zone_id, *candidate_ids]
         sql = f"""
             SELECT id, chunk_id, doc_id, zone_id, record_type, text, filename, source_path, extension,
                    chunk_index, chunk_count, char_len, content_hash, mtime, size_bytes, file_type, language
             FROM chunks
-            WHERE zone_id = ? AND is_deleted = 0 AND record_type = 'knowledge'
+            WHERE zone_id = ? AND is_deleted = 0
               AND id IN ({placeholders})
         """
-        for key, value in (filters or {}).items():
-            if key not in self._FILTERABLE_FIELDS:
-                continue
-            if isinstance(value, (str, int, float, bool)):
-                sql += f" AND {key} = ?"
-                params.append(value)
+        for key, value in normalized_filters.items():
+            sql += f" AND {key} = ?"
+            params.append(value)
 
         with self._connect() as conn:
             return conn.execute(sql, params).fetchall()
+
+    def _search_rows_exact(
+        self,
+        zone_id: ZoneId,
+        query_vec: list[float],
+        top_k: int,
+        filters: dict[str, Any],
+    ) -> list[SearchHit]:
+        params: list[Any] = [zone_id]
+        sql = """
+            SELECT c.id, c.chunk_id, c.doc_id, c.zone_id, c.record_type, c.text, c.filename,
+                   c.source_path, c.extension, c.chunk_index, c.chunk_count, c.char_len,
+                   c.content_hash, c.mtime, c.size_bytes, c.file_type, c.language, v.vector
+            FROM chunks c
+            JOIN chunk_vectors v ON c.chunk_id = v.chunk_id
+            WHERE c.zone_id = ? AND c.is_deleted = 0
+        """
+        for key, value in filters.items():
+            sql += f" AND c.{key} = ?"
+            params.append(value)
+
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        if not rows:
+            return []
+
+        query = self._normalize(np.asarray(query_vec, dtype=np.float32))
+        scored: list[tuple[float, sqlite3.Row]] = []
+        for row in rows:
+            vector = np.frombuffer(row["vector"], dtype=np.float32)
+            score = float(np.dot(query, vector))
+            scored.append((score, row))
+        scored.sort(key=lambda item: item[0], reverse=True)
+
+        hits: list[SearchHit] = []
+        for score, row in scored[:top_k]:
+            hits.append(
+                SearchHit(
+                    chunk_id=row["chunk_id"],
+                    doc_id=row["doc_id"],
+                    zone_id=zone_id,
+                    score=score,
+                    text=row["text"],
+                    metadata=_public_metadata(row),
+                )
+            )
+        return hits
 
     def _rebuild_zone_index(self, zone_id: ZoneId) -> None:
         with self._connect() as conn:
@@ -596,3 +673,20 @@ class FaissSqliteVectorStore(VectorStore):
         with self._connect() as conn:
             conn.executescript(self._schema_sql())
             conn.commit()
+
+
+def _public_metadata(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
+    return {
+        "filename": row["filename"],
+        "source_path": row["source_path"],
+        "extension": row["extension"],
+        "chunk_index": row["chunk_index"],
+        "chunk_count": row["chunk_count"],
+        "char_len": row["char_len"],
+        "content_hash": row["content_hash"],
+        "mtime": row["mtime"],
+        "size_bytes": row["size_bytes"],
+        "file_type": row["file_type"],
+        "language": row["language"],
+        "record_type": row["record_type"],
+    }

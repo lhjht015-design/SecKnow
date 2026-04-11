@@ -1,73 +1,74 @@
-## Phase 1 边界
+# 4.3 Vector Store（Phase 2 进度）
 
-已完成：
+本目录实现 4.3 向量存储层的在线/离线统一能力，并在 Phase 2 完成统一过滤契约、文档级删除与导出统计口径对齐。
 
-- 统一数据模型：`ChunkRecord / SearchHit / BaselineBundle / ExportManifest`
-- 统一服务契约：`ensure_zone / upsert / search / hybrid_search / delete / export_zone / get_baseline`
+## 当前状态
+
+Phase 1（基础设施）已完成：
+
+- 统一数据模型：`ChunkRecord / SearchHit / SparseHit / BaselineBundle / ExportManifest`
+- 统一门面：`VectorInfrastructureService`
 - 在线后端：`QdrantVectorStore`
-- 离线后端：`FaissSqliteVectorStore`
-- dense + sparse 融合：`HybridRetriever`
+- 离线后端：`FaissSqliteVectorStore` + `SQLiteFtsSparseIndex`
+- 融合检索：`HybridRetriever`（dense + sparse, RRF 融合）
 
-暂不做：
+Phase 2（契约统一）已完成：
 
-- IVF-PQ 参数优化
-- 完整 REST API
-- 前端联调
-- 真实召回质量调优
+- 新增文档级删除接口：`delete_by_doc_id(zone_id, doc_id)`
+- 统一检索过滤字段白名单：
+  - `doc_id, filename, source_path, extension, file_type, language, record_type`
+- 非法过滤字段统一忽略，不抛错
+- `search()` / `hybrid_search()` 默认限定 `record_type=knowledge`
+- 仅当显式 `filters={"record_type":"baseline"}` 时允许普通检索返回 baseline
+- `get_baseline()` 始终只返回 baseline
+- `export_zone()` 统一统计口径：
+  - `record_count` = knowledge 数量
+  - `baseline_count` = baseline 数量
+  - 在线/离线返回字典均显式包含这两个字段
+- 修复在线 `delete_by_doc_id` 行为，确保同 `doc_id` 下 knowledge 与 baseline 都能删除
 
-# Phase 1 设计说明（4.3）
-
-## 1. 目标
-
-第一阶段只做一件事：把 4.3 模块从 demo 脚本升级为可持续演进的检索基础设施层。  
-即：**先定边界和契约，再做性能优化。**
-
-## 2. 4.3 对外契约
+## 对外接口（4.5/4.4 调用）
 
 统一通过 `VectorInfrastructureService` 暴露：
 
 - `ensure_zone(zone_id, dim)`
 - `upsert(zone_id, records)`
-- `search(zone_id, query_vec, top_k, filters)`
-- `hybrid_search(zone_id, query, query_vec, top_k, filters)`
+- `search(zone_id, query_vec, top_k=10, filters=None)`
+- `hybrid_search(zone_id, query, query_vec, top_k=10, filters=None)`
 - `delete(zone_id, chunk_ids)`
+- `delete_by_doc_id(zone_id, doc_id)`
 - `export_zone(zone_id, target_dir)`
 - `get_baseline(zone_id)`
 
-## 3. 模块分层
+## 模块结构
 
-- 领域模型层：`src/secknow/vector_store/models.py`
-- 抽象接口层：`src/secknow/vector_store/stores/base.py`
-- 后端实现层：
-  - `QdrantVectorStore`（在线）
-  - `FaissSqliteVectorStore`（离线）
-- 兼容服务层：
-  - `HybridRetriever`（dense+sparse 融合）
-  - `VectorInfrastructureService`（统一门面）
+- 模型与契约：`src/secknow/vector_store/models.py`
+- 抽象与过滤契约：`src/secknow/vector_store/stores/base.py`
+- 在线实现：`src/secknow/vector_store/stores/qdrant_store.py`
+- 离线实现：`src/secknow/vector_store/stores/faiss_sqlite_store.py`
+- 稀疏检索：`src/secknow/vector_store/services/sparse.py`
+- 融合层：`src/secknow/vector_store/services/hybrid.py`
+- 统一门面：`src/secknow/vector_store/services/vector_service.py`
 
-## 4. 在线与离线差异处理
+## 测试进度（Phase 2）
 
-- 在线（Qdrant）
-  - 三分区按 collection 隔离：`knowledge_cyber/ai/crypto`
-  - payload 保存文本与元数据
-  - payload index 覆盖常见过滤字段
-- 离线（FAISS + SQLite）
-  - SQLite 管理 chunk 原文、元数据、删除标记、FTS5
-  - FAISS 管理向量 ANN（Phase 1 使用 `IndexFlatIP`）
-  - 删除策略：软删 + 重建索引
+新增契约测试文件：
 
-## 5. Hybrid 策略
+- `src/secknow/vector_store/tests/test_unified_contract.py`
 
-`hybrid_search` 固定在兼容层实现，避免深绑任一后端：
+覆盖点：
 
-1. dense: `VectorStore.search(...)`
-2. sparse: BM25（在线内存 BM25 / 离线 SQLite FTS5）
-3. fusion: RRF（Reciprocal Rank Fusion）
+- offline dense/sparse/hybrid 默认仅返回 knowledge
+- 显式 baseline 过滤时 dense/sparse/hybrid 可查 baseline
+- 非法过滤字段被忽略
+- offline / online `delete_by_doc_id`
+- offline / online `export_zone` 统计字段
+- `get_baseline` 仅返回 baseline
 
-## 6. 与 Vue 前端的接入方式
+## 调用链路
 
-前端不直接调用 `stores/*`。建议链路保持：
+建议保持：
 
 `Vue(4.6) -> FastAPI(4.5) -> VectorInfrastructureService(4.3)`
 
-后续 4.5 只需要把 HTTP 入参映射到 `VectorInfrastructureService` 方法即可，不需要感知底层是 Qdrant 还是 FAISS。
+4.5 只需映射 HTTP 入参与返回值，不应直接耦合 `stores/*` 实现细节。

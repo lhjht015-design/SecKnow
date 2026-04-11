@@ -13,6 +13,31 @@ from secknow.vector_store.models import (
 )
 
 
+FILTERABLE_FIELDS = frozenset(
+    {
+        "doc_id",
+        "filename",
+        "source_path",
+        "extension",
+        "file_type",
+        "language",
+        "record_type",
+    }
+)
+
+
+def normalize_search_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
+    """Apply the shared 4.3 filtering contract across all backends."""
+    normalized: dict[str, Any] = {}
+    for key, value in (filters or {}).items():
+        if key not in FILTERABLE_FIELDS:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            normalized[key] = value
+    normalized.setdefault("record_type", "knowledge")
+    return normalized
+
+
 class VectorStore(ABC):
     @abstractmethod
     def ensure_zone(self, zone_id: ZoneId, dim: int) -> None:
@@ -35,6 +60,10 @@ class VectorStore(ABC):
     @abstractmethod
     def delete(self, zone_id: ZoneId, chunk_ids: list[str]) -> DeleteResult:
         """按外部 chunk_id 删除 chunk。"""
+
+    @abstractmethod
+    def delete_by_doc_id(self, zone_id: ZoneId, doc_id: str) -> DeleteResult:
+        """按文档级 doc_id 删除该文档的全部 chunk。"""
 
     @abstractmethod
     def get_baseline(self, zone_id: ZoneId) -> BaselineBundle:

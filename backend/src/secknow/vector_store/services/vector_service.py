@@ -21,7 +21,9 @@ class VectorInfrastructureService:
     def __init__(self, dense_store: VectorStore, sparse_index: SparseTextIndex) -> None:
         self.dense_store = dense_store
         self.sparse_index = sparse_index
-        self.hybrid = HybridRetriever(dense_store=dense_store, sparse_index=sparse_index)
+        self.hybrid = HybridRetriever(
+            dense_store=dense_store, sparse_index=sparse_index
+        )
 
     def ensure_zone(self, zone_id: ZoneId, dim: int) -> None:
         self.dense_store.ensure_zone(zone_id=zone_id, dim=dim)
@@ -38,6 +40,8 @@ class VectorInfrastructureService:
         top_k: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[SearchHit]:
+        if top_k <= 0:
+            return []
         return self.dense_store.search(
             zone_id=zone_id,
             query_vec=query_vec,
@@ -53,6 +57,8 @@ class VectorInfrastructureService:
         top_k: int = 10,
         filters: dict[str, Any] | None = None,
     ) -> list[SearchHit]:
+        if top_k <= 0:
+            return []
         return self.hybrid.hybrid_search(
             zone_id=zone_id,
             query=query,
@@ -64,6 +70,11 @@ class VectorInfrastructureService:
     def delete(self, zone_id: ZoneId, chunk_ids: list[str]) -> DeleteResult:
         result = self.dense_store.delete(zone_id=zone_id, chunk_ids=chunk_ids)
         self.sparse_index.delete(zone_id=zone_id, chunk_ids=chunk_ids)
+        return result
+
+    def delete_by_doc_id(self, zone_id: ZoneId, doc_id: str) -> DeleteResult:
+        result = self.dense_store.delete_by_doc_id(zone_id=zone_id, doc_id=doc_id)
+        self.sparse_index.delete_by_doc_id(zone_id=zone_id, doc_id=doc_id)
         return result
 
     def export_zone(self, zone_id: ZoneId, target_dir: str) -> dict[str, Any]:
