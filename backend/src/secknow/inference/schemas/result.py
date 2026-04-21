@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SearchResult(BaseModel):
+    """语义检索结果项。"""
+
     model_config = ConfigDict(extra="forbid")
 
     chunk_id: str
@@ -17,6 +19,8 @@ class SearchResult(BaseModel):
 
 
 class CodeRiskItem(BaseModel):
+    """单个代码扫描单元对应的风险结果。"""
+
     model_config = ConfigDict(extra="forbid")
 
     code_unit: str
@@ -26,6 +30,8 @@ class CodeRiskItem(BaseModel):
 
 
 class CodeRiskResult(BaseModel):
+    """代码风险扫描整体结果。"""
+
     model_config = ConfigDict(extra="forbid")
 
     lang: str

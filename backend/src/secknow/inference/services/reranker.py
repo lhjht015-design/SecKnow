@@ -7,7 +7,7 @@ from ..models import RankedSearchResult
 
 
 class SearchReranker:
-    """Small local reranker for 4.4 search output."""
+    """4.4 检索结果的本地轻量重排器。"""
 
     def rerank(self, query: str, hits: list[SearchHit]) -> list[RankedSearchResult]:
         terms = [term for term in query.lower().split() if term]

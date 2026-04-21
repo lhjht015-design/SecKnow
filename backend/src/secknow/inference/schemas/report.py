@@ -6,6 +6,8 @@ from .result import CodeRiskResult, SearchResult
 
 
 class SearchReport(BaseModel):
+    """面向展示层的语义检索报告。"""
+
     model_config = ConfigDict(extra="forbid")
 
     query: str
@@ -14,6 +16,8 @@ class SearchReport(BaseModel):
 
 
 class CodeRiskReport(BaseModel):
+    """面向展示层的代码风险扫描报告。"""
+
     model_config = ConfigDict(extra="forbid")
 
     total: int

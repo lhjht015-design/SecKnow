@@ -11,7 +11,7 @@ from .services.semantic_search import SemanticSearchService
 
 
 class InferenceService:
-    """Public 4.4 facade for 4.5 API and later application wiring."""
+    """给 4.5 和后续应用层使用的 4.4 统一门面。"""
 
     def __init__(self, vector_service: VectorInfrastructureService) -> None:
         self.vector_service = vector_service

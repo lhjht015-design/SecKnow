@@ -6,7 +6,7 @@ from ..exceptions import QueryEncodingError
 
 
 class QueryEncoder:
-    """Reuse 4.1 embedding infrastructure for query encoding."""
+    """复用 4.1 编码基础设施完成查询向量化。"""
 
     def __init__(
         self,

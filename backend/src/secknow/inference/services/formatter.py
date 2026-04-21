@@ -5,7 +5,7 @@ from ..schemas.result import SearchResult
 
 
 class SearchResultFormatter:
-    """Convert retrieval hits into stable 4.4 result schema."""
+    """将检索命中转换为稳定的 4.4 结果结构。"""
 
     def format(self, ranked_results: list[RankedSearchResult]) -> list[SearchResult]:
         formatted: list[SearchResult] = []

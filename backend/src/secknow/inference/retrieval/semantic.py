@@ -7,7 +7,7 @@ from secknow.vector_store.services.vector_service import VectorInfrastructureSer
 
 
 class SemanticRetriever:
-    """Thin 4.4 adapter over 4.3 retrieval methods."""
+    """4.4 对 4.3 检索方法的轻量适配器。"""
 
     def __init__(self, vector_service: VectorInfrastructureService) -> None:
         self.vector_service = vector_service

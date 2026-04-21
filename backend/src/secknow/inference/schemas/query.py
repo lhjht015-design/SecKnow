@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SemanticQuery(BaseModel):
+    """语义检索请求结构。"""
+
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1)
@@ -13,6 +15,8 @@ class SemanticQuery(BaseModel):
 
 
 class CodeScanQuery(BaseModel):
+    """代码风险扫描请求结构。"""
+
     model_config = ConfigDict(extra="forbid")
 
     code_snippet: str = Field(min_length=1)

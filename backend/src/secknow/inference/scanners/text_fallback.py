@@ -4,7 +4,7 @@ from .base import CodeScanner
 
 
 class TextFallbackScanner(CodeScanner):
-    """Simple line/block splitter used before AST-based scanning is implemented."""
+    """在 AST 扫描落地前使用的简单文本分块扫描器。"""
 
     def __init__(self, language: str) -> None:
         self.language = language

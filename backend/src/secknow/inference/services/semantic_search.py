@@ -12,7 +12,7 @@ from .reranker import SearchReranker
 
 
 class SemanticSearchService:
-    """4.4 semantic retrieval workflow."""
+    """4.4 语义检索主流程。"""
 
     def __init__(self, vector_service: VectorInfrastructureService) -> None:
         self.vector_service = vector_service

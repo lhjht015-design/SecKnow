@@ -13,7 +13,7 @@ from .reranker import SearchReranker
 
 
 class CodeRiskScanService:
-    """4.4 code risk scan workflow skeleton."""
+    """4.4 代码风险扫描主流程骨架。"""
 
     def __init__(self, vector_service: VectorInfrastructureService) -> None:
         self.vector_service = vector_service

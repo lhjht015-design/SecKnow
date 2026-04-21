@@ -14,6 +14,7 @@ def build_online_service(
     qdrant_port: int = 6333,
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
     distance: str = "cosine",
+    sparse_db_path: str | Path | None = None,
 ) -> VectorInfrastructureService:
     dense_store = QdrantVectorStore(
         host=qdrant_host,
@@ -21,7 +22,11 @@ def build_online_service(
         embedding_model=embedding_model,
         distance=distance,
     )
-    sparse_index = MemoryBm25Index()
+    sparse_index = (
+        SQLiteFtsSparseIndex(db_path=sparse_db_path)
+        if sparse_db_path is not None
+        else MemoryBm25Index()
+    )
     return VectorInfrastructureService(dense_store=dense_store, sparse_index=sparse_index)
 
 

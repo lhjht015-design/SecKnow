@@ -1,1 +1,1 @@
-"""Inference tests package."""
+"""4.4 推理模块测试包。"""

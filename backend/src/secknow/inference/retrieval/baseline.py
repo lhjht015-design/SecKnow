@@ -5,7 +5,7 @@ from secknow.vector_store.services.vector_service import VectorInfrastructureSer
 
 
 class BaselineRetriever:
-    """Thin 4.4 adapter over 4.3 baseline access."""
+    """4.4 对 4.3 基线读取能力的轻量适配器。"""
 
     def __init__(self, vector_service: VectorInfrastructureService) -> None:
         self.vector_service = vector_service

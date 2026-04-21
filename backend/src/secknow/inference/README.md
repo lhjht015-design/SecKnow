@@ -1,30 +1,30 @@
-# 4.4 Inference
+# 4.4 推理模块
 
-`secknow.inference` is the 4.4 orchestration layer.
+`secknow.inference` 是 4.4 的编排层。
 
-It sits between:
+它位于以下模块之间：
 
-- 4.5 API: receives user-facing query requests
-- 4.3 vector_store: provides dense / hybrid retrieval and baseline access
-- 4.1 text_processing: provides the embedding path reused for query encoding
+- 4.5 API：接收面向用户的查询请求
+- 4.3 `vector_store`：提供稠密检索、混合检索和基线读取
+- 4.1 `text_processing`：提供可复用的查询编码路径
 
-## Scope
+## 职责范围
 
-4.4 is responsible for:
+4.4 负责：
 
-- semantic retrieval orchestration
-- code risk scan orchestration
-- query encoding reuse
-- result reranking
-- result formatting
+- 语义检索流程编排
+- 代码风险扫描流程编排
+- 复用查询编码能力
+- 检索结果重排
+- 结果格式化输出
 
-4.4 is not responsible for:
+4.4 不负责：
 
-- document ingestion and chunk generation
-- vector persistence implementation
-- direct HTTP routing
+- 文档入库和分块生产
+- 向量存储底层实现
+- HTTP 路由处理
 
-## Current directory layout
+## 当前目录结构
 
 ```text
 inference/
@@ -41,58 +41,58 @@ inference/
 └── tests/
 ```
 
-## Responsibilities by file
+## 文件职责
 
 - `facade.py`
-  - public 4.4 entrypoints for 4.5
-  - keeps API layer away from internal service wiring
+  - 给 4.5 使用的 4.4 统一入口
+  - 隔离 API 层与 4.4 内部服务装配细节
 - `config.py`
-  - default top-k, rerank weights, supported languages
+  - 默认 `top_k`、重排权重、支持语言等配置
 - `models.py`
-  - internal dataclasses shared inside 4.4
+  - 4.4 内部共享的数据模型
 - `schemas/*`
-  - request / response contracts consumed by 4.5 and 4.6
+  - 4.5 / 4.6 消费的请求响应契约
 - `services/query_encoder.py`
-  - reuses 4.1 embedding path for query encoding
+  - 复用 4.1 的编码能力完成查询向量化
 - `services/semantic_search.py`
-  - query -> encode -> retrieve -> rerank -> format
+  - 查询 -> 编码 -> 检索 -> 重排 -> 格式化
 - `services/code_risk_scan.py`
-  - code risk scan workflow
+  - 代码风险扫描主流程
 - `services/reranker.py`
-  - local result reranking policy
+  - 本地结果重排策略
 - `services/formatter.py`
-  - normalize raw search hits into UI/API friendly output
+  - 将原始检索命中统一转换为 UI / API 友好的输出
 - `retrieval/semantic.py`
-  - thin adapter over 4.3 `search()` / `hybrid_search()`
+  - 对 4.3 `search()` / `hybrid_search()` 的轻量封装
 - `retrieval/baseline.py`
-  - thin adapter over 4.3 `get_baseline()`
+  - 对 4.3 `get_baseline()` 的轻量封装
 - `scanners/router.py`
-  - picks language-specific code scanner
+  - 按语言选择代码扫描器
 - `scanners/text_fallback.py`
-  - first-stage fallback scanner without AST dependencies
+  - 第一阶段不依赖 AST 的降级扫描器
 - `scanners/treesitter_scan.py`
-  - reserved AST-based scanner entrypoint
+  - 预留给 AST 扫描的 `tree-sitter` 入口
 
-## Intended public APIs
+## 对外接口
 
 - `semantic_search(query, zone_id, top_k=10, filters=None)`
 - `code_risk_scan(code_snippet, lang, zone_id="cyber", top_k=10)`
 
-## Current implementation stage
+## 当前实现阶段
 
-This directory is scaffolded as the initial 4.4 baseline.
+当前目录已完成 4.4 的初始骨架。
 
-Implemented now:
+目前已具备：
 
-- package layout
-- schema definitions
-- service wiring
-- semantic search skeleton
-- code scan skeleton
+- 包结构
+- Schema 定义
+- 服务装配
+- 语义检索骨架
+- 代码扫描骨架
 
-Planned next:
+下一步建议：
 
-1. wire a concrete API layer in 4.5
-2. tune rerank policy against real retrieval samples
-3. replace fallback code scanning with tree-sitter based slicing
-4. add integration tests against offline vector store
+1. 在 4.5 中接入实际 API 层
+2. 基于真实检索样本调整重排策略
+3. 用 `tree-sitter` 切片替换当前降级扫描器
+4. 补离线向量库集成测试

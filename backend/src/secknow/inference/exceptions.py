@@ -2,12 +2,12 @@ from __future__ import annotations
 
 
 class InferenceError(Exception):
-    """Base exception for 4.4 inference module."""
+    """4.4 推理模块基础异常。"""
 
 
 class QueryEncodingError(InferenceError):
-    """Raised when a query cannot be encoded."""
+    """查询无法完成编码时抛出。"""
 
 
 class UnsupportedLanguageError(InferenceError):
-    """Raised when a code scan language is not supported."""
+    """代码扫描语言不受支持时抛出。"""
