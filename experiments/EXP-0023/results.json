@@ -1,0 +1,117 @@
+{
+  "summary": {
+    "positive_total": 4,
+    "positive_solved": 4,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "total_probes": 2171,
+    "mean_elapsed_ms": 3864.6
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "note": "ELF 每匹配一字节 sleep 6ms",
+      "negative": false,
+      "path": [
+        "solve_timing_checker"
+      ],
+      "refusals": [],
+      "probes": 387,
+      "mode": "timing",
+      "detect_ms": 2171.3,
+      "attempts": 1,
+      "reason": null,
+      "recovered": "flag{t1ming}",
+      "delay_ms": 6.42,
+      "solved": true,
+      "elapsed_ms": 11050.3
+    },
+    {
+      "id": "T2",
+      "note": "Python 每匹配一字节 sleep 2ms",
+      "negative": false,
+      "path": [
+        "solve_timing_checker"
+      ],
+      "refusals": [],
+      "probes": 485,
+      "mode": "timing",
+      "detect_ms": 219.0,
+      "attempts": 1,
+      "reason": null,
+      "recovered": "flag{t1m3}",
+      "delay_ms": 2.52,
+      "solved": true,
+      "elapsed_ms": 1464.2
+    },
+    {
+      "id": "R1",
+      "note": "数字前缀校验器（v023 回归）",
+      "negative": false,
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 594,
+      "mode": "check_num",
+      "detect_ms": 550.3,
+      "reason": null,
+      "recovered": "flag{elf_prefix_int}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 2442.0
+    },
+    {
+      "id": "E4",
+      "note": "ELF 变换程序（批量加速）",
+      "negative": false,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 221,
+      "mode": "enc",
+      "detect_ms": 552.9,
+      "reason": null,
+      "recovered": "flag{elf_transform_ok}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 1459.9
+    },
+    {
+      "id": "N1",
+      "note": "恒定 sleep 5ms，与输入无关",
+      "negative": true,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "solve_timing_checker",
+          "reason": "timing_signal_weak"
+        }
+      ],
+      "probes": 484,
+      "mode": "timing",
+      "detect_ms": 1722.4,
+      "attempts": 3,
+      "reason": "timing_signal_weak",
+      "refused": true,
+      "elapsed_ms": 5493.7
+    },
+    {
+      "id": "N2",
+      "note": "每字节 0.2ms，埋在进程噪声里",
+      "negative": true,
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "mode": "none",
+      "detect_ms": 1277.6,
+      "reason": "no_prefix_signal",
+      "refused": true,
+      "elapsed_ms": 1277.6
+    }
+  ]
+}

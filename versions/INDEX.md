@@ -34,6 +34,7 @@
 | v022 | [v022_attachment_entry.src](v022_attachment_entry.src) | 按附件后缀/魔数自动建立 oracle 入口（脚本/zip/ELF/文本） | Python + WSL | 正样本 6/6，负样本 4/4 |
 | v023 | [v023_elf_prefix.src](v023_elf_prefix.src) | ELF 校验器前缀接口：enc/check_num/check_exit 检测与归一 | Python + WSL | 正样本 4/4，负样本 2/2 |
 | v024 | [v024_timing_channel.src](v024_timing_channel.src) | 时序侧信道前缀爬坡：基线 + 频率序早停 + 结束验证 | Python + WSL | 正样本 3/3，负样本 2/2 |
+| v025 | [v025_parallel_oracle.src](v025_parallel_oracle.src) | 并行探测优化：Q/Y 批量协议 + 时序/结果分流 | Python + WSL | 正样本 4/4，负样本 2/2 |
 
 ## 各版本说明
 
@@ -892,3 +893,45 @@ python versions/v024_timing_channel.src --only T1
 ```
 
 **产出**：`experiments/EXP-0022/{lab/,chal/,results.json,report.md}`
+
+### v025_parallel_oracle.src
+
+**回答的问题**：v024 的时序/前缀爬坡是串行的，每次探测都在等一个进程或一次 sleep。
+能不能批量并发，同时不破坏测量精度？
+
+**改动**
+
+1. worker 新增批量协议：`Q <n>` → n 个耗时，`Y <n>` → n 个结果；
+   worker 内 8 路线程池，保序回传；每个任务在自己线程内计时。
+2. 时序爬坡按"轮"执行：基线 3 次、候选 16 个一批、确认 3 次串行。
+3. 阈值封顶 5ms（ELF），并用各步 gap 中位数做结束验证；
+   时序失败最多重试 3 次。
+
+**对照（同机同靶场）**
+
+| 题 | v024 串行 | v025 并行 |
+| --- | --- | --- |
+| T2 Python 时序 | 约 3.2 s | 约 1.3 s |
+| R1 ELF 数字前缀 | 约 3.5 s | 约 2.0 s |
+| T1 ELF 时序 | 约 11–16 s，偶发失败 | 约 11 s，阈值上限 + 重试后稳定 |
+| E4 ELF 变换（新增） | — | 约 1.5 s |
+
+正样本 4/4，负样本 2/2，连续 3 次一致，平均约 3.2 s/题。
+
+**关键负结果**：ELF 时序的并行批测把噪声从 ±2ms 抬到 ±10ms（16 路），
+6ms 的睡眠信号被淹没；4 路仍有 ±4ms。因此 **ELF 时序保持串行**，
+只有 Python（进程内 sleep 释放 GIL）并行。
+
+**四条结论**（见 `laws/LAW-0029.md`）：
+1. 并发只对"结果型"探测安全；时序型并发会污染要测的量。
+2. 进程启动是 ELF 的噪声地板，并行不能突破。
+3. 阈值不能只由首步估计决定——封顶 + 逐步 gap 中位数 + 重试才稳。
+4. 批量协议保序但不必保时序；每任务独立计时。
+
+**运行**
+```bash
+python versions/v025_parallel_oracle.src
+python versions/v025_parallel_oracle.src --only E4
+```
+
+**产出**：`experiments/EXP-0023/{results.json,report.md}`（靶场复用 EXP-0022）
