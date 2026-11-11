@@ -1,0 +1,144 @@
+{
+  "summary": {
+    "units": 8,
+    "positive_total": 5,
+    "positive_solved": 5,
+    "negative_total": 3,
+    "negative_correctly_refused": 3,
+    "total_probes": 7484
+  },
+  "rows": [
+    {
+      "id": "P1",
+      "note": "逐字节 S 盒",
+      "negative": false,
+      "probes": 6278,
+      "ok": true,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_table",
+        "verify_plain"
+      ],
+      "refusals": [
+        {
+          "unit": "invert_bytewise_affine",
+          "reason": "affine_not_applicable"
+        }
+      ],
+      "reason": null,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b73626f785f6275745f62696a6563746976657d"
+    },
+    {
+      "id": "P2",
+      "note": "逐字节仿射",
+      "negative": false,
+      "probes": 124,
+      "ok": true,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "reason": null,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b627974655f616666696e655f686572657d"
+    },
+    {
+      "id": "P3",
+      "note": "GF(2) 随机可逆矩阵",
+      "negative": false,
+      "probes": 220,
+      "ok": true,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_gf2",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "reason": null,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b6766325f6d61747269785f6c6f76657d"
+    },
+    {
+      "id": "P4",
+      "note": "三轮 Feistel",
+      "negative": false,
+      "probes": 239,
+      "ok": true,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_gf2",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "reason": null,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b6665697374656c5f69735f6c696e6561727d"
+    },
+    {
+      "id": "P5",
+      "note": "前缀校验器",
+      "negative": false,
+      "probes": 375,
+      "ok": true,
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "reason": null,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b7072656669785f6f7261636c655f77696e737d"
+    },
+    {
+      "id": "N1",
+      "note": "sha256",
+      "negative": true,
+      "probes": 13,
+      "ok": false,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "probe_facts",
+          "reason": "not_length_preserving"
+        }
+      ],
+      "reason": "not_length_preserving"
+    },
+    {
+      "id": "N2",
+      "note": "非线性 32 位混合",
+      "negative": true,
+      "probes": 232,
+      "ok": false,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "invert_gf2",
+          "reason": "structure_unknown"
+        }
+      ],
+      "reason": "structure_unknown"
+    },
+    {
+      "id": "N3",
+      "note": "随机掩码",
+      "negative": true,
+      "probes": 3,
+      "ok": false,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "probe_facts",
+          "reason": "nondeterministic"
+        }
+      ],
+      "reason": "nondeterministic"
+    }
+  ]
+}

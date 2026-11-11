@@ -29,6 +29,7 @@
 | v017 | [v017_ret2win_retest.src](v017_ret2win_retest.src) | ret2win 复测：stripped / -O2 / 改名后的后门定位 | pyelftools/capstone + WSL | 正样本 4/4，负样本 2/2 |
 | v018 | [v018_three_protections.src](v018_three_protections.src) | 三保护组合：fmt 泄漏 canary+PIE → GOT 泄漏 libc → ROP | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 | v019 | [v019_blackbox_logic.src](v019_blackbox_logic.src) | 黑盒行为刻画：不读源码反解题目自定义逻辑 | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
+| v020 | [v020_contract_units.src](v020_contract_units.src) | 把黑盒反解策略接入契约单元库（类型化规划 + guard + 验证） | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 
 ## 各版本说明
 
@@ -643,3 +644,53 @@ python versions/v019_blackbox_logic.src --only P3
 ```
 
 **产出**：`experiments/EXP-0017/{chal/,results.json,report.md}`
+
+### v020_contract_units.src
+
+**回答的问题**：v019 的四类反解策略是一条写死的流程。能不能把它们拆成
+带显式契约的单元，接进和 encoding / RSA / pwn 相同的规划器？
+
+**做法**：8 个单元，比 v007 多两个契约字段 `accepts` / `produces`，再加 `guard`：
+
+| 单元 | accepts | produces | guard |
+| --- | --- | --- | --- |
+| `probe_facts` | oracle | facts | — |
+| `classify_structure` | facts | structure | — |
+| `invert_bytewise_affine` | structure | plain | label=bytewise |
+| `invert_bytewise_table` | structure | plain | label=bytewise |
+| `invert_permutation` | structure | plain | label=permutation |
+| `invert_gf2` | structure | plain | label=dense |
+| `solve_prefix_checker` | checker | verified | — |
+| `verify_plain` | plain | verified | — |
+
+规划器用 DFS + 回溯，单元按代价从低到高排列：仿射先试，抛
+`affine_not_applicable` 后自动换建表；所有候选都必须过 `verify_plain`。
+
+**结果（连续 2 次一致）**
+
+| 题 | 规划路径 | 探测数 |
+| --- | --- | --- |
+| P1 | `probe_facts → classify → invert_bytewise_affine(拒绝) → invert_bytewise_table → verify` | 6278 |
+| P2 | `probe_facts → classify → invert_bytewise_affine → verify` | 124 |
+| P3/P4 | `probe_facts → classify → invert_gf2 → verify` | 220 / 239 |
+| P5 | `solve_prefix_checker` | 375 |
+| N1 | `probe_facts` 拒绝 `not_length_preserving` | 13 |
+| N2 | `invert_gf2` 拒绝 `structure_unknown` | 232 |
+| N3 | `probe_facts` 拒绝 `nondeterministic` | 3 |
+
+正样本 5/5，负样本 3/3，总探测数与 v019 完全相同。
+
+**四条结论**（见 `laws/LAW-0024.md`）：
+1. 契约化没有增加能力，也没有增加开销；增加的是可组合性与显式拒绝。
+2. "逐字节"是一个结构标签，仿射与建表是同一状态上的两个并列候选。
+3. 执行验证保持唯一出口，任何策略都不能绕过 "重新加密 == 原密文"。
+4. 拒绝原因分层：探测层 / 结构层 / 反解层各有明确信号。
+
+**运行**
+```bash
+python versions/v020_contract_units.src
+python versions/v020_contract_units.src --list
+python versions/v020_contract_units.src --only P1
+```
+
+**产出**：`experiments/EXP-0018/{results.json,report.md}`（挑战脚本复用 `EXP-0017/chal/`）

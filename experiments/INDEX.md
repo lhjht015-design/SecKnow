@@ -22,6 +22,45 @@
 | EXP-0015 | 2026-11-11 | ret2win 复测（stripped / -O2 / 改名） | 4/4 解出（2 例只能靠字符串引用）；无后门 / 假后门 2/2 如实拒绝；连续 3 次稳定 | `EXP-0015/report.md` |
 | EXP-0016 | 2026-11-11 | canary + PIE + ret2libc 三保护组合 | 同进程三段泄漏后打通；错 libc / 无泄漏 2/2 如实拒绝；连续 3 次稳定 | `EXP-0016/report.md` |
 | EXP-0017 | 2026-11-11 | 黑盒逻辑刻画：不读源码反解题目自定义逻辑 | 逐字节/仿射/置换/GF(2)/前缀校验 5/5；sha256/非线性/随机 3/3 拒绝；平均 22.9 ms | `EXP-0017/report.md` |
+| EXP-0018 | 2026-11-11 | 黑盒反解策略接入契约单元库 | 8 个带 guard 的单元；5/5 解出、3/3 拒绝；探测数与单体实现完全一致 | `EXP-0018/report.md` |
+
+---
+
+## EXP-0018 — 黑盒反解策略接入契约单元库
+
+**背景**：EXP-0017 的刻画与反解是一条写死的流程。本实验把它拆成 8 个契约单元，
+接进与 v007/v009 相同的类型化规划器。
+
+**单元与状态机**
+
+```
+oracle ─probe_facts→ facts ─classify→ structure
+structure ─invert_bytewise_affine / invert_bytewise_table / invert_permutation /
+            invert_gf2→ plain ─verify_plain→ verified
+checker ─solve_prefix_checker→ verified
+```
+
+`structure` 只标 `bytewise / permutation / dense`；仿射与建表是同一状态上的
+两个并列候选。规划器 DFS + 回溯，便宜的先试，抛 `Refuse` 就换下一个。
+
+| 题 | 规划路径 / 原因 | 探测数 |
+| --- | --- | --- |
+| P1 | `… → invert_bytewise_affine(拒绝) → invert_bytewise_table → verify` | 6278 |
+| P2 | `… → invert_bytewise_affine → verify` | 124 |
+| P3 | `… → invert_gf2 → verify` | 220 |
+| P4 | `… → invert_gf2 → verify` | 239 |
+| P5 | `solve_prefix_checker` | 375 |
+| N1 | `probe_facts: not_length_preserving` | 13 |
+| N2 | `invert_gf2: structure_unknown` | 232 |
+| N3 | `probe_facts: nondeterministic` | 3 |
+
+正样本 5/5，负样本 3/3；总探测数 7484，与 EXP-0017 单体实现完全相同。
+
+**四条结论**（`laws/LAW-0024.md`）：
+1. 契约化没有增加能力，也没有增加开销；增加的是可组合性与显式拒绝。
+2. "逐字节"是一个结构标签；仿射拒绝不是错误，是"换建表"的信号。
+3. 执行验证保持唯一出口：所有策略都必须过"重新加密 == 原密文"。
+4. 拒绝原因分层：探测层 / 结构层 / 反解层，各自有明确信号。
 
 ---
 

@@ -614,6 +614,47 @@ LAW-0017 说六成步骤是题目特有逻辑、题库变不出来——这是�
 变成"可探测、可反解、可复核"的题目。下一步是接入契约单元
 （oracle → strategy → plain）与符号执行（angr），把覆盖从脚本扩到 ELF。
 
+### 结论 23：把黑盒策略接进契约单元库——能力不变，决策显式
+
+v019 的四类反解策略原本是一条写死的流程。本实验把它拆成 8 个单元：
+`probe_facts / classify_structure / invert_bytewise_affine /
+invert_bytewise_table / invert_permutation / invert_gf2 /
+solve_prefix_checker / verify_plain`。
+
+每个单元在 v007 的 `params/returns/technique` 之外多声明三样：
+`accepts`、`produces`、`guard`；不适用时抛 `Refuse`，由规划器换下一个候选。
+
+规划器是 DFS + 回溯，单元按代价从低到高排列：
+
+| 题 | 规划路径 / 原因 | 探测数 |
+| --- | --- | --- |
+| P1 | `… → invert_bytewise_affine(拒绝) → invert_bytewise_table → verify` | 6278 |
+| P2 | `… → invert_bytewise_affine → verify` | 124 |
+| P3 | `… → invert_gf2 → verify` | 220 |
+| P4 | `… → invert_gf2 → verify` | 239 |
+| P5 | `solve_prefix_checker` | 375 |
+| N1 | `probe_facts: not_length_preserving` | 13 |
+| N2 | `invert_gf2: structure_unknown` | 232 |
+| N3 | `probe_facts: nondeterministic` | 3 |
+
+正样本 5/5，负样本 3/3；总探测数 7484，与 v019 单体实现**完全相同**。
+
+**四条结论**
+
+1. **契约化没有增加能力，也没有增加开销。** 增加的是可组合性与显式拒绝；
+   规划、召回、验证现在与 encoding / RSA / pwn 单元共用同一套机制。
+2. **"逐字节"是一个结构标签，不是单元。** 仿射与建表是同一状态上的两个
+   并列候选；仿射抛 `affine_not_applicable` 不是错误，而是"换建表"的信号。
+   这与 v009/v010 的"多单元召回 → 逐个执行 → 失败剪枝"是同一机制。
+3. **执行验证保持唯一出口。** 四个反解单元都只产出 `plain`，
+   必须再进 `verify_plain`；任何策略都不能绕过"重新加密 == 原密文"。
+4. **拒绝原因分层**：探测层（nondeterministic / not_length_preserving）、
+   结构层（structure_unknown）、反解层（not_bijective / not_invertible /
+   verify_failed）各有明确信号。
+
+能力边界与 LAW-0023 完全一致：契约化不会让非线性构造变得可解。
+→ 见 `laws/LAW-0024.md`。
+
 
 ## 4. 更新日志（追加式）
 
@@ -772,6 +813,18 @@ LAW-0017 说六成步骤是题目特有逻辑、题库变不出来——这是�
   7484 次探测，平均 22.9 ms/题，连续 2 次一致。
 - 记录 `laws/LAW-0023.md`：把"理解逻辑"换成"刻画行为"的适用边界——
   需要可执行 oracle，只覆盖低复杂度结构，真正的非线性构造仍需符号执行。
+
+### 2026-11-11 — 黑盒策略接入契约单元库（v020 / EXP-0018）
+
+- 新增 `versions/v020_contract_units.src`：8 个契约单元，
+  比 v007 多 `accepts` / `produces` / `guard` 三个字段；不适用时抛 `Refuse`。
+- 规划器用 DFS + 回溯，单元按代价从低到高排列；所有明文必须过
+  `verify_plain`（重新加密 == 原密文）。
+- 结果：P1–P5 全解，N1–N3 全部如实拒绝；总探测数 7484，与 v019 单体实现一致。
+  P1 的路径显式记录了 `invert_bytewise_affine` 的拒绝与自动回退到建表单元。
+- 记录 `laws/LAW-0024.md`：契约化的价值是把决策点显式化（吃什么、吐什么、
+  何时适用、如何拒绝），而不是增加能力。
+
 
 
 
