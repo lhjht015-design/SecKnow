@@ -1,0 +1,156 @@
+{
+  "summary": {
+    "search": "bfs",
+    "units": 14,
+    "positive_total": 8,
+    "positive_solved": 6,
+    "negative_total": 4,
+    "negative_correctly_failed": 4,
+    "mean_expanded": 329.2,
+    "mean_elapsed_ms": 33.1
+  },
+  "rows": [
+    {
+      "id": "M1",
+      "flavor": "specific",
+      "steps_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 74,
+      "elapsed_ms": 81.4
+    },
+    {
+      "id": "M1",
+      "flavor": "abstract",
+      "steps_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 74,
+      "elapsed_ms": 3.4
+    },
+    {
+      "id": "M2",
+      "flavor": "specific",
+      "steps_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "hex_decode",
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 74,
+      "elapsed_ms": 4.6
+    },
+    {
+      "id": "M2",
+      "flavor": "abstract",
+      "steps_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "hex_decode",
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 74,
+      "elapsed_ms": 4.7
+    },
+    {
+      "id": "M3",
+      "flavor": "specific",
+      "steps_expected": 5,
+      "negative": false,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 89.5
+    },
+    {
+      "id": "M3",
+      "flavor": "abstract",
+      "steps_expected": 5,
+      "negative": false,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 89.8
+    },
+    {
+      "id": "M4",
+      "flavor": "specific",
+      "steps_expected": 2,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 27,
+      "elapsed_ms": 0.7
+    },
+    {
+      "id": "M4",
+      "flavor": "abstract",
+      "steps_expected": 2,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "parse_int_fields",
+        "rsa_small_e"
+      ],
+      "expanded": 27,
+      "elapsed_ms": 0.7
+    },
+    {
+      "id": "N1",
+      "flavor": "specific",
+      "steps_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 58.4
+    },
+    {
+      "id": "N1",
+      "flavor": "abstract",
+      "steps_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 58.2
+    },
+    {
+      "id": "N2",
+      "flavor": "specific",
+      "steps_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 3.0
+    },
+    {
+      "id": "N2",
+      "flavor": "abstract",
+      "steps_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 600,
+      "elapsed_ms": 2.9
+    }
+  ]
+}

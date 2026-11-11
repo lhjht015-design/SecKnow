@@ -1,0 +1,477 @@
+"""
+v010_compose_mixed.src — 混合场景：先解码，再走结构化求解（RSA）
+
+为什么需要这一步
+    v009 验证的是纯文本变换链（base64 → hex → XOR）。
+    但真实赛题最典型的形态是**混合的**：
+        密文 → Base64 解码 → 得到 "n = ..., e = 3, c = ..." → 走 RSA 求解
+    也就是说，流水线中间要从「字符串」变成「结构化参数」。
+    规划器的状态如果只会是字符串，就走不到结构化单元。
+
+本文件的改动
+    1. 状态值类型从 `str` 扩展为 `str | dict[str, int]`；
+    2. 新增类型 `int_fields`（一组带标签的整数）；
+    3. 新增单元 `parse_int_fields`：text → int_fields（认中英文标签、十进制/十六进制）；
+    4. 新增单元 `rsa_small_e`：int_fields → flag；
+    5. 启发式、去重键、flag 检测都要能处理非字符串状态。
+
+测什么
+    M1  base64("n/e/c")            → 解码 → 解析 → RSA       （3 步）
+    M2  hex("n/e/c")               → 解码 → 解析 → RSA       （3 步）
+    M3  base64(hex(base64("n/e/c"))) → 三层解码 → 解析 → RSA （5 步）
+    M4  中文标签 + 十六进制数值      → 解析 → RSA             （验证改名/换进制）
+    N1  负样本：e = 65537（不具备小公钥指数漏洞）→ **应当失败**
+    N2  负样本：4 字节重复密钥 XOR 包裹的文本    → **应当失败**
+
+运行
+    python versions/v010_compose_mixed.src
+    python versions/v010_compose_mixed.src --search bfs
+
+产出物
+    experiments/EXP-0008/results.json
+    experiments/EXP-0008/report.md
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+import re
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0008"
+
+import sys
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 状态：字符串 或 结构化字段
+# --------------------------------------------------------------------------------------
+
+StateValue = str | dict[str, int]
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+HEX_ONLY = re.compile(r"^[0-9a-fA-F\s]+$")
+
+
+def value_key(value: StateValue) -> str:
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    return value
+
+
+def detect_type(value: StateValue) -> str:
+    if isinstance(value, dict):
+        return "int_fields"
+    text = value.strip()
+    if FLAG_RE.search(text):
+        return "flag"
+    if len(text) >= 16 and HEX_ONLY.match(text) and len(text.replace(" ", "")) % 2 == 0:
+        return "hex"
+    if len(text) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", text) and len(text) % 4 == 0:
+        return "base64"
+    return "text"
+
+
+# --------------------------------------------------------------------------------------
+# 单元
+# --------------------------------------------------------------------------------------
+
+def b64_decode(data: str) -> str:
+    raw = data.strip()
+    raw += "=" * (-len(raw) % 4)
+    return base64.b64decode(raw, validate=True).decode("utf-8")
+
+
+def hex_decode(data: str) -> str:
+    return bytes.fromhex(data.strip().replace(" ", "")).decode("utf-8")
+
+
+def reverse_text(data: str) -> str:
+    return data.strip()[::-1]
+
+
+LABEL_VALUE = re.compile(
+    r"(?P<label>公钥指数|密文值|模数|指数|密文|modulus|exponent|ciphertext"
+    r"|\b[a-zA-Z]{1,3}\b)"
+    r"\s*[=:：]\s*(?P<value>0x[0-9a-fA-F]+|\d+)"
+)
+LABEL_MAP = {
+    "n": "n", "模数": "n", "modulus": "n",
+    "e": "e", "指数": "e", "公钥指数": "e", "exponent": "e",
+    "c": "c", "密文": "c", "密文值": "c", "ciphertext": "c",
+}
+
+
+def parse_int_fields(data: str) -> dict[str, int]:
+    """把带标签的整数抽成结构化字段。中英文标签、十进制/十六进制都认。"""
+    fields: dict[str, int] = {}
+    for match in LABEL_VALUE.finditer(data):
+        label = match.group("label").strip().casefold()
+        role = LABEL_MAP.get(label)
+        if role is None:
+            continue
+        token = match.group("value")
+        try:
+            value = int(token, 16) if token.lower().startswith("0x") else int(token, 10)
+        except ValueError:
+            continue
+        fields.setdefault(role, value)
+    if len(fields) < 2:
+        raise ValueError("没有找到足够的带标签整数")
+    return fields
+
+
+def rsa_small_e(fields: dict[str, int]) -> str:
+    """小公钥指数（小明文）攻击：c 恰好是明文的 e 次方。"""
+    if not {"n", "e", "c"} <= set(fields):
+        raise ValueError(f"缺少字段：{sorted({'n','e','c'} - set(fields))}")
+    import gmpy2
+
+    n, e, c = fields["n"], fields["e"], fields["c"]
+    if e > 64:
+        raise ValueError(f"指数 e={e} 过大，不适用小公钥指数攻击")
+    root, exact = gmpy2.iroot(c, e)
+    if not exact:
+        raise ValueError("c 不是完全 e 次方")
+    return int(root).to_bytes((int(root).bit_length() + 7) // 8, "big").decode("utf-8", "replace")
+
+
+# accepts 放宽到所有文本形态，让执行去判断这一步是否成立
+TEXT_TYPES = {"text", "hex", "base64"}
+
+UNITS: list[dict] = [
+    {"id": "b64_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": b64_decode,
+     "direction": "decode", "note": "解一层 Base64"},
+    {"id": "hex_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": hex_decode,
+     "direction": "decode", "note": "解一层 hex"},
+    {"id": "reverse_text", "accepts": TEXT_TYPES, "produces": "text", "fn": reverse_text,
+     "direction": "neutral", "note": "整体反转"},
+    {"id": "parse_int_fields", "accepts": {"text"}, "produces": "int_fields",
+     "fn": parse_int_fields, "direction": "decode", "note": "文本 → 带标签整数"},
+    {"id": "rsa_small_e", "accepts": {"int_fields"}, "produces": "flag",
+     "fn": rsa_small_e, "direction": "solver", "note": "RSA 小公钥指数攻击"},
+]
+BASE_UNITS = list(UNITS)
+
+
+# --------------------------------------------------------------------------------------
+# 诱饵（用于可扩展性验证）
+# --------------------------------------------------------------------------------------
+
+def b64_encode(data: str) -> str:
+    return base64.b64encode(data.strip().encode()).decode()
+
+
+def hex_encode(data: str) -> str:
+    return data.strip().encode().hex()
+
+
+def upper_text(data: str) -> str:
+    return data.strip().upper()
+
+
+DECOY_POOL = [("b64_encode", b64_encode), ("hex_encode", hex_encode),
+              ("upper_text", upper_text)]
+
+
+def make_decoys(count: int) -> list[dict]:
+    out: list[dict] = []
+    for index in range(count):
+        name, fn = DECOY_POOL[index % len(DECOY_POOL)]
+        if index >= len(DECOY_POOL):
+            name = f"{name}_{index}"
+        out.append({"id": name, "accepts": TEXT_TYPES, "produces": "text", "fn": fn,
+                    "direction": "encode", "note": "诱饵"})
+    return out
+
+
+# --------------------------------------------------------------------------------------
+# 载荷抽取
+# --------------------------------------------------------------------------------------
+
+PAYLOAD_TOKEN = re.compile(r"[A-Za-z0-9+/=]{16,}")
+
+
+def extract_payload(text: str) -> str | None:
+    candidates = [t for t in PAYLOAD_TOKEN.findall(text) if not re.fullmatch(r"[0-9]+", t)]
+    return max(candidates, key=len) if candidates else None
+
+
+def _looks_structured(text: str) -> bool:
+    """题面里是否已经含有带标签的整数（此时整段文本本身就是一个合法起点）。"""
+    try:
+        parse_int_fields(text)
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
+# --------------------------------------------------------------------------------------
+# 规划：BFS / beam
+# --------------------------------------------------------------------------------------
+
+MAX_NODES = 600
+
+
+def _heuristic(unit: dict, output: StateValue, depth: int) -> float:
+    score = 0.0
+    direction = unit.get("direction", "neutral")
+    if direction == "decode":
+        score += 2.0
+    elif direction == "encode":
+        score -= 5.0
+    if isinstance(output, str):
+        printable = sum(
+            1 for ch in output
+            if 32 <= ord(ch) < 127 or "一" <= ch <= "鿿"
+        )
+        score += 3.0 * printable / max(len(output), 1)
+    else:
+        score += 1.5  # 拿到结构化参数本身就是进展
+    score -= 0.2 * depth
+    return score
+
+
+def _run_unit(unit: dict, value: StateValue) -> StateValue:
+    return unit["fn"](value)
+
+
+def plan(initial_text: str, expected: str | None, max_depth: int,
+         beam_k: int, search: str) -> dict:
+    started = time.perf_counter()
+    payload = extract_payload(initial_text)
+    if payload is None:
+        return {"solved": False, "path": [], "expanded": 0, "depth_used": 0,
+                "elapsed_ms": 0.0, "error": "payload_not_found"}
+
+    # 两个起点都要试：
+    #   1) 抽出来的那串编码载荷（适合 base64/hex 包裹的情形）
+    #   2) 整段题面（适合「题面本身就是 n/e/c 文本」的情形——
+    #      否则载荷抽取会把最长的那个整数当成载荷，反而丢掉其余字段）
+    starts: list[StateValue] = [payload]
+    if _looks_structured(initial_text):
+        starts.append(initial_text)
+
+    beam: list[tuple[float, str, StateValue, list[str]]] = []
+    seen: set[tuple[str, str]] = set()
+    for start in starts:
+        start_type = detect_type(start)
+        key = (start_type, value_key(start))
+        if key in seen:
+            continue
+        seen.add(key)
+        beam.append((0.0, start_type, start, []))
+    expanded = 0
+
+    for depth in range(max_depth):
+        candidates: list[tuple[float, str, StateValue, list[str]]] = []
+        for _score, current_type, current_value, path in beam:
+            for unit in UNITS:
+                if current_type not in unit["accepts"]:
+                    continue
+                if expanded >= MAX_NODES:
+                    break
+                expanded += 1
+                try:
+                    output = _run_unit(unit, current_value)
+                except (ValueError, UnicodeDecodeError, binascii.Error, TypeError, ImportError):
+                    continue
+                if isinstance(output, str) and not output.strip():
+                    continue
+                if isinstance(output, dict) and not output:
+                    continue
+                new_path = [*path, unit["id"]]
+                if isinstance(output, str):
+                    found = FLAG_RE.search(output)
+                    if found and (expected is None or found.group(0).lower() == expected.lower()):
+                        return {"solved": True, "path": new_path, "output": found.group(0),
+                                "expanded": expanded, "depth_used": len(new_path),
+                                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+                    if found and expected is not None:
+                        continue
+                new_type = detect_type(output)
+                key = (new_type, value_key(output))
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append((_heuristic(unit, output, depth), new_type, output, new_path))
+        if not candidates:
+            break
+        candidates.sort(key=lambda item: -item[0])
+        beam = candidates[:beam_k] if search == "beam" else candidates[:MAX_NODES]
+        if search == "bfs":
+            beam = candidates  # BFS 保留全部，靠 MAX_NODES 兜底
+
+    return {"solved": False, "path": [], "expanded": expanded, "depth_used": 0,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 题目
+# --------------------------------------------------------------------------------------
+
+def rsa_text(flag: str, e: int = 3, *, labels: str = "en", base: str = "dec") -> str:
+    """构造一段含 n/e/c 的题面文本。labels: en/zh；base: dec/hex。"""
+    m = int.from_bytes(flag.encode(), "big")
+    n = (1 << 2048) - 0xE5B1A7C3D9F102468ACE13579BDF02468 + 1
+    c = pow(m, e, n)
+    fmt = (lambda v: hex(v)) if base == "hex" else (lambda v: str(v))
+    if labels == "zh":
+        return f"模数 = {fmt(n)}\n公钥指数 = {fmt(e)}\n密文值 = {fmt(c)}\n"
+    return f"n = {fmt(n)}\ne = {fmt(e)}\nc = {fmt(c)}\n"
+
+
+def wrap(payload: str, layers: list[str]) -> str:
+    value = payload
+    for layer in reversed(layers):
+        if layer == "b64":
+            value = base64.b64encode(value.encode()).decode()
+        elif layer == "hex":
+            value = value.encode().hex()
+    return value
+
+
+def build_tasks() -> list[dict]:
+    tasks: list[dict] = []
+
+    flag1 = "flag{mixed_b64_then_rsa}"
+    tasks.append({
+        "id": "M1", "expected": flag1, "steps": 3,
+        "payload": wrap(rsa_text(flag1), ["b64"]),
+        "text_specific": "题目：先 Base64 解码，再按 RSA 小公钥指数求解。\n{payload}",
+        "text_abstract": "题目：这串东西解一次之后，能读到三个整数，用它们还原原文。\n{payload}",
+    })
+
+    flag2 = "flag{mixed_hex_then_rsa}"
+    tasks.append({
+        "id": "M2", "expected": flag2, "steps": 3,
+        "payload": wrap(rsa_text(flag2), ["hex"]),
+        "text_specific": "题目：先解 hex，再走 RSA。\n{payload}",
+        "text_abstract": "题目：这是一段十六进制表示的内容，里面有三个整数。\n{payload}",
+    })
+
+    flag3 = "flag{mixed_five_layers}"
+    tasks.append({
+        "id": "M3", "expected": flag3, "steps": 5,
+        "payload": wrap(rsa_text(flag3), ["b64", "hex", "b64"]),
+        "text_specific": "题目：三层编码，解完后还要做 RSA。\n{payload}",
+        "text_abstract": "题目：需要反复解码，最后得到的是一组整数关系。\n{payload}",
+    })
+
+    flag4 = "flag{mixed_zh_hex_labels}"
+    tasks.append({
+        "id": "M4", "expected": flag4, "steps": 2,
+        "payload": rsa_text(flag4, labels="zh", base="hex"),
+        "text_specific": "题目：中文标签 + 十六进制数值的 RSA。\n{payload}",
+        "text_abstract": "题目：请从下面三项里还原原文。\n{payload}",
+    })
+
+    # 负样本 1：e=65537，不满足小公钥指数条件
+    flag5 = "flag{should_not_solve_large_e}"
+    tasks.append({
+        "id": "N1", "expected": flag5, "steps": 2, "negative": True,
+        "payload": wrap(rsa_text(flag5, e=65537), ["b64"]),
+        "text_specific": "题目：Base64 解码后是 RSA 参数。\n{payload}",
+        "text_abstract": "题目：解一次，会看到三个整数。\n{payload}",
+    })
+
+    # 负样本 2：4 字节重复密钥 XOR，库里没有对应单元
+    flag6 = "flag{should_not_solve_multibyte}"
+    key = b"\x13\x37\xbe\xef"
+    multibyte = bytes(b ^ key[i % len(key)] for i, b in enumerate(flag6.encode())).hex()
+    tasks.append({
+        "id": "N2", "expected": flag6, "steps": 2, "negative": True,
+        "payload": multibyte,
+        "text_specific": "题目：某个 4 字节重复密钥的 XOR。\n{payload}",
+        "text_abstract": "题目：字节被一组固定的四个值循环处理过。\n{payload}",
+    })
+    return tasks
+
+
+def run(max_depth: int, decoys: int, search: str, beam_k: int) -> dict:
+    global UNITS
+    UNITS = list(BASE_UNITS) + (make_decoys(decoys) if decoys else [])
+
+    rows: list[dict] = []
+    for task in build_tasks():
+        for flavor in ("specific", "abstract"):
+            text = task[f"text_{flavor}"].format(payload=task["payload"])
+            outcome = plan(text, task["expected"], max_depth, beam_k, search)
+            row = {
+                "id": task["id"], "flavor": flavor, "steps_expected": task["steps"],
+                "negative": task.get("negative", False),
+                "solved": outcome["solved"], "path": outcome["path"],
+                "expanded": outcome["expanded"], "elapsed_ms": outcome["elapsed_ms"],
+            }
+            rows.append(row)
+            expect_fail = row["negative"]
+            ok = row["solved"] != expect_fail
+            log(f"  {row['id']}-{flavor:8} {'→'.join(row['path']) or '(none)':52} "
+                f"expanded={row['expanded']:3d}  {'OK' if ok else 'UNEXPECTED'}")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "search": search, "units": len(UNITS),
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_failed": sum(1 for r in negatives if not r["solved"]),
+        "mean_expanded": round(sum(r["expanded"] for r in rows) / max(len(rows), 1), 1),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    return {"summary": summary, "rows": rows}
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="混合场景：解码 + 结构化求解")
+    parser.add_argument("--max-depth", type=int, default=6)
+    parser.add_argument("--decoys", type=int, default=0)
+    parser.add_argument("--search", choices=["bfs", "beam"], default="beam")
+    parser.add_argument("--beam-k", type=int, default=8)
+    args = parser.parse_args()
+
+    result = run(args.max_depth, args.decoys, args.search, args.beam_k)
+    summary = result["summary"]
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    lines = ["# EXP-0008 — 混合场景：先解码再走 RSA", "",
+             "流水线中段从「字符串」切换为「结构化参数」（int_fields）。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "",
+             "| 题 | 题面 | 期望步数 | 实际路径 | 展开 | 结果 |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in result["rows"]:
+        if row["negative"]:
+            mark = "✓(正确失败)" if not row["solved"] else "✗(不该解出)"
+        else:
+            mark = "✓" if row["solved"] else "✗"
+        lines.append(f"| {row['id']} | {row['flavor']} | {row['steps_expected']} "
+                     f"| {'→'.join(row['path']) or '—'} | {row['expanded']} | {mark} |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

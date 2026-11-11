@@ -328,6 +328,28 @@ CRC32 命中 `crack_crc()`、凯撒命中 `variant_caesar()`），失败全在�
 
 ---
 
+### 结论 13：混合场景成立——状态必须能跨越「字符串 → 结构化参数」
+
+真实题是异构的：`密文 → Base64 → "n=…,e=3,c=…" → RSA`。
+把规划器状态扩展为 `str | dict[str, int]`，新增 `int_fields` 类型与两个单元
+（`parse_int_fields`、`rsa_small_e`）后：
+
+| 题 | 路径 | 结果 |
+| --- | --- | --- |
+| M1 base64("n/e/c") | `b64_decode → parse_int_fields → rsa_small_e` | ✓ |
+| M2 hex("n/e/c") | `hex_decode → parse_int_fields → rsa_small_e` | ✓ |
+| M3 三层编码 | `b64 → hex → b64 → parse_int_fields → rsa_small_e` | ✓ |
+| M4 中文标签 + hex 数值 | `parse_int_fields → rsa_small_e` | ✓ |
+| N1 e=65537 | 解析成功，RSA 判断不适用并拒绝 | ✓ 正确失败 |
+| N2 多字节 XOR | 无对应单元 | ✓ 正确失败 |
+
+正样本 **8/8**（4 题 × 2 种题面），负样本 **4/4 正确失败**。
+加 9 个诱饵后 beam 仍 8/8、BFS 掉到 6/8，与 EXP-0007 一致。
+→ 见 `laws/LAW-0014.md`。
+
+**关键设计**：单元必须对不适用的情况**显式拒绝**（e 过大、c 不是完全幂），
+否则会把"解不出"变成"解错了"。
+
 ## 4. 更新日志（追加式）
 
 ### 2026-09-21 — 接管、基线与流程骨架

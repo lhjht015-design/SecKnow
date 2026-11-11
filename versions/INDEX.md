@@ -19,6 +19,7 @@
 | v007 | [v007_solver_kit.src](v007_solver_kit.src) | 带显式契约的求解单元库 + 确定性拼装器 | 无（纯 Python） | **端到端 5/5** |
 | v008 | [v008_shift_test.src](v008_shift_test.src) | 分布漂移测试（改名 / 换格式 / 抽象描述） | 无（纯 Python） | keyword 6/15，shape 15/15 |
 | v009 | [v009_compose.src](v009_compose.src) | 多步组合：类型化搜索把单元串成流水线 | 无（纯 Python） | BFS 8/8→6/8；beam 8/8 |
+| v010 | [v010_compose_mixed.src](v010_compose_mixed.src) | 混合场景：解码 → 解析参数 → RSA | 无（纯 Python） | 正样本 8/8，负样本 4/4 |
 
 ## 各版本说明
 
@@ -243,3 +244,36 @@ python versions/v009_compose.src --sweep      # BFS vs beam 的可扩展性对�
 
 **注意**：单元库只有 5–20 个，题目是合成链。**这验证的是"组合机制成立"，
 不是"能解真实赛题"**——后者需要 50–200 个真实单元 + 未见过的留出题。
+
+### v010_compose_mixed.src
+
+**回答的问题**：真实赛题是**异构**的——"先 base64 解码，解出来是 RSA 的 n/e/c"。
+规划器的状态如果只会是字符串，就走不到结构化单元。
+
+**改动**：
+1. 状态值从 `str` 扩展为 `str | dict[str, int]`；
+2. 新增类型 `int_fields`；
+3. 新增单元 `parse_int_fields`（text → int_fields，认中英文标签、十进制/十六进制）；
+4. 新增单元 `rsa_small_e`（int_fields → flag，`e>64` 时**主动拒绝**）。
+
+**结果**
+
+| 题 | 路径 | 结果 |
+| --- | --- | --- |
+| M1 base64("n/e/c") | `b64_decode → parse_int_fields → rsa_small_e` | ✓ |
+| M2 hex("n/e/c") | `hex_decode → parse_int_fields → rsa_small_e` | ✓ |
+| M3 三层编码 | `b64 → hex → b64 → parse_int_fields → rsa_small_e` | ✓ |
+| M4 中文标签 + hex 数值 | `parse_int_fields → rsa_small_e` | ✓ |
+| N1 e=65537（负样本） | 解析成功但 RSA 主动拒绝 | ✓ 正确失败 |
+| N2 多字节 XOR（负样本） | 无对应单元 | ✓ 正确失败 |
+
+正样本 **8/8**（4 题 × 2 种题面），负样本 **4/4 正确失败**。
+加 9 个诱饵后：beam 仍 8/8，BFS 掉到 6/8——与 v009 的结论一致。
+
+**运行**
+```bash
+python versions/v010_compose_mixed.src
+python versions/v010_compose_mixed.src --search bfs --decoys 9
+```
+
+**产出**：`experiments/EXP-0008/{results.json,report.md}`
