@@ -1,0 +1,324 @@
+[
+  {
+    "id": "T1",
+    "tech": "RSA 小公钥指数 e=3 小明文 开三次方",
+    "query": "RSA 小公钥指数攻击 e=3 小明文 开三次方 恢复明文",
+    "solved": false,
+    "attempts": [
+      {
+        "unit": "rsa1",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/e=3 (小公钥指数攻击) (小明文攻击) (tereotyped messages攻击)/rsa1.py",
+        "status": "missing_slots",
+        "missing": [
+          "key"
+        ],
+        "applied": [
+          "c",
+          "n",
+          "e"
+        ]
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 public key、密文 c，求明文 m (公钥提取)/hello.py",
+        "status": "ran_no_match",
+        "applied": [
+          "n",
+          "e"
+        ],
+        "exit": 1,
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"C:\\Users\\lhjht015\\AppData\\Local\\Temp\\secknow-unit-uxjii83_\\assembled.py\", line 2, in <module>\n    import rsa\nModuleNotFoundError: No module named 'rsa'\n"
+      },
+      {
+        "unit": "rsa-base64",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 public key、密文 c，求明文 m (公钥提取)/rsa-base64.py",
+        "status": "ran_no_match",
+        "applied": [
+          "n",
+          "e"
+        ],
+        "exit": 1,
+        "stdout": "",
+        "stderr": "File \"C:\\Users\\lhjht015\\AppData\\Local\\Temp\\secknow-unit-muqoxdch\\assembled.py\", line 12, in <module>\n    d = int(invert(e,phi))\n            ^^^^^^^^^^^^^\nZeroDivisionError: invert() no inverse exists\n"
+      },
+      {
+        "unit": "hello1",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 e、n、密文 c，求明文 m/hello1.py",
+        "status": "ran_no_match",
+        "applied": [
+          "c",
+          "n",
+          "e"
+        ],
+        "exit": 1,
+        "stdout": "",
+        "stderr": "e \"C:\\Users\\lhjht015\\AppData\\Local\\Temp\\secknow-unit-si3ybhr7\\assembled.py\", line 13, in <module>\n    d = gmpy2.invert(e,phi)\n        ^^^^^^^^^^^^^^^^^^^\nZeroDivisionError: invert() no inverse exists\n"
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知e、p、q、密文c，求明文m/hello.py",
+        "status": "ran_no_match",
+        "applied": [
+          "e",
+          "c"
+        ],
+        "exit": 0,
+        "stdout": "10786438895799190897282198048633996653690402212775467179582600144765\n",
+        "stderr": ""
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 e、d、p+q、(p+1)(q+1)、以及密文C，求明文m/hello.py",
+        "status": "ran_no_match",
+        "applied": [
+          "c",
+          "e"
+        ],
+        "exit": 0,
+        "stdout": "1aYcU4k-\\xafP\\x9bOT\\x962\\xaf\\x06K\\xec\\xfaqa\\x08Z+\\xf4\\x08yR\\x1c\\x07]!\\x05\\xf3\\xb9\\xff\\xb2\\xa9+\\x0c49Y\\x80\\xb5\\x80\\x1e\\x88C\\x84\\x11meK&\\x01\\xa5\\x7f\\x0b\\x85\\x82N\\x07g\\xd0+\\x002h+\\xc3\\x8dH\\x89b\\x84JN\\x05\\xca\\x1c\\xcfl\\xa8e\\xf6\\xc2\\xa7\\x7fO\\xbf\\xb5pe\\xbf\\x0b\\xa4\\xb6.\\xc5M\\xaci}\\xf5\\xf5\\x8c`\\x03\\x04\\x16'\n",
+        "stderr": ""
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 e、n、密文 c，求明文 m/hello.py",
+        "status": "ran_no_match",
+        "applied": [
+          "c",
+          "e"
+        ],
+        "exit": 1,
+        "stdout": "",
+        "stderr": "e \"C:\\Users\\lhjht015\\AppData\\Local\\Temp\\secknow-unit-gv7hfn8i\\assembled.py\", line 16, in <module>\n    d = gmpy2.invert(e,phi)\n        ^^^^^^^^^^^^^^^^^^^\nZeroDivisionError: invert() no inverse exists\n"
+      },
+      {
+        "unit": "gen_keys1",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "status": "needs_driver"
+      }
+    ]
+  },
+  {
+    "id": "T2",
+    "tech": "base64 多层解码",
+    "query": "base64 多层编码 连续解码 还原明文",
+    "solved": false,
+    "attempts": [
+      {
+        "unit": "bbb64",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/Base/base64连续解码/bbb64.py",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "base64_text",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/Base/base64解码输出字节文本/base64_text.py",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "basedecode",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/Base/B64-B32-B16解密/basedecode.py",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "rsa-base64",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 public key、密文 c，求明文 m (公钥提取)/rsa-base64.py",
+        "status": "missing_slots",
+        "missing": [
+          "n",
+          "e"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "2024国城杯_writeup_by_Mini-Venom.meta_block2",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "春节解题领红包之九_{Web_中级题}_题解_–_wasm逆向.meta_block0",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/春节解题领红包之九_{Web_中级题}_题解_–_wasm逆向.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "conv",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/曼彻斯特编码/decode_man.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "THJCC_CTF_2026（部分）.meta_block2",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/THJCC_CTF_2026（部分）.meta.md",
+        "status": "no_slots_found"
+      }
+    ]
+  },
+  {
+    "id": "T3",
+    "tech": "单字节 XOR 爆破",
+    "query": "单字节 XOR 爆破 密钥 还原明文",
+    "solved": false,
+    "attempts": [
+      {
+        "unit": "UCTC_CTF_2024高校新生网安赛_部分WriteUp.meta_block1",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/UCTC_CTF_2024高校新生网安赛_部分WriteUp.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "THJCC_CTF_2026（部分）.meta_block2",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/THJCC_CTF_2026（部分）.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "第三届“祥云杯”网络安全大赛决赛-WriteUp_By_EDISEC.meta_block4",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“祥云杯”网络安全大赛决赛-WriteUp_By_EDISEC.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "之江杯-WriteUp.meta_block0",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/之江杯-WriteUp.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "SCRIPTS-INDEX_block5",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/SCRIPTS-INDEX.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "md5-brust",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/md5爆破/md5-brust.py",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 p、q、dp、dq、c 求明文 m (dp、dq 泄露)/hello.py",
+        "status": "missing_slots",
+        "missing": [
+          "c"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "xor",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/HackerGame_2022_出题记.meta.md",
+        "status": "needs_driver"
+      }
+    ]
+  },
+  {
+    "id": "T4",
+    "tech": "CRC32 明文校验爆破",
+    "query": "CRC32 校验值 爆破 小写字母 文件内容",
+    "solved": false,
+    "attempts": [
+      {
+        "unit": "crack_crc",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc-1byte.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "crack_crc",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc-2byte.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "crack_crc",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc-3byte.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "crack_crc",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc-4byte.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "crack_crc",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc-5byte.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "parse_dword",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc32/crc32.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "rangess",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc32/crc32.py",
+        "status": "needs_driver"
+      },
+      {
+        "unit": "reciprocal_callback",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/CRC32校验爆破/crc32/crc32.py",
+        "status": "needs_driver"
+      }
+    ]
+  },
+  {
+    "id": "T5",
+    "tech": "凯撒密码",
+    "query": "凯撒密码 移位 解密 还原明文",
+    "solved": false,
+    "attempts": [
+      {
+        "unit": "2024国城杯_writeup_by_Mini-Venom.meta_block2",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "encode_caesar",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/变异凯撒/encode_caesar.py",
+        "status": "missing_slots",
+        "missing": [
+          "c"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "variant_caesar",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/变异凯撒/variant_caesar.py",
+        "status": "missing_slots",
+        "missing": [
+          "c"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "2025某集团ctf决赛-RATTRACER-AsyncRAT通信解密.meta_block1",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025某集团ctf决赛-RATTRACER-AsyncRAT通信解密.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "hello",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/RSA综合脚本利用/已知 p、q、dp、dq、c 求明文 m (dp、dq 泄露)/hello.py",
+        "status": "missing_slots",
+        "missing": [
+          "c"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "ISCTF2025_部分_密码.meta_block2",
+        "path": "Des-CTF-Knowledge/CTF大赛WP集合/articles/ISCTF2025_部分_密码.meta.md",
+        "status": "no_slots_found"
+      },
+      {
+        "unit": "SCRIPTS-INDEX_block3",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/SCRIPTS-INDEX.md",
+        "status": "missing_slots",
+        "missing": [
+          "c"
+        ],
+        "applied": []
+      },
+      {
+        "unit": "test",
+        "path": "Des-CTF-Knowledge/CTF常用脚本及工具/Base/base64隐写加密与解密/test.py",
+        "status": "ran_no_match",
+        "applied": [
+          "data"
+        ],
+        "exit": 1,
+        "stdout": "",
+        "stderr": "pData\\Local\\Temp\\secknow-unit-p1i0yfdc\\assembled.py\", line 2, in <module>\n    print(text.decode('base64').encode('base64'))\n          ^^^^\nNameError: name 'text' is not defined. Did you mean: 'next'?\n"
+      }
+    ]
+  }
+]

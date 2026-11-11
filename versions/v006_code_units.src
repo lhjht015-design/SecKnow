@@ -1,0 +1,585 @@
+"""
+v006_code_units.src — 把知识库里的代码拆成结构化单元，按题目召回，再尝试拼装
+
+要回答的问题（用户 2026-11-11 提出）
+    「把代码按照函数定义拆开，面对不同题目直接召回函数，再对函数做适配，
+      怎么把代码拆成结构化单元，按召回和上下文拼接，关键是能不能拼出真正能用的脚本？」
+
+为什么要做单元级而不是文档级
+    文档级检索返回的是「一篇讲 CRC32 爆破的文章」，人还得自己读完再抄代码。
+    单元级检索返回的是「crack_crc() 这个函数，签名、依赖、可直接调用」——
+    这才是"知识库"和"代码库"的区别。
+
+本文件的四个阶段
+    1. 抽取：从所有 .py（以及 markdown 里的 python 代码块）抽出结构化单元
+    2. 索引：SQLite FTS5，字段 name / signature / docstring / body / path
+    3. 召回：给定题目描述，返回最相关的单元
+    4. 拼装：把召回单元变成一段**可运行**的脚本，并真实执行验证
+
+单元契约（拼装能成立的前提）
+    每个单元都带：source（源码）、imports（模块级依赖）、signature、
+    docstring、demo（`if __name__ == "__main__"` 段）、kind（function/class/script）。
+    拼装器只依赖这些显式信息，**不做任何猜测性生成**——猜错就如实失败。
+
+运行
+    python versions/v006_code_units.src --build
+    python versions/v006_code_units.src --inspect "单字节 XOR 爆破"
+    python versions/v006_code_units.src --inspect "CRC32 爆破"
+
+产出物
+    data/code_units.db
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import json
+import re
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+KB_ROOT = ROOT / "book" / "Des-CTF-Knowledge"
+DB_PATH = ROOT / "data" / "code_units.db"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 1. 抽取
+# --------------------------------------------------------------------------------------
+
+MARKDOWN_FENCE = re.compile(r"```(?:python|py)\s*\n(.*?)```", re.DOTALL)
+
+
+def module_imports(tree: ast.Module) -> list[str]:
+    """只收模块顶层的 import，它们决定了单元能否独立运行。"""
+    lines: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            lines.append("import " + ", ".join(alias.name for alias in node.names))
+        elif isinstance(node, ast.ImportFrom):
+            module = "." * node.level + (node.module or "")
+            names = ", ".join(alias.name for alias in node.names)
+            lines.append(f"from {module} import {names}")
+    return lines
+
+
+def extract_demo(tree: ast.Module, source: str) -> str:
+    """抽 `if __name__ == "__main__":` 段——它通常就是最可靠的用法示例。"""
+    for node in tree.body:
+        if not isinstance(node, ast.If):
+            continue
+        test = ast.dump(node.test)
+        if "__name__" in test and "__main__" in test:
+            return ast.get_source_segment(source, node) or ""
+    return ""
+
+
+def unit_from_node(node, source: str, path: str, imports: list[str], demo: str) -> dict | None:
+    segment = ast.get_source_segment(source, node)
+    if not segment or len(segment) < 20:
+        return None
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        kind = "function"
+        name = node.name
+        signature = f"def {node.name}(" + ", ".join(
+            arg.arg for arg in node.args.args
+        ) + ")"
+        docstring = ast.get_docstring(node) or ""
+        body_text = segment
+        deps = sorted({
+            n.id for n in ast.walk(node)
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+        })
+    elif isinstance(node, ast.ClassDef):
+        kind = "class"
+        name = node.name
+        signature = f"class {node.name}"
+        docstring = ast.get_docstring(node) or ""
+        body_text = segment
+        deps = []
+    else:
+        return None
+    digest = hashlib.sha256((path + name + segment).encode("utf-8")).hexdigest()[:16]
+    return {
+        "unit_id": f"unit:{digest}",
+        "kind": kind,
+        "name": name,
+        "signature": signature,
+        "docstring": docstring,
+        "body": body_text,
+        "source": segment,
+        "imports": "\n".join(imports),
+        "demo": demo,
+        "path": path,
+        "start_line": node.lineno,
+        "end_line": getattr(node, "end_lineno", node.lineno),
+        "deps": json.dumps(deps[:40]),
+    }
+
+
+def extract_from_python(path: Path, relative: str) -> list[dict]:
+    try:
+        source = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    if len(source) > 400_000:  # 超大文件跳过，避免 AST/内存问题
+        return []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    imports = module_imports(tree)
+    demo = extract_demo(tree, source)
+    units: list[dict] = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            unit = unit_from_node(node, source, relative, imports, demo)
+            if unit:
+                units.append(unit)
+    if not units:
+        # 没有顶层函数/类 → 整个文件当作一个 script 单元
+        digest = hashlib.sha256((relative + source).encode("utf-8")).hexdigest()[:16]
+        units.append({
+            "unit_id": f"unit:{digest}",
+            "kind": "script",
+            "name": path.stem,
+            "signature": f"script {path.stem}",
+            "docstring": "",
+            "body": source[:20_000],
+            "source": source,
+            "imports": "\n".join(imports),
+            "demo": demo,
+            "path": relative,
+            "start_line": 1,
+            "end_line": source.count("\n") + 1,
+            "deps": "[]",
+        })
+    return units
+
+
+def extract_from_markdown(path: Path, relative: str) -> list[dict]:
+    """WP 里内联的 python 代码块是重要来源，不能漏。"""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    units: list[dict] = []
+    for index, block in enumerate(MARKDOWN_FENCE.findall(text)):
+        if len(block) < 120:
+            continue
+        try:
+            tree = ast.parse(block)
+        except SyntaxError:
+            continue
+        imports = module_imports(tree)
+        funcs = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+        if funcs:
+            for node in funcs:
+                unit = unit_from_node(node, block, relative, imports, "")
+                if unit:
+                    units.append(unit)
+        else:
+            digest = hashlib.sha256((relative + str(index) + block).encode()).hexdigest()[:16]
+            units.append({
+                "unit_id": f"unit:{digest}",
+                "kind": "snippet",
+                "name": f"{path.stem}_block{index}",
+                "signature": "snippet",
+                "docstring": "",
+                "body": block[:20_000],
+                "source": block,
+                "imports": "\n".join(imports),
+                "demo": "",
+                "path": relative,
+                "start_line": 1,
+                "end_line": block.count("\n") + 1,
+                "deps": "[]",
+            })
+    return units
+
+
+def segment_for_index(text: str) -> str:
+    """中文用 jieba 切，ASCII（函数名/库名）原样保留。"""
+    if not text:
+        return ""
+    import jieba
+
+    out: list[str] = []
+    for token in jieba.cut_for_search(text):
+        value = token.strip()
+        if value and any(ch.isalnum() for ch in value):
+            out.append(value.casefold())
+    return " ".join(out)
+
+
+def build_index() -> None:
+    started = time.perf_counter()
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    connection = sqlite3.connect(DB_PATH)
+    connection.executescript(
+        """
+        CREATE TABLE code_units(
+            unit_id TEXT PRIMARY KEY, kind TEXT, name TEXT, signature TEXT,
+            docstring TEXT, body TEXT, source TEXT, imports TEXT, demo TEXT,
+            path TEXT, start_line INTEGER, end_line INTEGER, deps TEXT
+        );
+        CREATE VIRTUAL TABLE code_units_fts USING fts5(
+            unit_id UNINDEXED, name, signature, docstring, body, path,
+            tokenize='unicode61 remove_diacritics 2'
+        );
+        """
+    )
+
+    units: list[dict] = []
+    for path in sorted(KB_ROOT.rglob("*.py")):
+        if ".git" in path.parts:
+            continue
+        units.extend(extract_from_python(path, path.relative_to(ROOT / "book").as_posix()))
+    log(f"Python 单元：{len(units)}")
+
+    md_units: list[dict] = []
+    for path in sorted(KB_ROOT.rglob("*.md")):
+        if ".git" in path.parts:
+            continue
+        md_units.extend(extract_from_markdown(path, path.relative_to(ROOT / "book").as_posix()))
+    log(f"Markdown 内联单元：{len(md_units)}")
+    units.extend(md_units)
+
+    # 去重：同一份源码只留一个
+    seen: set[str] = set()
+    unique: list[dict] = []
+    for unit in units:
+        key = hashlib.sha256(unit["source"].encode("utf-8", errors="replace")).hexdigest()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(unit)
+    log(f"去重后单元：{len(unique)}")
+
+    with connection:
+        for unit in unique:
+            connection.execute(
+                "INSERT OR REPLACE INTO code_units VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (unit["unit_id"], unit["kind"], unit["name"], unit["signature"],
+                 unit["docstring"], unit["body"], unit["source"], unit["imports"],
+                 unit["demo"], unit["path"], unit["start_line"], unit["end_line"],
+                 unit["deps"]),
+            )
+            connection.execute(
+                "INSERT INTO code_units_fts VALUES (?,?,?,?,?,?)",
+                (unit["unit_id"], segment_for_index(unit["name"]),
+                 segment_for_index(unit["signature"]), segment_for_index(unit["docstring"]),
+                 segment_for_index(unit["body"]), segment_for_index(unit["path"])),
+            )
+    kinds: dict[str, int] = {}
+    for unit in unique:
+        kinds[unit["kind"]] = kinds.get(unit["kind"], 0) + 1
+    connection.close()
+    log(f"索引完成：{kinds}  用时 {time.perf_counter() - started:.1f}s → {DB_PATH}")
+
+
+# --------------------------------------------------------------------------------------
+# 3. 召回
+# --------------------------------------------------------------------------------------
+
+
+def build_query(query: str) -> str:
+    """中文切词 + 保留 ASCII 技术词（CRC32 / RSA / xor 等）。"""
+    import jieba
+
+    tokens: list[str] = []
+    for token in jieba.cut_for_search(query):
+        value = token.strip()
+        if value and any(ch.isalnum() for ch in value):
+            tokens.append(value.casefold())
+    for ascii_token in re.findall(r"[A-Za-z_][A-Za-z0-9_]{1,}", query):
+        tokens.append(ascii_token.casefold())
+    return " OR ".join(f'"{t}"' for t in dict.fromkeys(tokens))
+
+
+def search_units(query: str, top_k: int = 8) -> list[dict]:
+    expression = build_query(query)
+    if not expression:
+        return []
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    rows = connection.execute(
+        """
+        SELECT u.*, bm25(code_units_fts, 0.0, 3.0, 2.5, 2.0, 1.0, 1.5) AS score
+        FROM code_units_fts f
+        JOIN code_units u ON u.unit_id = f.unit_id
+        WHERE code_units_fts MATCH ?
+        ORDER BY score LIMIT ?
+        """,
+        (expression, top_k),
+    ).fetchall()
+    connection.close()
+    return [dict(row) for row in rows]
+
+
+def inspect(query: str, top_k: int) -> None:
+    units = search_units(query, top_k)
+    log(f"查询：{query}  → {len(units)} 个单元")
+    for rank, unit in enumerate(units, 1):
+        print(f"\n[{rank}] {unit['name']}  ({unit['kind']}, {unit['path']})")
+        print(f"    签名: {unit['signature']}")
+        if unit["docstring"]:
+            print(f"    说明: {unit['docstring'].splitlines()[0][:100]}")
+        body = " ".join(unit["body"].split())
+        print(f"    片段: {body[:180]}")
+
+
+# --------------------------------------------------------------------------------------
+# 4. 入口适配：把召回脚本当作带槽位的模板
+# --------------------------------------------------------------------------------------
+
+# 常见的"输入常量"名字。只认这些明确的名字，不做模糊猜测——
+# 猜错会产出能跑但算错的脚本，比直接失败更糟。
+PARAM_ALIASES = {
+    "n": {"n", "modulus", "N"},
+    "e": {"e", "exponent", "E"},
+    "c": {"c", "ct", "ciphertext", "cipher", "enc", "encrypted"},
+    "data": {"data", "s", "text", "payload", "raw"},
+    "key": {"key", "k"},
+}
+
+
+def _literal_text(node: ast.AST) -> str | None:
+    try:
+        return ast.literal_eval(node)  # type: ignore[return-value]
+    except (ValueError, SyntaxError):
+        return None
+
+
+def find_slots(source: str) -> dict[str, tuple[int, int]]:
+    """找出模块级常量赋值，返回 {角色: (起始行, 结束行)}。"""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    slots: dict[str, tuple[int, int]] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name):
+            continue
+        if _literal_text(node.value) is None:
+            continue
+        name = target.id
+        for role, aliases in PARAM_ALIASES.items():
+            if name in aliases:
+                slots.setdefault(role, (node.lineno, node.end_lineno or node.lineno))
+                break
+    return slots
+
+
+def parameterize(source: str, values: dict[str, str]) -> tuple[str, list[str], list[str]]:
+    """把题目给的值代入模板。返回 (新源码, 已代入的角色, 模板要求但题目没给的角色)。"""
+    slots = find_slots(source)
+    lines = source.splitlines()
+    applied: list[str] = []
+    missing: list[str] = []
+    # 从后往前替换，避免行号偏移
+    for role, (start, end) in sorted(slots.items(), key=lambda kv: -kv[1][0]):
+        if role in values:
+            lines[start - 1:end] = [f"{role} = {values[role]}"]
+            applied.append(role)
+        else:
+            missing.append(role)
+    return "\n".join(lines), applied, missing
+
+
+def run_script(source: str, timeout: int = 60) -> tuple[int, str, str]:
+    """把脚本落到临时文件并执行。真实执行是唯一可信的验证方式。"""
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="secknow-unit-") as workdir:
+        path = Path(workdir) / "assembled.py"
+        path.write_text(source, encoding="utf-8")
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(path)],
+                cwd=workdir, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return 124, "", f"timeout after {timeout}s"
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def assemble_and_run(query: str, values: dict[str, str], expected_flag: str,
+                     top_k: int = 8) -> dict:
+    """召回 → 逐单元尝试入口适配 → 执行 → 校验。
+
+    这是本文件的核心实验：**不生成任何代码**，只做参数代入。
+    代不进去就如实失败，绝不拼一个"看起来像"的脚本。
+    """
+    units = search_units(query, top_k)
+    attempts: list[dict] = []
+    for unit in units:
+        source = unit["source"]
+        if unit["kind"] in {"function", "class"}:
+            # 函数单元需要调用方，暂时只记录，不强行拼装
+            attempts.append({
+                "unit": unit["name"], "path": unit["path"], "status": "needs_driver",
+            })
+            continue
+        parameterized, applied, missing = parameterize(source, values)
+        if missing:
+            attempts.append({
+                "unit": unit["name"], "path": unit["path"],
+                "status": "missing_slots", "missing": missing, "applied": applied,
+            })
+            continue
+        if not applied:
+            attempts.append({
+                "unit": unit["name"], "path": unit["path"], "status": "no_slots_found",
+            })
+            continue
+        code, stdout, stderr = run_script(parameterized)
+        found = FLAG_RE.search(stdout)
+        ok = bool(found and found.group(0).lower() == expected_flag.lower())
+        attempts.append({
+            "unit": unit["name"], "path": unit["path"],
+            "status": "solved" if ok else "ran_no_match",
+            "applied": applied, "exit": code,
+            "stdout": stdout[-300:], "stderr": stderr[-200:],
+        })
+        if ok:
+            break
+    solved = any(a["status"] == "solved" for a in attempts)
+    return {"query": query, "solved": solved, "attempts": attempts}
+
+
+# --------------------------------------------------------------------------------------
+# 内置演示任务：用真实可执行的题目检验"拼装"到底成不成立
+# --------------------------------------------------------------------------------------
+
+
+def demo_tasks() -> list[dict]:
+    import base64
+    import zlib
+
+    tasks: list[dict] = []
+
+    # T1 RSA 小公钥指数：n 远大于 m^3
+    flag1 = "flag{rsa_small_e_no_padding}"
+    m1 = int.from_bytes(flag1.encode(), "big")
+    n1 = (1 << 2048) - 0xE5B1A7C3D9F102468ACE13579BDF02468 + 1
+    c1 = pow(m1, 3, n1)
+    tasks.append({
+        "id": "T1", "tech": "RSA 小公钥指数 e=3 小明文 开三次方",
+        "query": "RSA 小公钥指数攻击 e=3 小明文 开三次方 恢复明文",
+        "values": {"n": str(n1), "e": "3", "c": str(c1)},
+        "expected": flag1,
+    })
+
+    # T2 多层 base64
+    flag2 = "flag{b4se64_ch41n_1s_e4sy}"
+    blob = base64.b64encode(base64.b64encode(base64.b64encode(flag2.encode())).decode().encode()).decode()
+    tasks.append({
+        "id": "T2", "tech": "base64 多层解码",
+        "query": "base64 多层编码 连续解码 还原明文",
+        "values": {"data": repr(blob)},
+        "expected": flag2,
+    })
+
+    # T3 单字节 XOR
+    flag3 = "flag{x0r_w1th_s1ngle_byte}"
+    xored = bytes(b ^ 0x5A for b in flag3.encode()).hex()
+    tasks.append({
+        "id": "T3", "tech": "单字节 XOR 爆破",
+        "query": "单字节 XOR 爆破 密钥 还原明文",
+        "values": {"data": repr(xored)},
+        "expected": flag3,
+    })
+
+    # T4 CRC32 爆破 4 个小写字母
+    inner = "ctfz"
+    tasks.append({
+        "id": "T4", "tech": "CRC32 明文校验爆破",
+        "query": "CRC32 校验值 爆破 小写字母 文件内容",
+        "values": {},  # 没有明确的模块级槽位名，预期会失败
+        "expected": f"flag{{{inner}}}",
+    })
+
+    # T5 凯撒
+    flag5 = "flag{caesar_shifts_by_13}"
+    shifted = "".join(
+        chr((ord(ch) - 97 + 13) % 26 + 97) if ch.islower()
+        else chr((ord(ch) - 65 + 13) % 26 + 65) if ch.isupper() else ch
+        for ch in flag5
+    )
+    tasks.append({
+        "id": "T5", "tech": "凯撒密码",
+        "query": "凯撒密码 移位 解密 还原明文",
+        "values": {"data": repr(shifted)},
+        "expected": flag5,
+    })
+    return tasks
+
+
+def run_demo() -> None:
+    tasks = demo_tasks()
+    log(f"演示任务：{len(tasks)} 个")
+    results = []
+    for task in tasks:
+        outcome = assemble_and_run(task["query"], task["values"], task["expected"])
+        results.append({"id": task["id"], "tech": task["tech"], **outcome})
+        statuses = [a["status"] for a in outcome["attempts"]]
+        log(f"  {task['id']} {task['tech']}: {'SOLVED' if outcome['solved'] else 'FAILED'}  "
+            f"attempts={statuses[:5]}")
+    solved = sum(1 for r in results if r["solved"])
+    log(f"结果：{solved}/{len(results)} 通过真实执行解出")
+    out_dir = ROOT / "experiments" / "EXP-0005"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "results.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+    log(f"结果写入 {out_dir / 'results.json'}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="代码单元抽取 / 索引 / 召回 / 拼装")
+    parser.add_argument("--build", action="store_true", help="重建单元索引")
+    parser.add_argument("--inspect", nargs="*", default=None, help="查询并打印召回单元")
+    parser.add_argument("--demo", action="store_true", help="运行内置拼装演示任务")
+    parser.add_argument("--top-k", type=int, default=5)
+    args = parser.parse_args()
+
+    if args.build:
+        build_index()
+    if args.inspect:
+        if not DB_PATH.exists():
+            raise SystemExit("索引不存在，先运行 --build")
+        for query in args.inspect:
+            inspect(query, args.top_k)
+    if args.demo:
+        if not DB_PATH.exists():
+            raise SystemExit("索引不存在，先运行 --build")
+        run_demo()
+
+
+if __name__ == "__main__":
+    main()

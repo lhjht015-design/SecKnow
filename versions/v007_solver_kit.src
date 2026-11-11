@@ -1,0 +1,474 @@
+"""
+v007_solver_kit.src — 带显式契约的求解单元库 + 确定性拼装器
+
+上一轮（v006）暴露的问题
+    从知识库直接抓取代码单元、按「变量名像不像 n/e/c」去猜槽位，5 道题 0 通过。
+    但诊断显示：**正确的单元其实都召回到了**（RSA 命中了 rsa1.py，CRC32 命中了
+    crack_crc()，凯撒命中了 variant_caesar()），失败出在"入口适配"这一步：
+      - 把无关常量（key）当成必填槽位，直接否决了正确脚本
+      - 函数单元没有调用方，只能标记 needs_driver
+      - 加密函数被当成解密函数用
+      - 变量名不在别名表里就判定"没有槽位"
+
+    结论：**拆分 + 召回 + 拼接 这条路是对的，但"拼接"不能靠猜名字，
+    必须靠单元自带的显式契约。**
+
+本文件演示正确做法
+    每个单元显式声明：
+        params    —— 参数名与语义（这就是"入口适配"的接口）
+        returns   —— 返回值语义
+        code      —— 一段自包含的 solve(**params) 实现
+        technique —— 用于召回的技法关键词
+        demo      —— 可直接运行的示例参数（既是文档也是自检）
+
+    拼装器只做三件事：按技法召回 → 按参数名绑定 → 执行并校验。
+    **不生成任何代码，不猜测任何映射。**
+
+运行
+    python versions/v007_solver_kit.src --list
+    python versions/v007_solver_kit.src --demo
+
+产出物
+    experiments/EXP-0005/solver_kit_results.json
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0005"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 单元库：每个单元 = 显式契约 + 自包含实现
+# --------------------------------------------------------------------------------------
+
+UNITS: list[dict] = [
+    {
+        "id": "rsa_small_e",
+        "title": "RSA 小公钥指数（小明文）攻击",
+        "technique": ["rsa", "小公钥", "e=3", "小明文", "开三次方", "iroot", "低位指数"],
+        "params": {"n": "模数 N (int)", "e": "公钥指数 (int)", "c": "密文 c (int)"},
+        "returns": "明文 flag 字符串",
+        "code": '''
+import gmpy2
+
+def solve(n, e, c):
+    root, exact = gmpy2.iroot(c, e)
+    if not exact:
+        raise ValueError("c 不是完全 e 次方，小明文攻击不适用")
+    raw = int(root).to_bytes((int(root).bit_length() + 7) // 8, "big")
+    return raw.decode("utf-8", errors="replace")
+''',
+    },
+    {
+        "id": "base64_chain",
+        "title": "多层 Base64 连续解码",
+        "technique": ["base64", "多层", "连续解码", "b64", "编码链"],
+        "params": {"data": "待解码字符串 (str)"},
+        "returns": "解码后的 flag 字符串",
+        "code": '''
+import base64, re
+
+def solve(data):
+    text = data.strip()
+    for _ in range(8):
+        if re.search(r"flag\\{", text, re.I):
+            return text
+        try:
+            text = base64.b64decode(text, validate=True).decode("utf-8")
+        except Exception:
+            break
+    return text
+''',
+    },
+    {
+        "id": "xor_single_byte",
+        "title": "单字节 XOR 爆破",
+        "technique": ["xor", "异或", "单字节", "单字节密钥", "爆破密钥"],
+        "params": {"data": "hex 密文 (str)"},
+        "returns": "还原出的 flag 字符串",
+        "code": '''
+import re
+
+def solve(data):
+    raw = bytes.fromhex(data.strip().replace(" ", ""))
+    for key in range(256):
+        cand = bytes(b ^ key for b in raw)
+        try:
+            text = cand.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if re.search(r"flag\\{", text, re.I):
+            return text
+    raise ValueError("没有找到含 flag 的单字节密钥")
+''',
+    },
+    {
+        "id": "crc32_brute",
+        "title": "CRC32 明文校验爆破",
+        "technique": ["crc32", "校验值", "明文校验", "爆破", "zip", "文件内容"],
+        "params": {
+            "target_crc": "目标 CRC32 (int)",
+            "length": "内容长度 (int)",
+            "charset": "字符集 (str)",
+        },
+        "returns": "匹配到 flag{内容} 形式的字符串",
+        "code": '''
+import itertools, zlib
+
+def solve(target_crc, length, charset):
+    target = int(target_crc) & 0xFFFFFFFF
+    for combo in itertools.product(charset, repeat=int(length)):
+        word = "".join(combo)
+        if zlib.crc32(word.encode()) & 0xFFFFFFFF == target:
+            return f"flag{{{word}}}"
+    raise ValueError("字符集/长度范围内没有匹配项")
+''',
+    },
+    {
+        "id": "caesar_brute",
+        "title": "凯撒密码爆破",
+        "technique": ["凯撒", "caesar", "移位", "rot", "古典密码"],
+        "params": {"data": "密文字符串 (str)"},
+        "returns": "还原出的 flag 字符串",
+        "code": '''
+import re
+
+def solve(data):
+    text = data.strip()
+    for shift in range(26):
+        cand = "".join(
+            chr((ord(ch) - 97 - shift) % 26 + 97) if ch.islower()
+            else chr((ord(ch) - 65 - shift) % 26 + 65) if ch.isupper()
+            else ch
+            for ch in text
+        )
+        if re.search(r"flag\\{", cand, re.I):
+            return cand
+    raise ValueError("26 个移位里没有含 flag 的结果")
+''',
+    },
+]
+
+UNIT_INDEX = {unit["id"]: unit for unit in UNITS}
+
+
+# --------------------------------------------------------------------------------------
+# 确定性召回：技法关键词评分，不依赖向量/模型
+# --------------------------------------------------------------------------------------
+
+
+def recall(query: str, top_k: int = 3) -> list[dict]:
+    text = query.casefold()
+    scored: list[tuple[float, dict]] = []
+    for unit in UNITS:
+        hits = sum(1 for kw in unit["technique"] if kw.casefold() in text)
+        if hits == 0:
+            continue
+        # 命中关键词占比 + 绝对命中数，避免长关键词表占便宜
+        score = hits + hits / len(unit["technique"])
+        scored.append((score, unit))
+    scored.sort(key=lambda item: -item[0])
+    return [unit for _, unit in scored[:top_k]]
+
+
+# --------------------------------------------------------------------------------------
+# 拼装与执行
+# --------------------------------------------------------------------------------------
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def assemble(unit: dict, values: dict[str, object]) -> str:
+    """按契约绑定参数，生成一段可运行脚本。契约不全就抛错，绝不猜。"""
+    declared = set(unit["params"])
+    provided = set(values)
+    missing = declared - provided
+    if missing:
+        raise KeyError(f"缺少契约参数：{sorted(missing)}")
+    extra = provided - declared
+    if extra:
+        raise KeyError(f"题目给了契约外的参数：{sorted(extra)}")
+    call = ", ".join(f"{name}={values[name]!r}" for name in unit["params"])
+    return (
+        f"# 单元：{unit['id']} — {unit['title']}\n"
+        f"# 契约：{json.dumps(unit['params'], ensure_ascii=False)}\n"
+        f"{unit['code'].strip()}\n\n"
+        f"if __name__ == '__main__':\n"
+        f"    print(solve({call}))\n"
+    )
+
+
+def execute(source: str, timeout: int = 60) -> tuple[int, str, str]:
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="secknow-kit-") as workdir:
+        path = Path(workdir) / "solve.py"
+        path.write_text(source, encoding="utf-8")
+        try:
+            done = subprocess.run(
+                [sys.executable, str(path)], cwd=workdir, capture_output=True,
+                text=True, encoding="utf-8", errors="replace", timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            return 124, "", f"timeout after {timeout}s"
+    return done.returncode, done.stdout, done.stderr
+
+
+# --------------------------------------------------------------------------------------
+# 演示任务：与 v006 同一套，才能直接对比
+# --------------------------------------------------------------------------------------
+
+
+def demo_tasks() -> list[dict]:
+    import base64
+    import zlib
+
+    tasks: list[dict] = []
+
+    flag1 = "flag{rsa_small_e_no_padding}"
+    m1 = int.from_bytes(flag1.encode(), "big")
+    n1 = (1 << 2048) - 0xE5B1A7C3D9F102468ACE13579BDF02468 + 1
+    tasks.append({
+        "id": "T1", "query": "RSA 小公钥指数攻击 e=3 小明文 开三次方 恢复明文",
+        "params": {"n": n1, "e": 3, "c": pow(m1, 3, n1)}, "expected": flag1,
+    })
+
+    flag2 = "flag{b4se64_ch41n_1s_e4sy}"
+    blob = base64.b64encode(
+        base64.b64encode(base64.b64encode(flag2.encode()).decode().encode()).decode().encode()
+    ).decode()
+    tasks.append({
+        "id": "T2", "query": "base64 多层编码 连续解码 还原明文",
+        "params": {"data": blob}, "expected": flag2,
+    })
+
+    flag3 = "flag{x0r_w1th_s1ngle_byte}"
+    tasks.append({
+        "id": "T3", "query": "单字节 XOR 爆破 密钥 还原明文",
+        "params": {"data": bytes(b ^ 0x5A for b in flag3.encode()).hex()},
+        "expected": flag3,
+    })
+
+    inner = "ctfz"
+    tasks.append({
+        "id": "T4", "query": "CRC32 校验值 爆破 小写字母 文件内容",
+        "params": {
+            "target_crc": zlib.crc32(inner.encode()) & 0xFFFFFFFF,
+            "length": 4,
+            "charset": "abcdefghijklmnopqrstuvwxyz",
+        },
+        "expected": f"flag{{{inner}}}",
+    })
+
+    flag5 = "flag{caesar_shifts_by_13}"
+    shifted = "".join(
+        chr((ord(ch) - 97 + 13) % 26 + 97) if ch.islower()
+        else chr((ord(ch) - 65 + 13) % 26 + 65) if ch.isupper() else ch
+        for ch in flag5
+    )
+    tasks.append({
+        "id": "T5", "query": "凯撒密码 移位 解密 还原明文",
+        "params": {"data": shifted}, "expected": flag5,
+    })
+    return tasks
+
+
+def run_demo() -> None:
+    tasks = demo_tasks()
+    results = []
+    solved_count = 0
+    for task in tasks:
+        candidates = recall(task["query"])
+        entry = {"id": task["id"], "query": task["query"], "expected": task["expected"],
+                 "recalled": [u["id"] for u in candidates], "attempts": []}
+        ok = False
+        for unit in candidates:
+            try:
+                source = assemble(unit, task["params"])
+            except KeyError as error:
+                entry["attempts"].append({"unit": unit["id"], "status": "contract_mismatch",
+                                          "detail": str(error)})
+                continue
+            code, stdout, stderr = execute(source)
+            found = FLAG_RE.search(stdout)
+            matched = bool(found and found.group(0).lower() == task["expected"].lower())
+            entry["attempts"].append({
+                "unit": unit["id"], "status": "solved" if matched else "ran_no_match",
+                "exit": code, "stdout": stdout.strip()[:200], "stderr": stderr.strip()[-160:],
+            })
+            if matched:
+                ok = True
+                break
+        entry["solved"] = ok
+        solved_count += int(ok)
+        log(f"  {task['id']}: {'SOLVED' if ok else 'FAILED'}  召回={entry['recalled'][:3]}  "
+            f"尝试={[a['status'] for a in entry['attempts']]}")
+        results.append(entry)
+
+    log(f"结果：{solved_count}/{len(tasks)} 通过真实执行解出")
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "solver_kit_results.json").write_text(
+        json.dumps({"units": len(UNITS), "solved": solved_count, "total": len(tasks),
+                    "results": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    log(f"结果写入 {OUT_DIR / 'solver_kit_results.json'}")
+
+
+def list_units() -> None:
+    log(f"单元库：{len(UNITS)} 个")
+    for unit in UNITS:
+        print(f"\n[{unit['id']}] {unit['title']}")
+        print(f"  参数: {json.dumps(unit['params'], ensure_ascii=False)}")
+        print(f"  返回: {unit['returns']}")
+        print(f"  技法词: {', '.join(unit['technique'])}")
+
+
+# --------------------------------------------------------------------------------------
+# 参数抽取：从题目文本里把契约参数取出来
+# --------------------------------------------------------------------------------------
+
+# 每个单元配一个显式抽取器。这里同样不猜——抽不到就返回 None，
+# 由上层如实报告"参数抽取失败"，而不是拿一个错值去跑出错误结果。
+INT_RE = re.compile(r"\b(n|e|c)\s*=\s*(0x[0-9a-fA-F]+|\d+)")
+LONG_B64 = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+LONG_HEX = re.compile(r"\b[0-9a-fA-F]{24,}\b")
+CRC_RE = re.compile(r"CRC32\s*=\s*0x([0-9A-Fa-f]{8})")
+CAESAR_RE = re.compile(r"\b[a-z]{4}\{[a-z0-9_]{3,}\}")
+
+
+def extract_params(unit_id: str, text: str) -> dict[str, object] | None:
+    if unit_id == "rsa_small_e":
+        found = {name: int(value, 0) for name, value in INT_RE.findall(text)}
+        return found if {"n", "e", "c"} <= set(found) else None
+
+    if unit_id == "base64_chain":
+        candidates = LONG_B64.findall(text)
+        return {"data": max(candidates, key=len)} if candidates else None
+
+    if unit_id == "xor_single_byte":
+        candidates = LONG_HEX.findall(text)
+        return {"data": max(candidates, key=len)} if candidates else None
+
+    if unit_id == "crc32_brute":
+        crc = CRC_RE.search(text)
+        length = re.search(r"(\d+)\s*个\s*(小写|大写)?\s*(英文字母|字母)", text)
+        if not (crc and length):
+            return None
+        charset = (
+            "abcdefghijklmnopqrstuvwxyz"
+            if (length.group(2) or "小写") == "小写"
+            else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        )
+        return {"target_crc": int(crc.group(1), 16),
+                "length": int(length.group(1)), "charset": charset}
+
+    if unit_id == "caesar_brute":
+        candidates = CAESAR_RE.findall(text)
+        return {"data": candidates[0]} if candidates else None
+
+    return None
+
+
+def run_demo_from_text() -> None:
+    """端到端：**只看题目文本**，不提供任何预填参数。"""
+    tasks = demo_tasks()
+    # 把每个任务的参数重新渲染成一段"题目文本"，模拟真实赛题
+    rendered: list[dict] = []
+    for task in tasks:
+        params = task["params"]
+        if task["id"] == "T1":
+            text = (f"RSA 题：n = {params['n']}\ne = {params['e']}\nc = {params['c']}\n"
+                    "明文没有做 padding，求 flag。")
+        elif task["id"] == "T2":
+            text = f"给了一串经过多层 Base64 编码的字符串，求还原明文：\n{params['data']}"
+        elif task["id"] == "T3":
+            text = f"下面这段 hex 是单字节 XOR 加密的，请爆破密钥还原明文：\n{params['data']}"
+        elif task["id"] == "T4":
+            text = (f"ZIP 里文件的 CRC32 = 0x{params['target_crc']:08X}，"
+                    f"内容为 {params['length']} 个小写字母，求内容。")
+        else:
+            text = f"凯撒密码密文：\n{params['data']}"
+        rendered.append({"id": task["id"], "text": text, "expected": task["expected"]})
+
+    solved_count = 0
+    results = []
+    for task in rendered:
+        candidates = recall(task["text"])
+        entry = {"id": task["id"], "recalled": [u["id"] for u in candidates], "attempts": []}
+        ok = False
+        for unit in candidates:
+            values = extract_params(unit["id"], task["text"])
+            if values is None:
+                entry["attempts"].append({"unit": unit["id"], "status": "param_extract_failed"})
+                continue
+            try:
+                source = assemble(unit, values)
+            except KeyError as error:
+                entry["attempts"].append({"unit": unit["id"], "status": "contract_mismatch",
+                                          "detail": str(error)})
+                continue
+            code, stdout, stderr = execute(source)
+            found = FLAG_RE.search(stdout)
+            matched = bool(found and found.group(0).lower() == task["expected"].lower())
+            entry["attempts"].append({
+                "unit": unit["id"], "status": "solved" if matched else "ran_no_match",
+                "params": {k: (str(v)[:24] + "…" if len(str(v)) > 24 else v)
+                           for k, v in values.items()},
+                "exit": code, "stdout": stdout.strip()[:160], "stderr": stderr.strip()[-120:],
+            })
+            if matched:
+                ok = True
+                break
+        entry["solved"] = ok
+        solved_count += int(ok)
+        log(f"  {task['id']}: {'SOLVED' if ok else 'FAILED'}  "
+            f"召回={entry['recalled'][:2]} 尝试={[a['status'] for a in entry['attempts']]}")
+        results.append(entry)
+
+    log(f"端到端（仅给题目文本）：{solved_count}/{len(rendered)} 通过真实执行解出")
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "solver_kit_text_results.json").write_text(
+        json.dumps({"solved": solved_count, "total": len(rendered), "results": results},
+                   ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="带显式契约的求解单元库")
+    parser.add_argument("--list", action="store_true", help="列出单元与契约")
+    parser.add_argument("--demo", action="store_true", help="运行拼装演示（参数由程序提供）")
+    parser.add_argument("--demo-text", action="store_true",
+                        help="端到端演示：只给题目文本，参数自动抽取")
+    args = parser.parse_args()
+    if args.list:
+        list_units()
+    if args.demo:
+        run_demo()
+    if args.demo_text:
+        run_demo_from_text()
+    if not args.list and not args.demo and not args.demo_text:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

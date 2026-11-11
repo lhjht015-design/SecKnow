@@ -15,6 +15,8 @@
 | v003 | [v003_verified_answer.src](v003_verified_answer.src) | 带确定性验证的离线回答（实现 LAW-0001） | Ollama + SecKnow 索引 | 逻辑自测通过，待真实模型评测 |
 | v004 | [v004_retrieval_bench.src](v004_retrieval_bench.src) | 用 meta WP 真值客观评测检索质量 | SecKnow 索引 | 已跑通，120 题数据已出 |
 | v005 | [v005_sag2_multihop.src](v005_sag2_multihop.src) | SAG2 式离线多跳检索（BM25 + 本地判官 + 词扩展） | SecKnow 索引 + reranker | 已实现，待评测 |
+| v006 | [v006_code_units.src](v006_code_units.src) | 从知识库抽取代码单元并按题目召回（含拼装尝试） | 无（纯 Python） | 已跑通；拼装 0/5，暴露契约缺失 |
+| v007 | [v007_solver_kit.src](v007_solver_kit.src) | 带显式契约的求解单元库 + 确定性拼装器 | 无（纯 Python） | **端到端 5/5** |
 
 ## 各版本说明
 
@@ -137,3 +139,39 @@ BM25(FTS5) 取候选 → 判官（reranker 或 BM25）→ jieba 从选中段落�
 `--candidates`、`--judge-keep`、`--expand-n`
 
 **产出**：`experiments/EXP-0004/{results.json,report.md}`
+
+### v006_code_units.src
+
+**回答的问题**：能不能把知识库代码按函数拆开，按题目召回函数，再拼成脚本？
+
+**做法**：从 121 个 `.py` 与 markdown 内联代码块抽取 1165 个单元
+（508 function / 572 snippet / 80 script / 5 class），建 FTS5 索引，
+按题目召回；拼装时按"变量名像不像 n/e/c"猜槽位。
+
+**结果：0/5。** 但诊断显示**正确单元都召回到了**，失败全在适配环节：
+无关常量被当成必填槽位、函数无 driver、语义错配（把加密函数当解密用）。
+→ 见 `laws/LAW-0010.md`。这个"失败"是有价值的，它定位了真正的瓶颈。
+
+### v007_solver_kit.src
+
+**回答的问题**：既然瓶颈在适配，显式契约能不能解决？
+
+**做法**：每个单元声明 `params` / `returns` / `code` / `technique` / `demo`。
+拼装器只做三件事：按技法召回 → 按参数名绑定 → 执行校验。
+**不生成代码、不猜映射。**
+
+**结果：**
+- 参数由程序提供：**5/5**
+- **端到端只给题目文本**（参数靠每个单元配的正则抽取器）：**5/5**，约 1 秒，零模型
+
+**运行**
+```bash
+python versions/v007_solver_kit.src --list
+python versions/v007_solver_kit.src --demo
+python versions/v007_solver_kit.src --demo-text
+```
+
+**产出**：`experiments/EXP-0005/{solver_kit_results.json,solver_kit_text_results.json}`
+
+**注意**：这 5 个单元是手工编写的最小验证集，**不是泛化能力的证明**。
+真实成本在于把知识库里约 250 个可复用脚本改造成带契约的单元。

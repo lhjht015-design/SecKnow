@@ -1,0 +1,106 @@
+{
+  "solved": 5,
+  "total": 5,
+  "results": [
+    {
+      "id": "T1",
+      "recalled": [
+        "rsa_small_e"
+      ],
+      "attempts": [
+        {
+          "unit": "rsa_small_e",
+          "status": "solved",
+          "params": {
+            "n": "323170060713110073007148…",
+            "e": 3,
+            "c": "125497265439904521759676…"
+          },
+          "exit": 0,
+          "stdout": "flag{rsa_small_e_no_padding}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T2",
+      "recalled": [
+        "base64_chain"
+      ],
+      "attempts": [
+        {
+          "unit": "base64_chain",
+          "status": "solved",
+          "params": {
+            "data": "V20xNGFGb3pkR2xPU0U1c1Rt…"
+          },
+          "exit": 0,
+          "stdout": "flag{b4se64_ch41n_1s_e4sy}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T3",
+      "recalled": [
+        "xor_single_byte",
+        "crc32_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "xor_single_byte",
+          "status": "solved",
+          "params": {
+            "data": "3c363b3d21226a28052d6b2e…"
+          },
+          "exit": 0,
+          "stdout": "flag{x0r_w1th_s1ngle_byte}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T4",
+      "recalled": [
+        "crc32_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "crc32_brute",
+          "status": "solved",
+          "params": {
+            "target_crc": 3629650814,
+            "length": 4,
+            "charset": "abcdefghijklmnopqrstuvwx…"
+          },
+          "exit": 0,
+          "stdout": "flag{ctfz}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T5",
+      "recalled": [
+        "caesar_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "caesar_brute",
+          "status": "solved",
+          "params": {
+            "data": "synt{pnrfne_fuvsgf_ol_13…"
+          },
+          "exit": 0,
+          "stdout": "flag{caesar_shifts_by_13}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    }
+  ]
+}

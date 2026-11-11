@@ -1,0 +1,98 @@
+{
+  "units": 5,
+  "solved": 5,
+  "total": 5,
+  "results": [
+    {
+      "id": "T1",
+      "query": "RSA 小公钥指数攻击 e=3 小明文 开三次方 恢复明文",
+      "expected": "flag{rsa_small_e_no_padding}",
+      "recalled": [
+        "rsa_small_e"
+      ],
+      "attempts": [
+        {
+          "unit": "rsa_small_e",
+          "status": "solved",
+          "exit": 0,
+          "stdout": "flag{rsa_small_e_no_padding}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T2",
+      "query": "base64 多层编码 连续解码 还原明文",
+      "expected": "flag{b4se64_ch41n_1s_e4sy}",
+      "recalled": [
+        "base64_chain"
+      ],
+      "attempts": [
+        {
+          "unit": "base64_chain",
+          "status": "solved",
+          "exit": 0,
+          "stdout": "flag{b4se64_ch41n_1s_e4sy}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T3",
+      "query": "单字节 XOR 爆破 密钥 还原明文",
+      "expected": "flag{x0r_w1th_s1ngle_byte}",
+      "recalled": [
+        "xor_single_byte",
+        "crc32_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "xor_single_byte",
+          "status": "solved",
+          "exit": 0,
+          "stdout": "flag{x0r_w1th_s1ngle_byte}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T4",
+      "query": "CRC32 校验值 爆破 小写字母 文件内容",
+      "expected": "flag{ctfz}",
+      "recalled": [
+        "crc32_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "crc32_brute",
+          "status": "solved",
+          "exit": 0,
+          "stdout": "flag{ctfz}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    },
+    {
+      "id": "T5",
+      "query": "凯撒密码 移位 解密 还原明文",
+      "expected": "flag{caesar_shifts_by_13}",
+      "recalled": [
+        "caesar_brute"
+      ],
+      "attempts": [
+        {
+          "unit": "caesar_brute",
+          "status": "solved",
+          "exit": 0,
+          "stdout": "flag{caesar_shifts_by_13}",
+          "stderr": ""
+        }
+      ],
+      "solved": true
+    }
+  ]
+}
