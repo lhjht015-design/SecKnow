@@ -1,0 +1,211 @@
+{
+  "summary": {
+    "positive_total": 1,
+    "positive_solved": 1,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "mean_elapsed_ms": 496.1
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "negative": false,
+      "note": "三保护全开",
+      "solved": true,
+      "reason": null,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": true,
+          "canary": true
+        },
+        {
+          "unit": "plt_stub",
+          "puts_got": "0x3fb0",
+          "read_plt": "0x10c0",
+          "printf_plt": "0x10b0"
+        },
+        {
+          "unit": "analyze_layout",
+          "ok": "0x1",
+          "function_start": "0x11cc",
+          "buffer_slot": "0x90",
+          "canary_slot": "0x8",
+          "canary_offset": "0x88",
+          "ret_offset": "0x98",
+          "main_return": "0x127b"
+        },
+        {
+          "unit": "libc_offsets",
+          "ok": true,
+          "puts": "0x80e50",
+          "system": "0x50d70",
+          "binsh": "0x1d8678"
+        },
+        {
+          "unit": "round1_leak",
+          "ok": "0x1",
+          "idx0": "0x6",
+          "marker_index": "0x5",
+          "canary": "0x26afaff0770b9b00",
+          "saved_rip": "0x55d7af32927b",
+          "canary_list_index": "0x16"
+        },
+        {
+          "unit": "solve_pie",
+          "saved_rip": "0x55d7af32927b",
+          "base": "0x55d7af328000",
+          "page_aligned": true
+        },
+        {
+          "unit": "round2_leak",
+          "ok": "0x1",
+          "leaked": "0x7f8b7803ce50",
+          "raw_len": "0x6"
+        },
+        {
+          "unit": "solve_libc",
+          "base": "0x7f8b77fbc000",
+          "page_aligned": true
+        },
+        {
+          "unit": "execute",
+          "align": true,
+          "result": "solved"
+        }
+      ],
+      "elapsed_ms": 1188.4,
+      "attempts": [
+        {
+          "align": true,
+          "solved": true,
+          "reason": null,
+          "elapsed_ms": 1188.4
+        }
+      ]
+    },
+    {
+      "id": "N1",
+      "negative": true,
+      "note": "libc 版本不匹配（错偏移）",
+      "solved": false,
+      "reason": "libc_mismatch",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": true,
+          "canary": true
+        },
+        {
+          "unit": "plt_stub",
+          "puts_got": "0x3fb0",
+          "read_plt": "0x10c0",
+          "printf_plt": "0x10b0"
+        },
+        {
+          "unit": "analyze_layout",
+          "ok": "0x1",
+          "function_start": "0x11cc",
+          "buffer_slot": "0x90",
+          "canary_slot": "0x8",
+          "canary_offset": "0x88",
+          "ret_offset": "0x98",
+          "main_return": "0x127b"
+        },
+        {
+          "unit": "libc_offsets",
+          "ok": true,
+          "puts": "0x80e50",
+          "system": "0x50d70",
+          "binsh": "0x1d8678"
+        },
+        {
+          "unit": "round1_leak",
+          "ok": "0x1",
+          "idx0": "0x6",
+          "marker_index": "0x5",
+          "canary": "0x5969905b1758d400",
+          "saved_rip": "0x5629ae6d627b",
+          "canary_list_index": "0x16"
+        },
+        {
+          "unit": "solve_pie",
+          "saved_rip": "0x5629ae6d627b",
+          "base": "0x5629ae6d5000",
+          "page_aligned": true
+        },
+        {
+          "unit": "round2_leak",
+          "ok": "0x1",
+          "leaked": "0x7f21a464ae50",
+          "raw_len": "0x6"
+        },
+        {
+          "unit": "solve_libc",
+          "base": "0x7f21a4638b0b",
+          "page_aligned": false
+        }
+      ],
+      "elapsed_ms": 146.6,
+      "attempts": [
+        {
+          "align": true,
+          "solved": false,
+          "reason": "libc_mismatch",
+          "elapsed_ms": 146.6
+        }
+      ]
+    },
+    {
+      "id": "N2",
+      "negative": true,
+      "note": "没有 printf 泄漏原语",
+      "solved": false,
+      "reason": "leak_failed",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": true,
+          "canary": true
+        },
+        {
+          "unit": "plt_stub",
+          "puts_got": "0x3fb0",
+          "read_plt": "0x10c0",
+          "printf_plt": "0x10b0"
+        },
+        {
+          "unit": "analyze_layout",
+          "ok": "0x1",
+          "function_start": "0x11cc",
+          "buffer_slot": "0x90",
+          "canary_slot": "0x8",
+          "canary_offset": "0x88",
+          "ret_offset": "0x98",
+          "main_return": "0x1280"
+        },
+        {
+          "unit": "libc_offsets",
+          "ok": true,
+          "puts": "0x80e50",
+          "system": "0x50d70",
+          "binsh": "0x1d8678"
+        },
+        {
+          "unit": "round1_leak",
+          "ok": "0x0",
+          "reason": "leak_failed"
+        }
+      ],
+      "elapsed_ms": 153.4,
+      "attempts": [
+        {
+          "align": true,
+          "solved": false,
+          "reason": "leak_failed",
+          "elapsed_ms": 153.4
+        }
+      ]
+    }
+  ]
+}

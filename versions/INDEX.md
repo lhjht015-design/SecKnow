@@ -27,6 +27,7 @@
 | v015 | [v015_leak_bypass.src](v015_leak_bypass.src) | canary / PIE 绕过：格式化字符串泄漏 + 同进程利用 | pyelftools/capstone + WSL | 3/3 绕过，负样本如实失败 |
 | v016 | [v016_ret2libc.src](v016_ret2libc.src) | ret2libc：PLT 桩解析 + libc 偏移 + 两阶段泄漏利用 | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 | v017 | [v017_ret2win_retest.src](v017_ret2win_retest.src) | ret2win 复测：stripped / -O2 / 改名后的后门定位 | pyelftools/capstone + WSL | 正样本 4/4，负样本 2/2 |
+| v018 | [v018_three_protections.src](v018_three_protections.src) | 三保护组合：fmt 泄漏 canary+PIE → GOT 泄漏 libc → ROP | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 
 ## 各版本说明
 
@@ -551,3 +552,47 @@ python versions/v017_ret2win_retest.src --only R2
 ```
 
 **产出**：`experiments/EXP-0015/{ret2win/,results.json,report.md}`
+
+### v018_three_protections.src
+
+**回答的问题**：真实题通常 canary + PIE + 无后门三者同时成立。能不能在**同一进程**里
+依次拿到 canary、PIE 基址、libc 基址，再用一次溢出打穿？
+
+**靶场**（`experiments/EXP-0016/lab/vuln4.c`）：
+`main` 循环 → `vuln{ char buf[128]; read(0,buf,0x200); printf(buf); }`，
+编译 `-fstack-protector-all -pie -fPIE -O0`。
+
+**三段式信息链**
+
+| 轮次 | 载荷 | 得到 |
+| --- | --- | --- |
+| 1 | `AAAAAAAA + "%p,"×N + NUL` | 标记值定位 idx0 → canary、saved rip → PIE 基址 |
+| 2 | `%<idx0+2>$s` + 指针槽放 `base+puts@got` | puts 运行时地址 → libc 基址（页对齐校验） |
+| 3 | padding + canary + saved rbp + ret + pop_rdi + binsh + system | shell → flag |
+
+**新增单元**：`analyze_layout` / `round1_leak` / `round2_leak` / `build_stage3`。
+
+| 题 | 类型 | 结果 | 原因 |
+| --- | --- | --- | --- |
+| T1 | 三保护全开 | ✓ 约 1.18 s | 真实执行拿到 `flag{three_protections}` |
+| N1 | 错 libc 偏移 | ✓ 如实拒绝 | `libc_mismatch` |
+| N2 | 无可控泄漏 | ✓ 如实拒绝 | `leak_failed` |
+
+连续 3 次稳定，平均约 490 ms/题。
+
+**六个关键点**（见 `laws/LAW-0022.md`）：
+1. 三样信息必须同进程、按依赖顺序拿；
+2. `"%p,"` 是 **3 字节**，泄漏串必须严格小于 canary_offset——我按 2 字节估算，
+   44 个值就写坏 canary，报错是 `stack smashing detected`；
+3. read 不补 NUL，泄漏串末尾必须显式加 `\x00`，否则 printf 会读进缓冲区残留；
+4. idx0 用 `0x4141414141414141` 标记现场标定，不写死下标；
+5. `%s` 的指针放在格式说明之后（GOT 地址含 `00`，放开头会截断格式串）；
+6. 栈对齐仍需额外 `ret`。
+
+**运行**
+```bash
+python versions/v018_three_protections.src
+python versions/v018_three_protections.src --only T1
+```
+
+**产出**：`experiments/EXP-0016/{lab/,results.json,report.md}`

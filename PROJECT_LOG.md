@@ -537,6 +537,42 @@ pwn 验证真的控制了 RIP 并拿到 flag。
 → 见 `laws/LAW-0021.md`。至此 pwn 的三条主路径（ret2win / canary-PIE 绕过 /
 ret2libc）都已在真实进程上验证。下一个自然缺口是三者组合以及堆利用。
 
+### 结论 21：三保护组合是一条信息链，泄漏载荷自己也会踩 canary
+
+靶场 `vuln4`：`while(1){ puts("input:"); vuln(); }`，
+`vuln{ char buf[128]; read(0,buf,0x200); printf(buf); }`，
+`-fstack-protector-all -pie -fPIE`。同一进程、三段式：
+
+1. `AAAAAAAA + "%p,"×N + NUL` → 标记值定位 idx0 → canary + saved rip → PIE 基址；
+2. `%<idx0+2>$s` + 指针槽放 `base+puts@got` → puts 泄漏 → libc 基址；
+3. canary + saved rbp + [对齐 ret] + pop_rdi + binsh + system → shell。
+
+| 题 | 结果 | 原因 |
+| --- | --- | --- |
+| T1 三保护全开 | ✓ 约 1.18 s | 真实执行拿到 `flag{three_protections}` |
+| N1 错 libc 偏移 | ✓ 如实拒绝 | `libc_mismatch` |
+| N2 无可控泄漏 | ✓ 如实拒绝 | `leak_failed` |
+
+连续 3 次稳定，平均约 490 ms/题。
+
+**六个关键点**
+
+1. 三样信息必须同进程、按依赖顺序拿（fmt → canary/PIE → GOT → libc → ROP）。
+2. **`"%p,"` 是 3 字节，不是 2 字节。** 我按 2 字节估算载荷长度，
+   44 个值写出 141 字节，超过 canary_offset=136，**泄漏载荷自己把 canary 写坏了**，
+   报错是 `*** stack smashing detected ***`——现象像"利用逻辑错"，
+   实际是长度算错。安全公式：`n = (canary_offset - 8 - 1) // 3`。
+3. **read 不补 NUL**，printf 会继续读缓冲区残留；残留里的 `%` 会变成额外格式说明符。
+   泄漏串末尾必须显式补 `\x00`。
+4. **idx0 必须现场标定**：在 buffer[0] 放 `0x4141414141414141`，扫出它对应的 `%p` 下标；
+   canary / saved rip 的槽位都按 `idx0 + 偏移` 算，不写死。
+5. **`%s` 的指针要放在格式说明之后**：PIE 下 GOT 地址高位含 `00`，
+   放开头会截断格式串。做法是先写 `LIBC:%<idx0+2>$s`，空格补到 16 字节，再在偏移 16 放指针。
+6. 栈对齐仍需额外 `ret`（system 入口要求 rsp ≡ 8 mod 16）。
+
+→ 见 `laws/LAW-0022.md`。至此 pwn 四条主路径（ret2win / canary-PIE / ret2libc /
+三者组合）都已在真实进程上打通。
+
 
 ## 4. 更新日志（追加式）
 
@@ -672,5 +708,17 @@ ret2libc）都已在真实进程上验证。下一个自然缺口是三者组合
   N1/N2 均如实拒绝；连续 3 次稳定，平均约 635 ms/题。
 - 记录 `laws/LAW-0021.md`：符号剥离/改名可被行为痕迹绕过；
   `-O2` 的 `endbr64; push r12; push rbp` 会骗过入口检测；候选必须执行验证。
+
+### 2026-11-11 — 三保护组合（v018 / EXP-0016）
+
+- 新增 `versions/v018_three_protections.src` 与 `experiments/EXP-0016/lab/`：
+  `vuln4`（canary + PIE + 循环 + `printf(buf)`）、`vuln4_noleak`（无可控泄漏）。
+- 三段式同进程利用：`%p` 泄漏 canary + PIE → `%s` 读 puts@got 得 libc →
+  canary + ROP `system("/bin/sh")`。
+- 结果：T1 解出（约 1.18 s）；N1 错偏移 `libc_mismatch`；N2 `leak_failed`；
+  连续 3 次稳定，平均约 490 ms/题。
+- 记录 `laws/LAW-0022.md`：三保护是信息依赖链；`"%p,"` 是 3 字节，
+  长度估算错会先写坏 canary；read 不补 NUL；指针槽要在格式说明之后；对齐仍需 `ret`。
+
 
 

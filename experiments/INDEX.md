@@ -20,6 +20,47 @@
 | EXP-0013 | 2026-11-11 | canary / PIE 绕过（格式化字符串泄漏） | 3/3 绕过成功；无泄漏原语时如实失败；连续 3 次稳定 | `EXP-0013/report.md` |
 | EXP-0014 | 2026-11-11 | ret2libc（PLT 解析 + libc 偏移 + 两阶段泄漏） | 正样本 1/1 解出；错版本 / 无 PLT 两个负样本如实拒绝；连续 3 次稳定 | `EXP-0014/report.md` |
 | EXP-0015 | 2026-11-11 | ret2win 复测（stripped / -O2 / 改名） | 4/4 解出（2 例只能靠字符串引用）；无后门 / 假后门 2/2 如实拒绝；连续 3 次稳定 | `EXP-0015/report.md` |
+| EXP-0016 | 2026-11-11 | canary + PIE + ret2libc 三保护组合 | 同进程三段泄漏后打通；错 libc / 无泄漏 2/2 如实拒绝；连续 3 次稳定 | `EXP-0016/report.md` |
+
+---
+
+## EXP-0016 — canary + PIE + ret2libc 三保护组合
+
+**背景**：v015 只会绕保护，v016 只会 ret2libc；真实题通常三者同时成立。
+三样信息必须在同一进程里按依赖顺序拿。
+
+**靶场**（`experiments/EXP-0016/lab/`）：
+
+| 文件 | 说明 |
+| --- | --- |
+| `vuln4` | `while(1){ puts("input:"); vuln(); }`，`buf[128]` + `read(0x200)` + `printf(buf)`；`-fstack-protector-all -pie -fPIE` |
+| `vuln4_noleak` | 同样保护，但 printf 用常量格式串，没有可控泄漏 |
+| `libc.so.6` | 题目附带 libc |
+
+**三段式**
+
+| 轮次 | 载荷 | 得到 |
+| --- | --- | --- |
+| 1 | `AAAAAAAA + "%p,"×N + NUL` | idx0 → canary + saved rip → PIE 基址 |
+| 2 | `%<idx0+2>$s` + 指针槽 | puts 运行时地址 → libc 基址 |
+| 3 | canary + saved rbp + ret + pop_rdi + binsh + system | shell → flag |
+
+| 题 | 结果 | 原因 |
+| --- | --- | --- |
+| T1 | ✓ 约 1.18 s | 真实执行拿到 flag |
+| N1 错 libc 偏移 | ✓ 如实拒绝 | `libc_mismatch` |
+| N2 无可控泄漏 | ✓ 如实拒绝 | `leak_failed` |
+
+连续 3 次稳定，平均约 490 ms/题。
+
+**六个关键点**（`laws/LAW-0022.md`）：
+1. 三样信息必须同进程、按依赖顺序拿；
+2. `"%p,"` 是 3 字节，泄漏串必须严格小于 canary_offset——按 2 字节估算会写坏 canary，
+   现象是 `*** stack smashing detected ***`；
+3. read 不补 NUL，泄漏串末尾必须加 `\x00`；
+4. idx0 用 `0x4141414141414141` 标记现场标定；
+5. `%s` 的指针放在格式说明之后（GOT 地址含 `00`）；
+6. 栈对齐仍需额外 `ret`。
 
 ---
 
