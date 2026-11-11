@@ -1,0 +1,165 @@
+{
+  "summary": {
+    "positive_total": 2,
+    "positive_solved": 2,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "mean_elapsed_ms": 475.2
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "negative": false,
+      "solved": true,
+      "refused": false,
+      "output": "flag{ret2win_real_binary}",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 36
+        },
+        {
+          "unit": "find_gadgets",
+          "result": "ok",
+          "found": [
+            "pop r15; ret",
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 73,
+          "static_hints": [
+            280,
+            288,
+            24,
+            32
+          ],
+          "ok": true
+        },
+        {
+          "unit": "build_ret2win",
+          "result": "ok",
+          "target": "win",
+          "payload_len": 88
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "rc": 0,
+          "stdout": "input:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA�\u0011@\nflag{ret2win_real_binary}"
+        }
+      ],
+      "elapsed_ms": 1320.9
+    },
+    {
+      "id": "T2",
+      "negative": false,
+      "solved": true,
+      "refused": false,
+      "output": "flag{ret2win_real_binary}",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 36
+        },
+        {
+          "unit": "find_gadgets",
+          "result": "ok",
+          "found": [
+            "pop r15; ret",
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 73,
+          "static_hints": [
+            280,
+            288,
+            24,
+            32
+          ],
+          "ok": true
+        },
+        {
+          "unit": "build_ret2win",
+          "result": "ok",
+          "target": "win_arg",
+          "payload_len": 104
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "rc": 0,
+          "stdout": "input:\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA�\u0011@\nflag{ret2win_real_binary}"
+        }
+      ],
+      "elapsed_ms": 572.1
+    },
+    {
+      "id": "N1",
+      "negative": true,
+      "solved": false,
+      "refused": true,
+      "reason": "canary_present",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": true,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 36
+        },
+        {
+          "unit": "protection_gate",
+          "result": "refuse",
+          "reason": "canary_present"
+        }
+      ],
+      "elapsed_ms": 4.0
+    },
+    {
+      "id": "N2",
+      "negative": true,
+      "solved": false,
+      "refused": true,
+      "reason": "pie_enabled",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": true,
+          "canary": false,
+          "nx": true,
+          "relro": "full",
+          "symbols": 35
+        },
+        {
+          "unit": "protection_gate",
+          "result": "refuse",
+          "reason": "pie_enabled"
+        }
+      ],
+      "elapsed_ms": 3.9
+    }
+  ]
+}

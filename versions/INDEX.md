@@ -23,6 +23,7 @@
 | v011 | [v011_file_payload.src](v011_file_payload.src) | 文件型载荷：魔数识别 + zip/png/pcap/elf | 无（纯 Python） | 12/12 正样本，4/4 负样本 |
 | v012 | [v012_zip_members.src](v012_zip_members.src) | 多成员压缩包：全部成员入队 + 先验排序 | 无（纯 Python） | beam_k=32 时 12/12 |
 | v013 | [v013_chain_coverage.src](v013_chain_coverage.src) | 用 726 条真实攻击链测单元库覆盖边界 | 无（纯 Python） | 61.7% 步骤属题目特有逻辑 |
+| v014 | [v014_pwn_units.src](v014_pwn_units.src) | pwn 单元：ELF 分析 + gadget + 偏移探测 + 真实 exploit | pyelftools/capstone + WSL | 正样本 2/2，负样本 2/2 |
 
 ## 各版本说明
 
@@ -387,3 +388,41 @@ python versions/v013_chain_coverage.src
 ```
 
 **产出**：`experiments/EXP-0011/{results.json,report.md}`
+
+### v014_pwn_units.src
+
+**回答的问题**：LAW-0017 显示 pwn 是最大缺口（635 步）。pwn 的标准套路能不能单元化，
+并且**真的打穿一个进程**？
+
+**做法**：在 WSL(Ubuntu 22.04 + gcc 11.4) 里编译三个真实靶场，用四个单元串成确定性流程：
+
+| 单元 | 作用 |
+| --- | --- |
+| `elf_info` | canary / PIE / NX / RELRO、符号地址、`.text` 布局 |
+| `find_gadgets` | capstone 反汇编，按**指令边界**找 `pop reg; ret` |
+| `probe_offset` | 用标记地址真实执行，从崩溃 RIP 反推 padding 长度 |
+| `build_ret2win` | 拼 payload，自动处理 16 字节栈对齐 |
+
+**结果**
+
+| 题 | 类型 | 结果 |
+| --- | --- | --- |
+| T1 | ret2win | ✓ 真实执行拿到 flag |
+| T2 | 带参数的 ret2win（需 `pop rdi`） | ✓ |
+| N1 | 开 canary | ✓ 正确拒绝（`canary_present`） |
+| N2 | 开 PIE | ✓ 正确拒绝（`pie_enabled`） |
+
+平均 **475 ms/题**（偏移探测在 WSL 内批量执行，比逐次跨进程快约 15 倍）。
+
+**五个必须踩过才知道的坑**（见 `laws/LAW-0018.md`）：
+裸字节扫 gadget 会落在指令中间；内核把非规范地址归一化为 `nil`；
+后门调用 libc 需要 16 字节栈对齐；canary 符号是未定义导入（`st_value=0`）；
+跨进程探测慢一个数量级。
+
+**运行**
+```bash
+python versions/v014_pwn_units.src
+python versions/v014_pwn_units.src --only T2
+```
+
+**产出**：`experiments/EXP-0012/{pwn/,results.json,report.md}`

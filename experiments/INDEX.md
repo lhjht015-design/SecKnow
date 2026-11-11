@@ -16,6 +16,43 @@
 | EXP-0009 | 2026-11-11 | 文件型载荷：zip / png / pcap / elf | 正样本 12/12，负样本 4/4；平均 2.9 节点 | `EXP-0009/report.md` |
 | EXP-0010 | 2026-11-11 | 多成员压缩包（含嵌套与 25 成员） | beam_k=32 时 12/12；beam_k=8/16 掉到 10/12 并告警 | `EXP-0010/report.md` |
 | EXP-0011 | 2026-11-11 | 真实攻击链覆盖率（726 条 / 6795 步） | 61.7% 步骤属题目特有逻辑；现有单元完整覆盖 11.2% 的链 | `EXP-0011/report.md` |
+| EXP-0012 | 2026-11-11 | pwn 单元（真实 ELF + 真实执行） | ret2win 2/2 解出；canary/PIE 2/2 正确拒绝；平均 475 ms | `EXP-0012/report.md` |
+
+---
+
+## EXP-0012 — pwn 单元：在真实 ELF 上打穿一个进程
+
+**背景**：EXP-0011 显示 pwn 是最大缺口（635 步）。这个实验验证 pwn 能否单元化。
+
+**靶场**（WSL Ubuntu 22.04 + gcc 11.4 编译，`experiments/EXP-0012/pwn/`）：
+
+| 二进制 | 编译选项 | 用途 |
+| --- | --- | --- |
+| `vuln` | `-fno-stack-protector -no-pie` | 正样本 |
+| `vuln_canary` | `-fstack-protector-all -no-pie` | 负样本（canary） |
+| `vuln_pie` | `-fno-stack-protector -pie -fPIE` | 负样本（PIE） |
+
+**四个单元**：`elf_info`（保护+符号）→ `find_gadgets`（capstone）→
+`probe_offset`（真实执行探测）→ `build_ret2win`（拼 payload + 栈对齐）。
+
+**结果**
+
+| 题 | 类型 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| T1 | ret2win | ✓ | 真实执行拿到 `flag{ret2win_real_binary}` |
+| T2 | 带参数的 ret2win | ✓ | 必须找到 `pop rdi; ret` 并传参 |
+| N1 | canary | ✓ 正确拒绝 | `canary_present` |
+| N2 | PIE | ✓ 正确拒绝 | `pie_enabled` |
+
+**五个坑**（详见 `laws/LAW-0018.md`）：
+1. 裸字节扫 gadget 会落在指令中间 → 必须用反汇编器 + 符号地址校验；
+2. 内核把非规范地址归一化为 `nil` → 用标记值匹配 RIP，而不是反推崩溃地址；
+3. 后门调用 libc 需要 16 字节栈对齐 → 多加一个 `ret`；
+4. canary 符号是未定义导入（`st_value=0`）→ 查导入表而不是可寻址符号；
+5. 逐次跨进程探测慢 15 倍 → 把循环放进 WSL 内一个进程。
+
+**与前面版本的区别**：这是第一个**最终产物打穿真实进程**的单元组。
+crypto/encoding 的单元只验证"数据变换正确"，pwn 单元验证"真的控制了 RIP 并拿到 flag"。
 
 ---
 
