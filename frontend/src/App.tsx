@@ -25,7 +25,7 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
   enqueueIndex,
   fetchChunkGraph,
@@ -587,13 +587,13 @@ function Results({ response }: { response: SearchResponse }) {
       {hits.length ? (
         <div className="evidence-layout">
           <div className="evidence-list">
-            {hits.map((hit, index) => (
+            {hits.map((hit) => (
               <EvidenceCard
                 key={hit.chunk.chunk_id}
                 hit={hit}
-                index={index}
                 copied={copied === hit.chunk.chunk_id}
                 onCopy={() => void copyText(hit.chunk.chunk_id, hit.chunk.text)}
+                query={response.query}
               />
             ))}
           </div>
@@ -644,24 +644,188 @@ function evidenceToHit(item: EvidenceItem, index: number): SearchHit {
   }
 }
 
+const CODE_HINT =
+  /^\s|\{|\}|;\s*$|\b0x[0-9a-f]+\b|\btext:|\b(?:mov|call|push|pop|ret|retn|jmp|leave|lea|add|sub|xor|cmp|test|fgets|printf|puts|read|write|malloc|free|eax|ebx|ecx|edx|esi|edi|ebp|esp|dword|qword)\b/i
+
+const CJK_HINT = /[一-鿿]/
+const FENCE_HINT = /^```/
+const LIST_HINT = /^\s*(?:\d+[.)]|[-*+])\s+/
+const HEADING_HINT = /^\s*#{1,6}\s+/
+const TABLE_HINT = /^\s*\|.*\|\s*$/
+
+type EvidenceBlock = { kind: 'prose' | 'code' | 'heading'; text: string }
+
+function splitEvidence(text: string): EvidenceBlock[] {
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  const blocks: EvidenceBlock[] = []
+  let prose = ''
+  let code: string[] = []
+  let inCode = false
+  let inFence = false
+  let fence: string[] = []
+  const flushProse = () => {
+    const value = prose.trim()
+    if (value) blocks.push({ kind: 'prose', text: value })
+    prose = ''
+  }
+  const flushCode = () => {
+    if (code.length) blocks.push({ kind: 'code', text: code.join('\n') })
+    code = []
+    inCode = false
+  }
+  for (const raw of lines) {
+    const line = raw.trimEnd()
+    if (FENCE_HINT.test(line.trim())) {
+      if (inFence) {
+        if (fence.length) blocks.push({ kind: 'code', text: fence.join('\n') })
+        fence = []
+        inFence = false
+      } else {
+        flushProse()
+        flushCode()
+        inFence = true
+      }
+      continue
+    }
+    if (inFence) {
+      fence.push(raw)
+      continue
+    }
+    if (!line.trim()) {
+      if (!inCode) flushProse()
+      else code.push('')
+      continue
+    }
+    if (HEADING_HINT.test(line)) {
+      flushProse()
+      flushCode()
+      blocks.push({ kind: 'heading', text: line.replace(HEADING_HINT, '') })
+      continue
+    }
+    if (LIST_HINT.test(line)) {
+      flushProse()
+      flushCode()
+      blocks.push({ kind: 'prose', text: line.trim() })
+      continue
+    }
+    if (TABLE_HINT.test(line)) {
+      // Markdown 表格按等宽行渲染，至少保持列对齐；跳过分隔行
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue
+      flushProse()
+      code.push(raw)
+      inCode = true
+      continue
+    }
+    const explicitCode = CODE_HINT.test(line)
+    // 已经在代码块里时，短的、不含中文的行视为续行（汇编写法千奇百怪）
+    const continuation = inCode && !CJK_HINT.test(line) && line.trim().length <= 48
+    if (explicitCode || continuation) {
+      flushProse()
+      code.push(raw)
+      inCode = true
+    } else {
+      flushCode()
+      prose = prose ? `${prose} ${line.trim()}` : line.trim()
+    }
+  }
+  if (inFence && fence.length) blocks.push({ kind: 'code', text: fence.join('\n') })
+  flushProse()
+  flushCode()
+  return blocks
+}
+
+function queryTerms(query: string): string[] {
+  const terms = query
+    .split(/[\s，。、；：？！?,;:!()（）[\]【】]+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2)
+  return Array.from(new Set(terms)).slice(0, 6)
+}
+
+function highlightTerms(text: string, terms: string[]): ReactNode {
+  const usable = terms.filter((term) => term.length >= 2)
+  if (!usable.length) return text
+  const escaped = usable.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const matcher = new RegExp(`(${escaped.join('|')})`, 'gi')
+  const lowered = new Set(usable.map((term) => term.toLowerCase()))
+  return (
+    <>
+      {text.split(matcher).map((part, index) =>
+        lowered.has(part.toLowerCase()) ? (
+          <mark key={index}>{part}</mark>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+const INLINE_HINT = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g
+
+function renderInline(text: string, terms: string[]): ReactNode {
+  const parts = text.split(INLINE_HINT)
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={index}>{highlightTerms(part.slice(2, -2), terms)}</strong>
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return <code key={index} className="inline-code">{part.slice(1, -1)}</code>
+        }
+        const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part)
+        if (link) return <span key={index}>{link[1]}</span>
+        return <span key={index}>{highlightTerms(part, terms)}</span>
+      })}
+    </>
+  )
+}
+
+function EvidenceText({
+  text,
+  expanded,
+  terms,
+}: {
+  text: string
+  expanded: boolean
+  terms: string[]
+}) {
+  const blocks = useMemo(() => splitEvidence(text), [text])
+  return (
+    <div className={expanded ? 'evidence-body' : 'evidence-body collapsed'}>
+      {blocks.map((block, index) =>
+        block.kind === 'code' ? (
+          <pre key={index} className="evidence-code">{highlightTerms(block.text, terms)}</pre>
+        ) : block.kind === 'heading' ? (
+          <p key={index} className="evidence-heading">{renderInline(block.text, terms)}</p>
+        ) : (
+          <p key={index}>{renderInline(block.text, terms)}</p>
+        ),
+      )}
+    </div>
+  )
+}
+
 function EvidenceCard({
   hit,
-  index,
   copied,
   onCopy,
+  query,
 }: {
   hit: SearchHit
-  index: number
   copied: boolean
   onCopy: () => void
+  query: string
 }) {
-  const [expanded, setExpanded] = useState(index < 3)
+  const [expanded, setExpanded] = useState(false)
   const [graphOpen, setGraphOpen] = useState(false)
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
   const citation = hit.chunk.citation
   const channels = Object.entries(hit.channels).sort((left, right) => right[1] - left[1])
   const previewUrl = pagePreviewUrl(citation)
+  const terms = useMemo(() => queryTerms(query), [query])
 
   useEffect(() => {
     if (!graphOpen || graph || graphError) return
@@ -688,7 +852,7 @@ function EvidenceCard({
           <strong>{formatScore(hit.score)}</strong>
         </div>
       </header>
-      <div className={expanded ? 'evidence-text' : 'evidence-text clamped'}>{hit.chunk.text}</div>
+      <EvidenceText text={hit.chunk.text} expanded={expanded} terms={terms} />
       {hit.chunk.text.length > 320 && (
         <button className="expand-button" type="button" onClick={() => setExpanded((value) => !value)}>
           {expanded ? '收起原文' : '展开原文'}
@@ -1173,7 +1337,7 @@ function SettingsView({
           <div><h2 id="capability-title">实际运行能力</h2><p>这里反映当前机器上已安装并可被离线运行时加载的组件，而不是配置开关。</p></div>
         </div>
         <div className="capability-grid">
-          {[
+          {([
             ['llamaindex', 'LlamaIndex 统一解析'],
             ['unstructured', 'Unstructured 文档结构'],
             ['tree_sitter', 'tree-sitter 代码结构'],
@@ -1183,7 +1347,7 @@ function SettingsView({
             ['milvus_driver', 'Milvus 混合索引驱动'],
             ['neo4j_driver', 'Neo4j 图存储驱动'],
             ['deterministic_reasoning', 'NetworkX 确定性推理图'],
-          ].map(([key, label]) => {
+          ] as [string, string][]).map(([key, label]) => {
             const ready = capabilities[key] === true
             return <span className={ready ? 'state-badge on' : 'state-badge'} key={key}><span />{label} · {ready ? '可用' : '未就绪'}</span>
           })}

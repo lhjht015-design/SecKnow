@@ -1125,6 +1125,20 @@ v025 只把批量 Y 接进检测与前缀分数；本版本把 `call_many` 全�
 - 记录 `laws/LAW-0030.md`：批量 Y 安全；减少探测数与并发是两条正交优化；
   复用必须由最终重新加密兜底。
 
+### 2026-11-11 — 检索结果渲染审计与优化（EXP-0025）
+
+- 先修了前端无法构建的 TS 错误（`capabilities[key]` 的索引类型），
+  之前 `frontend/dist` 一直是 8 月的旧构建。
+- 证据卡渲染重做：
+    - 按内容切分散文 / 代码块，合并 PDF 软换行；代码用等宽块并保留行结构；
+    - 解析 Markdown 围栏、表格、标题、加粗、行内代码与链接；
+    - 查询词高亮；默认折叠，避免首条证据占满整屏；
+    - 字号 11 → 12.5px，`overflow-wrap: anywhere` 防长串溢出。
+- **不是编码乱码**：中文与 UTF-8 在页面里显示正常；难看来自 OCR 噪声
+  （`cft竞赛权威指南pwn`、`1ibpivot.so`）与 PDF 提取的断行。
+- 截图：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta}.jpg`。
+
+
 
 
 
