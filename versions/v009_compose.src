@@ -1,0 +1,554 @@
+"""
+v009_compose.src — 多步组合：把多个契约单元串成一条可执行的流水线
+
+为什么这是最关键的一步
+    v007/v008 每题只用了一个单元。但真实赛题绝大多数是**多步**的：
+        base64 → 得到 hex → 单字节 XOR → 得到 flag
+    这一步要验证的是：
+        在没有 LLM 的情况下，能不能**自动规划**出一条正确的单元序列并真的跑通。
+
+做法：类型化的前向搜索（确定性）
+    1. 每个单元声明 accepts（吃什么样的数据）与 produces（吐出什么）。
+    2. 规划器从题面给的初始数据出发，每一步选一个「能接受当前类型」的单元，
+       **真实执行**，拿到新数据。
+    3. 如果结果是 flag → 成功；否则按新数据的形态继续，直到达到深度上限。
+    4. 执行抛异常 / 结果无变化 / 状态重复 → 该分支立即剪枝。
+
+    这不是"生成代码"，而是**在类型空间里做 BFS**。全程零模型、零向量，
+    每一步都可复现，失败也是显式的。
+
+测什么
+    S1  1 步：hex → 单字节 XOR
+    S2  2 步：base64 → 解码 → hex → XOR
+    S3  3 步：base64 → 解码 → hex → 解码 → 凯撒
+    S4  4 步：base64 → hex → base64 → XOR（三种变换 + 一个求解器）
+    命名变体：同一道题分别用「明说技术名」和「只描述行为」两种题面，
+              检验形态/类型驱动是否免疫改名（接续 LAW-0011）。
+    负样本 N1：用库里没有的多字节 XOR 密钥加密 → 规划器**应当失败**，
+              用来确认它不会瞎凑一个"看起来能跑"的结果。
+
+运行
+    python versions/v009_compose.src
+    python versions/v009_compose.src --max-depth 5
+
+产出物
+    experiments/EXP-0007/results.json
+    experiments/EXP-0007/report.md
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+import re
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0007"
+
+for _stream in (__import__("sys").stdout, __import__("sys").stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 单元库：真正可调用的实现 + 显式类型契约
+# --------------------------------------------------------------------------------------
+
+def b64_decode(data: str) -> str:
+    raw = data.strip()
+    # 补齐 padding
+    raw += "=" * (-len(raw) % 4)
+    return base64.b64decode(raw, validate=True).decode("utf-8")
+
+
+def hex_decode(data: str) -> str:
+    return bytes.fromhex(data.strip().replace(" ", "")).decode("utf-8")
+
+
+def xor_brute(data: str) -> str:
+    raw = bytes.fromhex(data.strip().replace(" ", ""))
+    for key in range(256):
+        candidate = bytes(b ^ key for b in raw)
+        try:
+            text = candidate.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if re.search(r"flag\{", text, re.I):
+            return text
+    raise ValueError("没有命中单字节密钥")
+
+
+def caesar_brute(data: str) -> str:
+    text = data.strip()
+    for shift in range(26):
+        candidate = "".join(
+            chr((ord(ch) - 97 - shift) % 26 + 97) if ch.islower()
+            else chr((ord(ch) - 65 - shift) % 26 + 65) if ch.isupper()
+            else ch
+            for ch in text
+        )
+        if re.search(r"flag\{", candidate, re.I):
+            return candidate
+    raise ValueError("26 个移位都没有命中")
+
+
+def reverse_text(data: str) -> str:
+    return data.strip()[::-1]
+
+
+# ---- 诱饵单元：合法但不解决问题的变换，用来测搜索的可扩展性 --------------------------
+
+def b64_encode(data: str) -> str:
+    return base64.b64encode(data.strip().encode()).decode()
+
+
+def hex_encode(data: str) -> str:
+    return data.strip().encode().hex()
+
+
+def upper_text(data: str) -> str:
+    return data.strip().upper()
+
+
+def lower_text(data: str) -> str:
+    return data.strip().lower()
+
+
+def strip_ws(data: str) -> str:
+    return "".join(data.split())
+
+
+def url_decode(data: str) -> str:
+    from urllib.parse import unquote
+
+    return unquote(data.strip())
+
+
+def rot13_text(data: str) -> str:
+    return "".join(
+        chr((ord(c) - 97 + 13) % 26 + 97) if c.islower()
+        else chr((ord(c) - 65 + 13) % 26 + 65) if c.isupper() else c
+        for c in data.strip()
+    )
+
+
+DECOY_POOL = [
+    ("b64_encode", b64_encode), ("hex_encode", hex_encode),
+    ("upper_text", upper_text), ("lower_text", lower_text),
+    ("strip_ws", strip_ws), ("url_decode", url_decode),
+    ("rot13_text", rot13_text),
+]
+
+
+def make_decoys(count: int) -> list[dict]:
+    """生成 count 个形态合理、但对求解没有帮助的变换单元。"""
+    decoys: list[dict] = []
+    for index in range(count):
+        name, fn = DECOY_POOL[index % len(DECOY_POOL)]
+        if index >= len(DECOY_POOL):
+            name = f"{name}_{index}"
+        decoys.append({
+            "id": name, "accepts": TEXT_TYPES, "produces": "text", "fn": fn,
+            "direction": "encode", "code": "(decoy)", "note": "诱饵单元",
+        })
+    return decoys
+
+
+# accepts 故意放宽到所有文本形态：让**执行**去判断这一步是否成立，
+# 而不是让类型声明过度约束、把可行路径提前剪掉。
+TEXT_TYPES = {"text", "hex", "base64", "ciphertext"}
+
+UNITS: list[dict] = [
+    {"id": "b64_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": b64_decode,
+     "direction": "decode", "code": "base64.b64decode(...)", "note": "解一层 Base64"},
+    {"id": "hex_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": hex_decode,
+     "direction": "decode", "code": "bytes.fromhex(...)", "note": "解一层 hex"},
+    {"id": "reverse_text", "accepts": TEXT_TYPES, "produces": "text", "fn": reverse_text,
+     "direction": "neutral", "code": "text[::-1]", "note": "整体反转"},
+    {"id": "xor_brute", "accepts": {"hex"}, "produces": "flag", "fn": xor_brute,
+     "direction": "solver", "code": "for key in range(256): ...", "note": "单字节 XOR 爆破"},
+    {"id": "caesar_brute", "accepts": TEXT_TYPES, "produces": "flag", "fn": caesar_brute,
+     "direction": "solver", "code": "for shift in range(26): ...", "note": "凯撒爆破"},
+]
+
+UNIT_INDEX = {unit["id"]: unit for unit in UNITS}
+# 每次 run 都从这份基线重建，避免诱饵在多次调用间累积
+BASE_UNITS = list(UNITS)
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+# --------------------------------------------------------------------------------------
+# 形态识别：决定"当前这坨数据是什么"
+# --------------------------------------------------------------------------------------
+
+HEX_ONLY = re.compile(r"^[0-9a-fA-F\s]+$")
+
+
+def detect_type(value: str) -> str:
+    text = value.strip()
+    if FLAG_RE.search(text):
+        return "flag"
+    if len(text) >= 16 and HEX_ONLY.match(text) and len(text.replace(" ", "")) % 2 == 0:
+        return "hex"
+    if len(text) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", text) and len(text) % 4 == 0:
+        return "base64"
+    return "text"
+
+
+# --------------------------------------------------------------------------------------
+# 载荷抽取：从题面里把真正要处理的那串数据找出来
+# --------------------------------------------------------------------------------------
+
+PAYLOAD_TOKEN = re.compile(r"[A-Za-z0-9+/=]{16,}")
+
+
+def extract_payload(text: str) -> str | None:
+    """题面里最长的那串「看起来像编码数据」的 token 就是载荷。
+
+    这是"参数抽取"在多步场景下的对应物：连初始数据都找错，后面全错。
+    找不到就返回 None，由上层如实失败。
+    """
+    candidates = [t for t in PAYLOAD_TOKEN.findall(text) if not re.fullmatch(r"[0-9]+", t)]
+    if not candidates:
+        return None
+    return max(candidates, key=len)
+
+
+# --------------------------------------------------------------------------------------
+# 规划器：类型空间里的 BFS，每一步真实执行
+# --------------------------------------------------------------------------------------
+
+MAX_NODES = 400
+
+
+def plan(initial: str, expected: str | None, max_depth: int) -> dict:
+    started = time.perf_counter()
+    payload = extract_payload(initial)
+    if payload is None:
+        return {"solved": False, "path": [], "output": None, "expanded": 0,
+                "depth_used": 0, "elapsed_ms": 0.0, "trace": [],
+                "error": "payload_not_found"}
+    start_type = detect_type(payload)
+    queue: list[tuple[str, str, list[str], int]] = [(start_type, payload, [], 0)]
+    visited: set[tuple[str, str]] = {(start_type, payload)}
+    expanded = 0
+    trace: list[dict] = []
+
+    while queue and expanded < MAX_NODES:
+        current_type, current_value, path, depth = queue.pop(0)
+        if depth >= max_depth:
+            continue
+        for unit in UNITS:
+            if current_type not in unit["accepts"]:
+                continue
+            expanded += 1
+            step = {"at_depth": depth, "unit": unit["id"], "from_type": current_type}
+            try:
+                output = unit["fn"](current_value)
+            except (ValueError, UnicodeDecodeError, binascii.Error, TypeError) as error:
+                step["result"] = f"error:{type(error).__name__}"
+                trace.append(step)
+                continue
+            if not isinstance(output, str) or not output.strip():
+                step["result"] = "empty"
+                trace.append(step)
+                continue
+            new_path = [*path, unit["id"]]
+            found = FLAG_RE.search(output)
+            if found and (expected is None or found.group(0).lower() == expected.lower()):
+                step["result"] = "solved"
+                trace.append(step)
+                return {
+                    "solved": True, "path": new_path, "output": found.group(0),
+                    "expanded": expanded, "depth_used": len(new_path),
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "trace": trace,
+                }
+            if found and expected is not None:
+                step["result"] = "flag_but_wrong"
+                trace.append(step)
+                continue
+
+            new_type = detect_type(output)
+            key = (new_type, output)
+            if key in visited:
+                step["result"] = "duplicate_state"
+                trace.append(step)
+                continue
+            visited.add(key)
+            step["result"] = f"ok->{new_type}"
+            trace.append(step)
+            queue.append((new_type, output, new_path, depth + 1))
+
+    return {
+        "solved": False, "path": [], "output": None,
+        "expanded": expanded, "depth_used": 0,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+        "trace": trace[:40],
+    }
+
+
+
+def _heuristic(unit: dict, out_text: str, depth: int) -> float:
+    """给分支打分：偏解码、偏可读、偏浅层；encode 类诱饵重罚。"""
+    score = 0.0
+    direction = unit.get("direction", "neutral")
+    if direction == "decode":
+        score += 2.0
+    elif direction == "encode":
+        score -= 5.0
+    printable = sum(
+        1 for ch in out_text
+        if 32 <= ord(ch) < 127 or "一" <= ch <= "鿿"
+    )
+    score += 3.0 * printable / max(len(out_text), 1)
+    score -= 0.2 * depth
+    return score
+
+
+def beam_plan(initial: str, expected: str | None, max_depth: int, beam_k: int) -> dict:
+    """beam search：每层只保留得分最高的 beam_k 个分支。"""
+    started = time.perf_counter()
+    payload = extract_payload(initial)
+    if payload is None:
+        return {"solved": False, "path": [], "output": None, "expanded": 0,
+                "depth_used": 0, "elapsed_ms": 0.0, "trace": [], "error": "payload_not_found"}
+
+    beam: list[tuple[float, str, str, list[str]]] = [(0.0, detect_type(payload), payload, [])]
+    seen: set[tuple[str, str]] = {(beam[0][1], payload)}
+    expanded = 0
+    trace: list[dict] = []
+
+    for depth in range(max_depth):
+        candidates: list[tuple[float, str, str, list[str]]] = []
+        for _score, current_type, current_value, path in beam:
+            for unit in UNITS:
+                if current_type not in unit["accepts"]:
+                    continue
+                expanded += 1
+                try:
+                    output = unit["fn"](current_value)
+                except (ValueError, UnicodeDecodeError, binascii.Error, TypeError):
+                    continue
+                if not isinstance(output, str) or not output.strip():
+                    continue
+                new_path = [*path, unit["id"]]
+                found = FLAG_RE.search(output)
+                if found and (expected is None or found.group(0).lower() == expected.lower()):
+                    return {"solved": True, "path": new_path, "output": found.group(0),
+                            "expanded": expanded, "depth_used": len(new_path),
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+                            "trace": trace}
+                new_type = detect_type(output)
+                key = (new_type, output)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append((_heuristic(unit, output, depth), new_type, output, new_path))
+                trace.append({"unit": unit["id"], "to": new_type, "depth": depth})
+        if not candidates:
+            break
+        candidates.sort(key=lambda item: -item[0])
+        beam = candidates[:beam_k]
+
+    return {"solved": False, "path": [], "output": None, "expanded": expanded,
+            "depth_used": 0, "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+            "trace": trace[:40]}
+
+
+# --------------------------------------------------------------------------------------
+# 题目：按深度递进，每题再给两种题面
+# --------------------------------------------------------------------------------------
+
+def encode_layers(flag: str, layers: list[str], xor_key: int | None = None) -> str:
+    """按给定顺序加工 flag，返回最终字符串。
+
+    `layers` 按**从外到内**书写，例如 ["b64","hex","caesar"] 表示
+    「外层 base64，里面 hex，最里面凯撒」。因此实际施加顺序要反过来。
+    """
+    value = flag
+    if xor_key is not None:
+        value = bytes(b ^ xor_key for b in value.encode()).hex()
+    for layer in reversed(layers):
+        if layer == "b64":
+            value = base64.b64encode(value.encode()).decode()
+        elif layer == "hex":
+            value = value.encode().hex()
+        elif layer == "reverse":
+            value = value[::-1]
+        elif layer == "caesar":
+            value = "".join(
+                chr((ord(c) - 97 + 13) % 26 + 97) if c.islower()
+                else chr((ord(c) - 65 + 13) % 26 + 65) if c.isupper() else c
+                for c in value
+            )
+    return value
+
+
+def build_tasks() -> list[dict]:
+    tasks: list[dict] = []
+
+    # S1：1 步
+    flag1 = "flag{xor_single_byte}"
+    tasks.append({
+        "id": "S1", "depth": 1, "expected": flag1,
+        "payload": encode_layers(flag1, [], xor_key=0x5A),
+        "text_specific": "题目：一段 hex，用单字节密钥做了 XOR，爆破出明文。\n{payload}",
+        "text_abstract": "题目：每个字节都被同一个 0~255 的常数处理过，结果如下。求原始文本。\n{payload}",
+    })
+
+    # S2：2 步（base64 → hex → XOR）
+    flag2 = "flag{two_layers_b64_then_xor}"
+    tasks.append({
+        "id": "S2", "depth": 2, "expected": flag2,
+        "payload": encode_layers(flag2, ["b64"], xor_key=0x37),
+        "text_specific": "题目：外层是 Base64，里面是 hex，再里面是单字节 XOR。\n{payload}",
+        "text_abstract": "题目：下面这串东西解开一次之后还需要再处理一次，最后才能看懂。\n{payload}",
+    })
+
+    # S3：3 步（base64 → hex → 凯撒）
+    flag3 = "flag{three_steps_caesar}"
+    tasks.append({
+        "id": "S3", "depth": 3, "expected": flag3,
+        "payload": encode_layers(flag3, ["b64", "hex", "caesar"]),
+        "text_specific": "题目：Base64 解出来是 hex，hex 解出来还要做凯撒移位。\n{payload}",
+        "text_abstract": "题目：这串内容要经过三步不同处理才能还原，最后一步是字母整体平移。\n{payload}",
+    })
+
+    # S4：4 步（base64 → hex → base64 → XOR）
+    flag4 = "flag{four_layers_deep}"
+    tasks.append({
+        "id": "S4", "depth": 4, "expected": flag4,
+        "payload": encode_layers(flag4, ["b64", "hex", "b64"], xor_key=0x11),
+        "text_specific": "题目：四层：Base64 → hex → Base64 → 单字节 XOR。\n{payload}",
+        "text_abstract": "题目：这串东西需要反复解码，中间还夹了一层逐字节处理。\n{payload}",
+    })
+
+    # N1 负样本：多字节 XOR，库里没有对应单元 → 应当失败
+    flag5 = "flag{multibyte_key_not_in_library}"
+    key = b"\x13\x37\xbe\xef"
+    multibyte = bytes(b ^ key[i % len(key)] for i, b in enumerate(flag5.encode())).hex()
+    tasks.append({
+        "id": "N1", "depth": 2, "expected": flag5, "negative": True,
+        "payload": multibyte,
+        "text_specific": "题目：一段 hex，用 4 字节重复密钥 XOR 加密。\n{payload}",
+        "text_abstract": "题目：字节被一组固定的 4 个值循环处理过，求原文。\n{payload}",
+    })
+    return tasks
+
+
+def run(max_depth: int, decoys: int = 0, search: str = "bfs", beam_k: int = 8) -> dict:
+    global UNITS, UNIT_INDEX
+    UNITS = list(BASE_UNITS)
+    if decoys:
+        UNITS = UNITS + make_decoys(decoys)
+    UNIT_INDEX = {unit["id"]: unit for unit in UNITS}
+    if decoys:
+        log(f"注入诱饵单元 {decoys} 个 → 单元库共 {len(UNITS)} 个")
+
+    tasks = build_tasks()
+    rows: list[dict] = []
+    for task in tasks:
+        for flavor in ("specific", "abstract"):
+            text = task[f"text_{flavor}"].format(payload=task["payload"])
+            outcome = (beam_plan if search == "beam" else plan)(
+                text, task["expected"], max_depth, *( [beam_k] if search == "beam" else [] ))
+            row = {
+                "id": task["id"], "flavor": flavor, "depth_expected": task["depth"],
+                "negative": task.get("negative", False),
+                "solved": outcome["solved"], "path": outcome["path"],
+                "expanded": outcome["expanded"], "steps": outcome["depth_used"],
+                "elapsed_ms": outcome["elapsed_ms"],
+            }
+            rows.append(row)
+            ok = outcome["solved"]
+            expect_fail = task.get("negative", False)
+            verdict = "OK" if (ok != expect_fail) else "UNEXPECTED"
+            log(f"  {task['id']}-{flavor:8} path={'→'.join(outcome['path']) or '(none)':40} "
+                f"expanded={outcome['expanded']:3d} {outcome['elapsed_ms']:6.1f}ms  {verdict}")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_failed": sum(1 for r in negatives if not r["solved"]),
+        "by_depth": {},
+        "mean_expanded": round(sum(r["expanded"] for r in rows) / max(len(rows), 1), 1),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    for depth in sorted({r["depth_expected"] for r in positives}):
+        subset = [r for r in positives if r["depth_expected"] == depth]
+        summary["by_depth"][f"depth_{depth}"] = {
+            "solved": sum(1 for r in subset if r["solved"]), "total": len(subset),
+        }
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    lines = ["# EXP-0007 — 多步组合验证", "",
+             "单元按「输入/输出类型」串成流水线，规划器做类型化 BFS，每一步真实执行。",
+             "", "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 题面 | 期望步数 | 实际路径 | 展开节点 | 耗时 | 结果 |",
+             "| --- | --- | --- | --- | --- | --- | --- |"]
+    for r in rows:
+        mark = "✓" if r["solved"] else "✗"
+        if r["negative"]:
+            mark = "✓(正确失败)" if not r["solved"] else "✗(不该解出)"
+        lines.append(f"| {r['id']} | {r['flavor']} | {r['depth_expected']} "
+                     f"| {'→'.join(r['path']) or '—'} | {r['expanded']} | {r['elapsed_ms']}ms | {mark} |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+    return summary
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="多步组合验证")
+    parser.add_argument("--max-depth", type=int, default=5)
+    parser.add_argument("--decoys", type=int, default=0, help="注入多少个诱饵单元")
+    parser.add_argument("--sweep", action="store_true", help="扫描诱饵数量，测搜索可扩展性")
+    parser.add_argument("--search", choices=["bfs", "beam"], default="bfs")
+    parser.add_argument("--beam-k", type=int, default=8)
+    args = parser.parse_args()
+
+    if args.sweep:
+        rows = []
+        for search in ("bfs", "beam"):
+            for decoys in (0, 3, 7, 15):
+                log(f"===== search={search} 诱饵 {decoys} =====")
+                summary = run(args.max_depth, decoys, search, args.beam_k)
+                rows.append({"search": search, "decoys": decoys,
+                             "units": len(UNITS), **summary})
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        (OUT_DIR / "scaling.json").write_text(
+            json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+        log("可扩展性汇总：")
+        for row in rows:
+            log(f"  {row['search']:4} 单元 {row['units']:2d}  "
+                f"正样本 {row['positive_solved']}/{row['positive_total']}  "
+                f"平均展开 {row['mean_expanded']:6.1f}  平均耗时 {row['mean_elapsed_ms']}ms")
+        return
+
+    log(f"单元库：{len(UNITS)} 个；最大深度 {args.max_depth}；搜索={args.search}")
+    run(args.max_depth, args.decoys, args.search, args.beam_k)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,168 @@
+{
+  "summary": {
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 216.4,
+    "mean_elapsed_ms": 7.7
+  },
+  "rows": [
+    {
+      "id": "S1",
+      "flavor": "specific",
+      "depth_expected": 1,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "xor_brute"
+      ],
+      "expanded": 4,
+      "steps": 1,
+      "elapsed_ms": 0.2
+    },
+    {
+      "id": "S1",
+      "flavor": "abstract",
+      "depth_expected": 1,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "xor_brute"
+      ],
+      "expanded": 4,
+      "steps": 1,
+      "elapsed_ms": 0.1
+    },
+    {
+      "id": "S2",
+      "flavor": "specific",
+      "depth_expected": 2,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "xor_brute"
+      ],
+      "expanded": 23,
+      "steps": 2,
+      "elapsed_ms": 0.5
+    },
+    {
+      "id": "S2",
+      "flavor": "abstract",
+      "depth_expected": 2,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "xor_brute"
+      ],
+      "expanded": 23,
+      "steps": 2,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "S3",
+      "flavor": "specific",
+      "depth_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "hex_decode",
+        "caesar_brute"
+      ],
+      "expanded": 158,
+      "steps": 3,
+      "elapsed_ms": 3.2
+    },
+    {
+      "id": "S3",
+      "flavor": "abstract",
+      "depth_expected": 3,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "hex_decode",
+        "caesar_brute"
+      ],
+      "expanded": 158,
+      "steps": 3,
+      "elapsed_ms": 3.1
+    },
+    {
+      "id": "S4",
+      "flavor": "specific",
+      "depth_expected": 4,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "hex_decode",
+        "b64_decode",
+        "xor_brute"
+      ],
+      "expanded": 314,
+      "steps": 4,
+      "elapsed_ms": 14.9
+    },
+    {
+      "id": "S4",
+      "flavor": "abstract",
+      "depth_expected": 4,
+      "negative": false,
+      "solved": true,
+      "path": [
+        "b64_decode",
+        "hex_decode",
+        "b64_decode",
+        "xor_brute"
+      ],
+      "expanded": 314,
+      "steps": 4,
+      "elapsed_ms": 15.0
+    },
+    {
+      "id": "N1",
+      "flavor": "specific",
+      "depth_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 583,
+      "steps": 0,
+      "elapsed_ms": 20.4
+    },
+    {
+      "id": "N1",
+      "flavor": "abstract",
+      "depth_expected": 2,
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 583,
+      "steps": 0,
+      "elapsed_ms": 19.6
+    }
+  ]
+}

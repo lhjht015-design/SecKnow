@@ -1,0 +1,234 @@
+[
+  {
+    "search": "bfs",
+    "decoys": 0,
+    "units": 5,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 13.0,
+    "mean_elapsed_ms": 1.2
+  },
+  {
+    "search": "bfs",
+    "decoys": 3,
+    "units": 8,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 128.6,
+    "mean_elapsed_ms": 15.8
+  },
+  {
+    "search": "bfs",
+    "decoys": 7,
+    "units": 12,
+    "positive_total": 8,
+    "positive_solved": 6,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 0,
+        "total": 2
+      }
+    },
+    "mean_expanded": 184.2,
+    "mean_elapsed_ms": 12.5
+  },
+  {
+    "search": "bfs",
+    "decoys": 15,
+    "units": 20,
+    "positive_total": 8,
+    "positive_solved": 6,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 0,
+        "total": 2
+      }
+    },
+    "mean_expanded": 200.0,
+    "mean_elapsed_ms": 7.6
+  },
+  {
+    "search": "beam",
+    "decoys": 0,
+    "units": 5,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 13.0,
+    "mean_elapsed_ms": 1.1
+  },
+  {
+    "search": "beam",
+    "decoys": 3,
+    "units": 8,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 77.8,
+    "mean_elapsed_ms": 7.8
+  },
+  {
+    "search": "beam",
+    "decoys": 7,
+    "units": 12,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 128.4,
+    "mean_elapsed_ms": 7.3
+  },
+  {
+    "search": "beam",
+    "decoys": 15,
+    "units": 20,
+    "positive_total": 8,
+    "positive_solved": 8,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "by_depth": {
+      "depth_1": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_2": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_3": {
+        "solved": 2,
+        "total": 2
+      },
+      "depth_4": {
+        "solved": 2,
+        "total": 2
+      }
+    },
+    "mean_expanded": 216.4,
+    "mean_elapsed_ms": 7.7
+  }
+]

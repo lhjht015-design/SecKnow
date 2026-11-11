@@ -18,6 +18,7 @@
 | v006 | [v006_code_units.src](v006_code_units.src) | 从知识库抽取代码单元并按题目召回（含拼装尝试） | 无（纯 Python） | 已跑通；拼装 0/5，暴露契约缺失 |
 | v007 | [v007_solver_kit.src](v007_solver_kit.src) | 带显式契约的求解单元库 + 确定性拼装器 | 无（纯 Python） | **端到端 5/5** |
 | v008 | [v008_shift_test.src](v008_shift_test.src) | 分布漂移测试（改名 / 换格式 / 抽象描述） | 无（纯 Python） | keyword 6/15，shape 15/15 |
+| v009 | [v009_compose.src](v009_compose.src) | 多步组合：类型化搜索把单元串成流水线 | 无（纯 Python） | BFS 8/8→6/8；beam 8/8 |
 
 ## 各版本说明
 
@@ -209,3 +210,36 @@ python versions/v008_shift_test.src --router shape
 ```
 
 **产出**：`experiments/EXP-0006/{results.json,report.md}`
+
+### v009_compose.src
+
+**回答的问题**：真实赛题大多是**多步**的（base64 → hex → XOR），
+能不能在没有 LLM 的情况下自动规划出一条正确的单元序列并跑通？
+
+**做法**：类型化的前向搜索。
+- 每个单元声明 `accepts`（吃什么数据）与 `produces`（吐什么）；
+- 规划器从载荷出发，每步选一个能接受当前类型的单元，**真实执行**，重新识别形态后继续；
+- 结果为 flag 即成功；执行异常 / 状态重复 / 无变化即剪枝。
+- `--search beam` 时按「解码 +2 / 编码 −5 / 可打印比例 / 深度」打分，每层只留前 k 个。
+
+**结果**
+
+| 搜索 | 5 单元 | 8 单元 | 12 单元 | 20 单元 |
+| --- | --- | --- | --- | --- |
+| BFS | 8/8 | 8/8 | **6/8** | **6/8** |
+| beam | 8/8 | 8/8 | **8/8** | **8/8** |
+
+- 深度 1–4 全部覆盖，包括 4 层嵌套（b64 → hex → b64 → XOR）。
+- 两种题面（明说技术名 / 只描述行为）结果完全一致。
+- **负样本（多字节 XOR，库里没有对应单元）在两种搜索下都正确失败**。
+
+**运行**
+```bash
+python versions/v009_compose.src
+python versions/v009_compose.src --sweep      # BFS vs beam 的可扩展性对照
+```
+
+**产出**：`experiments/EXP-0007/{results.json,report.md,scaling.json}`
+
+**注意**：单元库只有 5–20 个，题目是合成链。**这验证的是"组合机制成立"，
+不是"能解真实赛题"**——后者需要 50–200 个真实单元 + 未见过的留出题。
