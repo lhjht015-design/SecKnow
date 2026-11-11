@@ -371,6 +371,28 @@ CRC32 命中 `crack_crc()`、凯撒命中 `variant_caesar()`），失败全在�
 **看上去 12/12，实际根本没验证 pcap/elf 路由**。收紧 `read_text` 到 `{file:bin}` 后重跑，
 路径才走对。→ **看路径，不只看结果。** 见 `laws/LAW-0015.md`。
 
+### 结论 15：多成员压缩包要穷举；预算不足会静默漏解
+
+`unzip` 改为返回全部成员，规划器对每个成员分叉；成员先验只排序、不丢弃。
+
+| 题 | 路径（尾部） | 结果 |
+| --- | --- | --- |
+| Z1 5 成员 | `unzip:secret.txt → read_text` | ✓ |
+| Z2 含嵌套 zip | `unzip:payload.zip → unzip:inside.txt → read_text` | ✓ |
+| Z3 含 PNG | `unzip:image.png → png_text → b64_decode` | ✓ |
+| **Z4 25 成员，flag 在 `zzz_9f3a.dat`** | `unzip:zzz_9f3a.dat → read_text` | ✓ |
+| Z5 目录结构 | `unzip:flag.txt → read_text` | ✓ |
+| N2 两层嵌套 | `unzip:level1.zip → unzip:deep.txt → read_text` | ✓ |
+| N1 纯诱饵 | 无路径 | ✓ 正确失败 |
+
+**预算扫描**：beam_k=8 → 10/12；16 → 10/12；32 → **12/12**。
+预算小于成员数时，正确成员会被**静默挤出**队列——不抛异常，只是通过率下降。
+已加显式告警 `members(N)>beam_k(K)`。
+→ 见 `laws/LAW-0016.md`。
+
+**核心认知**：成员先验只能用来排序，不能用来"猜一个"。
+Z4 的文件名毫无提示（`zzz_9f3a.dat`），靠名字猜必漏；穷举很便宜（50 节点、14 ms）。
+
 ## 4. 更新日志（追加式）
 
 ### 2026-09-21 — 接管、基线与流程骨架

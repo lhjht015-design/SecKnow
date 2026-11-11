@@ -1,0 +1,568 @@
+"""
+v012_zip_members.src — 多成员压缩包：解压后不再只取第一个文件
+
+为什么需要
+    真实比赛的 zip 往往有十几个成员，甚至带目录结构和嵌套压缩包。
+    v011 的 `unzip` 只取第一个非目录成员——在真实题上基本等于碰运气。
+
+本文件的改动
+    1. `unzip` 返回 `FileSet`（全部成员的引用），而不是单个文件；
+    2. 规划器遇到 FileSet 会**对每个成员分叉**，一个成员一条分支；
+    3. 分叉前按成员先验排序（文件名像 flag/secret、体积小、类型有趣），
+       并用 beam 控制预算——不是"猜一个"，而是"排好序后都试，靠执行验证"；
+    4. 防 zip-slip：跳过绝对路径与含 `..` 的成员。
+
+测什么
+    Z1  5 个成员，flag 在第 3 个            → unzip → read_text
+    Z2  10 个成员，其中一个是嵌套 zip        → unzip → unzip → read_text
+    Z3  6 个成员，其中一个是藏 base64 的 PNG → unzip → png_text → b64_decode
+    Z4  25 个成员，flag 藏在冷门文件里        → unzip → read_text
+    Z5  带目录结构的压缩包                   → unzip → read_text
+    N1  10 个诱饵成员，都没有 flag            → **应当失败**
+    N2  嵌套两层 zip，最里层才有 flag         → unzip → unzip → unzip → read_text
+
+运行
+    python versions/v012_zip_members.src
+    python versions/v012_zip_members.src --beam-k 4
+
+产出物
+    experiments/EXP-0010/artifacts/
+    experiments/EXP-0010/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+import os
+import re
+import struct
+import sys
+import time
+import zipfile
+import zlib
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0010"
+ARTIFACT_ROOT = OUT_DIR / "artifacts"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 状态
+# --------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FileRef:
+    path: str
+
+
+@dataclass(frozen=True)
+class FileSet:
+    refs: tuple[FileRef, ...]
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+HEX_ONLY = re.compile(r"^[0-9a-fA-F\s]+$")
+
+MAGIC = [
+    (b"PK\x03\x04", "file:zip"),
+    (b"\x89PNG\r\n\x1a\n", "file:png"),
+    (b"%PDF", "file:pdf"),
+    (b"\x7fELF", "file:elf"),
+    (b"\xd4\xc3\xb2\xa1", "file:pcap"),
+    (b"\xa1\xb2\xc3\xd4", "file:pcap"),
+    (b"\xff\xd8\xff", "file:jpeg"),
+    (b"GIF8", "file:gif"),
+]
+
+
+def sniff(path: str) -> str:
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(16)
+    except OSError:
+        return "file:missing"
+    for magic, kind in MAGIC:
+        if head.startswith(magic):
+            return kind
+    return "file:bin"
+
+
+def detect_type(value):
+    if isinstance(value, FileSet):
+        return "file_set"
+    if isinstance(value, FileRef):
+        return sniff(value.path)
+    if isinstance(value, dict):
+        return "int_fields"
+    text = value.strip()
+    if FLAG_RE.search(text):
+        return "flag"
+    if len(text) >= 16 and HEX_ONLY.match(text) and len(text.replace(" ", "")) % 2 == 0:
+        return "hex"
+    if len(text) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", text) and len(text) % 4 == 0:
+        return "base64"
+    return "text"
+
+
+def value_key(value) -> str:
+    if isinstance(value, FileSet):
+        return "set:" + "|".join(ref.path for ref in value.refs)
+    if isinstance(value, FileRef):
+        return "file:" + value.path
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    return value
+
+
+# --------------------------------------------------------------------------------------
+# 成员先验：不是"猜一个"，而是排好序后都试
+# --------------------------------------------------------------------------------------
+
+NAME_PRIOR = re.compile(r"(flag|secret|key|pass|answer|readme|note|hint|data)", re.I)
+INTERESTING = {"file:png", "file:zip", "file:elf", "file:pcap", "file:pdf"}
+
+
+def member_score(ref: FileRef) -> float:
+    path = Path(ref.path)
+    score = 0.0
+    if NAME_PRIOR.search(path.name):
+        score += 3.0
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return -99.0
+    if size < 20_000:
+        score += 1.0
+    elif size > 2_000_000:
+        score -= 2.0
+    if sniff(ref.path) in INTERESTING:
+        score += 1.5
+    return score
+
+
+# --------------------------------------------------------------------------------------
+# 单元
+# --------------------------------------------------------------------------------------
+
+TEXT_TYPES = {"text", "hex", "base64"}
+
+
+def _workdir(path: str) -> Path:
+    import hashlib
+    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:10]
+    target = ARTIFACT_ROOT / "_extracted" / f"{Path(path).stem}_{digest}"
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def unzip(ref: FileRef) -> FileSet:
+    """解压 zip，返回全部成员。成员安全性由 zip-slip 过滤保证。"""
+    target = _workdir(ref.path)
+    refs: list[FileRef] = []
+    with zipfile.ZipFile(ref.path) as archive:
+        for member in archive.infolist():
+            name = member.filename
+            if member.is_dir():
+                continue
+            if name.startswith("/") or ".." in Path(name).parts:
+                continue  # zip-slip 防护
+            archive.extract(member, target)
+            refs.append(FileRef(str(target / name)))
+    if not refs:
+        raise ValueError("zip 里没有可用成员")
+    return FileSet(tuple(refs))
+
+
+def read_text(value) -> str:
+    path = value.path if isinstance(value, FileRef) else value
+    raw = Path(path).read_bytes()
+    for encoding in ("utf-8", "gbk", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+            if text.strip():
+                return text
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("无法解码")
+
+
+def _printable_runs(raw: bytes, min_len: int = 6) -> str:
+    text = raw.decode("latin-1", errors="replace")
+    runs = re.findall(r"[\x20-\x7e]{%d,}" % min_len, text)
+    if not runs:
+        raise ValueError("没有可打印字符串")
+    return "\n".join(runs)
+
+
+def png_text(ref: FileRef) -> str:
+    raw = Path(ref.path).read_bytes()
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("不是 PNG")
+    offset, texts = 8, []
+    while offset + 8 <= len(raw):
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        kind = raw[offset + 4:offset + 8]
+        data = raw[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if kind == b"tEXt":
+            _kw, _, value = data.partition(b"\x00")
+            texts.append(value.decode("latin-1", errors="replace"))
+        elif kind == b"zTXt":
+            _kw, _, rest = data.partition(b"\x00")
+            try:
+                texts.append(zlib.decompress(rest[1:]).decode("latin-1", errors="replace"))
+            except zlib.error:
+                continue
+        elif kind == b"iTXt":
+            parts = data.split(b"\x00", 2)
+            if len(parts) == 3:
+                texts.append(parts[2].decode("utf-8", errors="replace"))
+        elif kind == b"IEND":
+            break
+    if not texts:
+        raise ValueError("PNG 没有文本块")
+    return "\n".join(texts)
+
+
+def pcap_strings(ref: FileRef) -> str:
+    raw = Path(ref.path).read_bytes()
+    offset, payloads = 24, []
+    while offset + 16 <= len(raw):
+        incl = struct.unpack("<I", raw[offset + 8:offset + 12])[0]
+        payloads.append(raw[offset + 16:offset + 16 + incl])
+        offset += 16 + incl
+    return _printable_runs(b"".join(payloads) if payloads else raw)
+
+
+def elf_strings(ref: FileRef) -> str:
+    return _printable_runs(Path(ref.path).read_bytes())
+
+
+def bin_strings(ref: FileRef) -> str:
+    return _printable_runs(Path(ref.path).read_bytes())
+
+
+def b64_decode(data: str) -> str:
+    raw = data.strip()
+    raw += "=" * (-len(raw) % 4)
+    return base64.b64decode(raw, validate=True).decode("utf-8")
+
+
+def hex_decode(data: str) -> str:
+    return bytes.fromhex(data.strip().replace(" ", "")).decode("utf-8")
+
+
+UNITS = [
+    {"id": "unzip", "accepts": {"file:zip"}, "produces": "file_set", "fn": unzip,
+     "direction": "decode", "note": "解压并列出成员"},
+    {"id": "read_text", "accepts": {"file:bin"}, "produces": "text", "fn": read_text,
+     "direction": "decode", "note": "按文本读取"},
+    {"id": "png_text", "accepts": {"file:png"}, "produces": "text", "fn": png_text,
+     "direction": "decode", "note": "PNG 文本块"},
+    {"id": "pcap_strings", "accepts": {"file:pcap"}, "produces": "text", "fn": pcap_strings,
+     "direction": "decode", "note": "pcap 可打印串"},
+    {"id": "elf_strings", "accepts": {"file:elf"}, "produces": "text", "fn": elf_strings,
+     "direction": "decode", "note": "ELF 可打印串"},
+    {"id": "bin_strings", "accepts": {"file:bin"}, "produces": "text", "fn": bin_strings,
+     "direction": "decode", "note": "通用可打印串"},
+    {"id": "b64_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": b64_decode,
+     "direction": "decode", "note": "解 Base64"},
+    {"id": "hex_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": hex_decode,
+     "direction": "decode", "note": "解 hex"},
+]
+
+
+# --------------------------------------------------------------------------------------
+# 附件生成
+# --------------------------------------------------------------------------------------
+
+def make_png(path: Path, text_chunk: str) -> None:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+        + chunk(b"tEXt", b"Comment\x00" + text_chunk.encode())
+        + chunk(b"IDAT", zlib.compress(b"\x00\xff\xff\xff"))
+        + chunk(b"IEND", b"")
+    )
+
+
+def prepare_artifacts() -> dict[str, Path]:
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+    made: dict[str, Path] = {}
+    decoys = [f"log_{i}.txt" for i in range(1, 40)]
+
+    # Z1：5 个成员，flag 在第 3 个
+    p = ARTIFACT_ROOT / "Z1_five.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("a.txt", "nothing here\n")
+        z.writestr("b.txt", "still nothing\n")
+        z.writestr("secret.txt", "flag{zip_five_members}\n")
+        z.writestr("c.txt", "nope\n")
+        z.writestr("d.txt", "nope\n")
+    made["Z1"] = p
+
+    # Z2：10 个成员，其中一个是嵌套 zip
+    inner = ARTIFACT_ROOT / "Z2_inner.zip"
+    with zipfile.ZipFile(inner, "w") as z:
+        z.writestr("inside.txt", "flag{zip_nested_member}\n")
+    p = ARTIFACT_ROOT / "Z2_ten.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        for name in decoys[:9]:
+            z.writestr(name, "decoy\n")
+        z.write(inner, "payload.zip")
+    made["Z2"] = p
+
+    # Z3：6 个成员，其中一个是藏 base64 的 PNG
+    png = ARTIFACT_ROOT / "Z3_hidden.png"
+    make_png(png, base64.b64encode(b"flag{zip_png_member}").decode())
+    p = ARTIFACT_ROOT / "Z3_mixed.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        for name in decoys[:5]:
+            z.writestr(name, "decoy\n")
+        z.write(png, "image.png")
+    made["Z3"] = p
+
+    # Z4：25 个成员，flag 藏在冷门文件里
+    p = ARTIFACT_ROOT / "Z4_twentyfive.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        for name in decoys[:24]:
+            z.writestr(name, "decoy\n")
+        z.writestr("zzz_9f3a.dat", "flag{zip_needle_in_haystack}\n")
+    made["Z4"] = p
+
+    # Z5：带目录结构
+    p = ARTIFACT_ROOT / "Z5_dirs.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        z.writestr("docs/readme.txt", "nothing\n")
+        z.writestr("docs/sub/flag.txt", "flag{zip_with_directories}\n")
+        z.writestr("src/main.py", "print('hi')\n")
+    made["Z5"] = p
+
+    # N1：10 个诱饵成员，都没有 flag
+    p = ARTIFACT_ROOT / "N1_decoys.zip"
+    with zipfile.ZipFile(p, "w") as z:
+        for name in decoys[:10]:
+            z.writestr(name, "just a log line\n")
+    made["N1"] = p
+
+    # N2：两层嵌套，最里层才有 flag
+    lvl1 = ARTIFACT_ROOT / "N2_lvl1.zip"
+    with zipfile.ZipFile(lvl1, "w") as z:
+        z.writestr("deep.txt", "flag{zip_nested_two_levels}\n")
+    lvl0 = ARTIFACT_ROOT / "N2_lvl0.zip"
+    with zipfile.ZipFile(lvl0, "w") as z:
+        z.write(lvl1, "level1.zip")
+    made["N2"] = lvl0
+    return made
+
+
+# --------------------------------------------------------------------------------------
+# 规划
+# --------------------------------------------------------------------------------------
+
+MAX_NODES = 2000
+MAX_MEMBERS = 32
+
+
+def _heuristic(unit: dict, output, depth: int) -> float:
+    score = 0.0
+    if unit.get("direction") in {"decode", "solver"}:
+        score += 2.0
+    if isinstance(output, str):
+        printable = sum(1 for ch in output if 32 <= ord(ch) < 127 or "一" <= ch <= "鿿")
+        score += 3.0 * printable / max(len(output), 1)
+    elif isinstance(output, FileSet):
+        score += 1.0
+    elif isinstance(output, FileRef):
+        score += 1.0
+    elif isinstance(output, dict):
+        score += 1.5
+    return score - 0.2 * depth
+
+
+def plan(initial_path: str, expected: str | None, max_depth: int,
+         beam_k: int, search: str) -> dict:
+    started = time.perf_counter()
+    root = FileRef(initial_path)
+    beam: list[tuple[float, str, object, list[str]]] = [(0.0, detect_type(root), root, [])]
+    seen: set[tuple[str, str]] = {(detect_type(root), value_key(root))}
+    expanded = 0
+
+    warnings: list[str] = []
+    for depth in range(max_depth):
+        candidates: list[tuple[float, str, object, list[str]]] = []
+        for _score, current_type, current_value, path in beam:
+            for unit in UNITS:
+                if current_type not in unit["accepts"]:
+                    continue
+                if expanded >= MAX_NODES:
+                    break
+                expanded += 1
+                try:
+                    output = unit["fn"](current_value)
+                except (ValueError, OSError, UnicodeDecodeError, binascii.Error,
+                        TypeError, zipfile.BadZipFile, struct.error):
+                    continue
+                if isinstance(output, str) and not output.strip():
+                    continue
+
+                if isinstance(output, FileSet):
+                    # 对每个成员分叉；先按成员先验排序，再由 beam 控预算
+                    members = sorted(output.refs, key=member_score, reverse=True)[:MAX_MEMBERS]
+                    # 预算小于成员数时，正确成员会被悄悄挤掉——必须显式告警，不能静默丢
+                    if search == "beam" and len(members) > beam_k:
+                        note = f"members({len(members)})>beam_k({beam_k})"
+                        if note not in warnings:
+                            warnings.append(note)
+                    for index, ref in enumerate(members):
+                        member_type = detect_type(ref)
+                        key = (member_type, value_key(ref))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        label = f"unzip:{Path(ref.path).name}"
+                        # 成员先验直接进入分支分数，否则排序会被父节点的同分抹平
+                        candidates.append((_score + member_score(ref), member_type, ref, [*path, label]))
+                    continue
+
+                new_path = [*path, unit["id"]]
+                if isinstance(output, str):
+                    found = FLAG_RE.search(output)
+                    if found and (expected is None or found.group(0).lower() == expected.lower()):
+                        return {"solved": True, "path": new_path, "output": found.group(0),
+                                "expanded": expanded, "warnings": warnings,
+                                "elapsed_ms":
+                                round((time.perf_counter() - started) * 1000, 1)}
+                    if found and expected is not None:
+                        continue
+                new_type = detect_type(output)
+                key = (new_type, value_key(output))
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append((_heuristic(unit, output, depth), new_type,
+                                   output, new_path))
+        if not candidates:
+            break
+        candidates.sort(key=lambda item: -item[0])
+        beam = candidates[:beam_k] if search == "beam" else candidates
+
+    return {"solved": False, "path": [], "expanded": expanded, "warnings": warnings,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+def build_tasks(artifacts: dict[str, Path]) -> list[dict]:
+    specs = [
+        ("Z1", "flag{zip_five_members}", False, "一个 5 成员的压缩包。", "压缩包里东西不多。"),
+        ("Z2", "flag{zip_nested_member}", False, "10 个成员，其中一个是压缩包。", "有个成员本身还是压缩包。"),
+        ("Z3", "flag{zip_png_member}", False, "6 个成员，其中是一张图片。", "里面混了一张图。"),
+        ("Z4", "flag{zip_needle_in_haystack}", False, "25 个成员，找需要的那个。", "文件很多，慢慢看。"),
+        ("Z5", "flag{zip_with_directories}", False, "带目录结构的压缩包。", "解压后有子目录。"),
+        ("N1", None, True, "10 个成员，全是日志。", "都是日志。"),
+        ("N2", "flag{zip_nested_two_levels}", False, "两层嵌套压缩包。", "包里还有包，可能不止一层。"),
+    ]
+    tasks = []
+    for tid, flag, negative, specific, abstract in specs:
+        path = artifacts[tid]
+        tasks.append({
+            "id": tid, "expected": flag, "negative": negative, "path": str(path),
+            "text_specific": f"{specific}\n附件路径：{path}",
+            "text_abstract": f"{abstract}\n附件路径：{path}",
+        })
+    return tasks
+
+
+def run(max_depth: int, search: str, beam_k: int) -> dict:
+    artifacts = prepare_artifacts()
+    rows: list[dict] = []
+    for task in build_tasks(artifacts):
+        for flavor in ("specific", "abstract"):
+            outcome = plan(task["path"], task["expected"], max_depth, beam_k, search)
+            row = {"id": task["id"], "flavor": flavor, "negative": task["negative"],
+                   "solved": outcome["solved"], "path": outcome["path"],
+                   "expanded": outcome["expanded"], "elapsed_ms": outcome["elapsed_ms"],
+                   "warnings": outcome.get("warnings", [])}
+            rows.append(row)
+            ok = row["solved"] != row["negative"]
+            # 只打印关键步骤（unzip 成员可能很多）
+            shown = outcome["path"][-4:] if outcome["path"] else []
+            warn = ("  WARN:" + ",".join(row["warnings"])) if row["warnings"] else ""
+            log(f"  {row['id']}-{flavor:8} ...{'→'.join(shown) or '(none)':48} "
+                f"expanded={row['expanded']:4d}  {'OK' if ok else 'UNEXPECTED'}{warn}")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    return {
+        "summary": {
+            "search": search, "beam_k": beam_k, "units": len(UNITS),
+            "positive_total": len(positives),
+            "positive_solved": sum(1 for r in positives if r["solved"]),
+            "negative_total": len(negatives),
+            "negative_correctly_failed": sum(1 for r in negatives if not r["solved"]),
+            "mean_expanded": round(sum(r["expanded"] for r in rows) / max(len(rows), 1), 1),
+            "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+        },
+        "rows": rows,
+    }
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="多成员压缩包")
+    parser.add_argument("--max-depth", type=int, default=6)
+    parser.add_argument("--search", choices=["bfs", "beam"], default="beam")
+    parser.add_argument("--beam-k", type=int, default=32,
+                        help="成员多时需要足够大的预算，否则可能把正确成员挤出 beam")
+    args = parser.parse_args()
+
+    result = run(args.max_depth, args.search, args.beam_k)
+    summary = result["summary"]
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    lines = ["# EXP-0010 — 多成员压缩包", "",
+             "`unzip` 返回全部成员，规划器对每个成员分叉，按成员先验排序后用 beam 控预算。",
+             "", "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 题面 | 路径（尾部） | 展开 | 结果 |",
+             "| --- | --- | --- | --- | --- |"]
+    for row in result["rows"]:
+        if row["negative"]:
+            mark = "✓(正确失败)" if not row["solved"] else "✗(不该解出)"
+        else:
+            mark = "✓" if row["solved"] else "✗"
+        shown = "→".join(row["path"][-4:]) if row["path"] else "—"
+        lines.append(f"| {row['id']} | {row['flavor']} | {shown} | {row['expanded']} | {mark} |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

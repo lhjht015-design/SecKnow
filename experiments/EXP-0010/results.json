@@ -1,0 +1,197 @@
+{
+  "summary": {
+    "search": "beam",
+    "beam_k": 32,
+    "units": 8,
+    "positive_total": 12,
+    "positive_solved": 12,
+    "negative_total": 2,
+    "negative_correctly_failed": 2,
+    "mean_expanded": 17.1,
+    "mean_elapsed_ms": 14.1
+  },
+  "rows": [
+    {
+      "id": "Z1",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:secret.txt",
+        "read_text"
+      ],
+      "expanded": 2,
+      "elapsed_ms": 18.2,
+      "warnings": []
+    },
+    {
+      "id": "Z1",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:secret.txt",
+        "read_text"
+      ],
+      "expanded": 2,
+      "elapsed_ms": 6.8,
+      "warnings": []
+    },
+    {
+      "id": "Z2",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:payload.zip",
+        "unzip:inside.txt",
+        "read_text"
+      ],
+      "expanded": 23,
+      "elapsed_ms": 15.9,
+      "warnings": []
+    },
+    {
+      "id": "Z2",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:payload.zip",
+        "unzip:inside.txt",
+        "read_text"
+      ],
+      "expanded": 23,
+      "elapsed_ms": 17.4,
+      "warnings": []
+    },
+    {
+      "id": "Z3",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:image.png",
+        "png_text",
+        "b64_decode"
+      ],
+      "expanded": 13,
+      "elapsed_ms": 8.8,
+      "warnings": []
+    },
+    {
+      "id": "Z3",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:image.png",
+        "png_text",
+        "b64_decode"
+      ],
+      "expanded": 13,
+      "elapsed_ms": 9.6,
+      "warnings": []
+    },
+    {
+      "id": "Z4",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:zzz_9f3a.dat",
+        "read_text"
+      ],
+      "expanded": 50,
+      "elapsed_ms": 34.6,
+      "warnings": []
+    },
+    {
+      "id": "Z4",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:zzz_9f3a.dat",
+        "read_text"
+      ],
+      "expanded": 50,
+      "elapsed_ms": 38.5,
+      "warnings": []
+    },
+    {
+      "id": "Z5",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:flag.txt",
+        "read_text"
+      ],
+      "expanded": 4,
+      "elapsed_ms": 4.4,
+      "warnings": []
+    },
+    {
+      "id": "Z5",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:flag.txt",
+        "read_text"
+      ],
+      "expanded": 4,
+      "elapsed_ms": 6.0,
+      "warnings": []
+    },
+    {
+      "id": "N1",
+      "flavor": "specific",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 25,
+      "elapsed_ms": 15.6,
+      "warnings": []
+    },
+    {
+      "id": "N1",
+      "flavor": "abstract",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 25,
+      "elapsed_ms": 14.2,
+      "warnings": []
+    },
+    {
+      "id": "N2",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:level1.zip",
+        "unzip:deep.txt",
+        "read_text"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 3.6,
+      "warnings": []
+    },
+    {
+      "id": "N2",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip:level1.zip",
+        "unzip:deep.txt",
+        "read_text"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 3.2,
+      "warnings": []
+    }
+  ]
+}

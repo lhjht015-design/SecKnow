@@ -21,6 +21,7 @@
 | v009 | [v009_compose.src](v009_compose.src) | 多步组合：类型化搜索把单元串成流水线 | 无（纯 Python） | BFS 8/8→6/8；beam 8/8 |
 | v010 | [v010_compose_mixed.src](v010_compose_mixed.src) | 混合场景：解码 → 解析参数 → RSA | 无（纯 Python） | 正样本 8/8，负样本 4/4 |
 | v011 | [v011_file_payload.src](v011_file_payload.src) | 文件型载荷：魔数识别 + zip/png/pcap/elf | 无（纯 Python） | 12/12 正样本，4/4 负样本 |
+| v012 | [v012_zip_members.src](v012_zip_members.src) | 多成员压缩包：全部成员入队 + 先验排序 | 无（纯 Python） | beam_k=32 时 12/12 |
 
 ## 各版本说明
 
@@ -316,3 +317,38 @@ python versions/v011_file_payload.src --search bfs
 ```
 
 **产出**：`experiments/EXP-0009/{artifacts/,results.json,report.md}`
+
+### v012_zip_members.src
+
+**回答的问题**：真实 zip 常有十几甚至上百个成员，v011 只取第一个等于碰运气。
+
+**改动**：
+1. `unzip` 返回 `FileSet`（全部成员），不再只取第一个；
+2. 规划器对每个成员**分叉**，成员先验（文件名像 flag/secret、体积小、类型有趣）
+   只用于**排序**，不用于丢弃；
+3. 防 zip-slip：跳过绝对路径与含 `..` 的成员；
+4. **预算不足时显式告警** `members(N)>beam_k(K)`。
+
+**结果**
+
+| beam_k | 正样本 |
+| --- | --- |
+| 8 | 10/12（Z4 失败） |
+| 16 | 10/12 |
+| 32 | **12/12** |
+
+- Z4 在 25 个成员中准确定位到名字毫无提示的 `zzz_9f3a.dat`；
+- Z2 / N2 支持嵌套 zip；
+- N1（10 个纯诱饵）在所有预算下都正确失败。
+
+**关键认知**：成员先验只能排序，不能用来"猜一个"——靠名字猜会在 Z4 上直接漏掉。
+而穷举要求**预算 ≥ 成员数**，否则会**静默漏解**（不报错，只是通过率下降）。
+→ 见 `laws/LAW-0016.md`
+
+**运行**
+```bash
+python versions/v012_zip_members.src
+python versions/v012_zip_members.src --beam-k 8   # 观察告警
+```
+
+**产出**：`experiments/EXP-0010/{artifacts/,results.json,report.md}`
