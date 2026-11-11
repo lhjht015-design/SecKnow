@@ -1,0 +1,422 @@
+"""
+v003_verified_answer.src — 带验证的离线回答（LAW-0001 的实现）
+
+解决的问题
+    v001 测出的事实：本地模型会给出结构完整、引用规范、但**解不了题**的答案。
+    平台原 `answer/llm.py` 的链路是「检索 → 拼 prompt → LLM 输出 → 直接返回」，
+    中间没有任何环节能证伪 LLM 的输出。于是"能解"变成了一句生成文本，而不是一个结论。
+
+本版本做什么
+    在生成之后、返回之前，插入一道**确定性**验证闸门：
+
+      1. 让模型按固定格式产出分步方案，每步必须带证据编号和"关键命令/载荷"。
+      2. 逐个检查每一步：
+         (a) 引用的证据编号是否真的存在于本次检索结果里？（查幻觉引用）
+         (b) 该步声称的关键命令/载荷/函数名，是否出现在它引用的那段证据原文里？（查无据断言）
+         (c) 有没有整步都没引用任何证据？（查凭空捏造）
+      3. 按未通过的比例给出判定：
+         SUPPORTED / PARTIAL / UNSUPPORTED
+      4. UNSUPPORTED 时**不输出确定性方案**，改为输出"证据不足"＋已核实的部分，
+         并明确列出被拒绝的步骤。宁可说不知道，也不说"能解"。
+
+核心设计原则
+    **验证器不能是被验证事物的同类。** 用 LLM 去检查 LLM 会重新引入同一个失效模式
+    （它同样会说"验证通过"）。所以这里的检查全部是确定性的字符串/集合运算，零模型参与。
+    唯一例外是"关键载荷提取"用正则启发式，它可能漏，但绝不会编。
+
+度量（用于判断这道闸门是否真的有效）
+    - fabricated_citation_rate：引用了不存在证据编号的比例
+    - unsupported_step_rate  ：声称的关键载荷在证据里找不到的比例
+    - uncited_step_rate      ：整步无引用的比例
+    - verdict 分布           ：有多少问题被判为 UNSUPPORTED
+
+运行
+    python versions/v003_verified_answer.src --model qwen3:8b
+    python versions/v003_verified_answer.src --model qwen3:8b --queries "ROP 是什么" "栈溢出怎么利用"
+
+产出物
+    experiments/EXP-0002/results.json
+    experiments/EXP-0002/report.md
+
+前置条件
+    - Ollama 在 http://127.0.0.1:11434 运行，且已 pull 目标模型。
+    - SecKnow 索引已建好（TF-IDF 与图已激活）。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0002"
+OLLAMA_URL = "http://127.0.0.1:11434"
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 本地 LLM
+# --------------------------------------------------------------------------------------
+
+
+@dataclass
+class LlmResult:
+    text: str
+    latency_s: float
+    output_tokens: int
+    error: str | None = None
+
+
+class OllamaClient:
+    def __init__(self, base_url: str = OLLAMA_URL) -> None:
+        self.base_url = base_url.rstrip("/")
+
+    def chat(self, model: str, system: str, user: str, *, num_predict: int = 1600,
+             temperature: float = 0.1, timeout: int = 900) -> LlmResult:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "stream": False,
+            "keep_alive": "30m",
+            "options": {"temperature": temperature, "num_predict": num_predict},
+        }
+        request = urllib.request.Request(
+            f"{self.base_url}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                body = json.loads(response.read())
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            return LlmResult("", time.perf_counter() - started, 0, f"{type(error).__name__}: {error}")
+        return LlmResult(
+            text=str(body.get("message", {}).get("content", "")),
+            latency_s=time.perf_counter() - started,
+            output_tokens=int(body.get("eval_count", 0)),
+        )
+
+    def list_models(self) -> list[str]:
+        try:
+            with urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=10) as response:
+                return [str(item["name"]) for item in json.loads(response.read()).get("models", [])]
+        except (urllib.error.URLError, TimeoutError, OSError, KeyError, ValueError):
+            return []
+
+
+# --------------------------------------------------------------------------------------
+# 结构化解析：把模型输出切成「步骤」
+# --------------------------------------------------------------------------------------
+
+STEP_HEAD = re.compile(r"^\s*(?:#{1,6}\s*)?(?:步骤|Step)\s*(\d+)\s*(.*)$", re.MULTILINE)
+CITATION = re.compile(r"\[E(\d+)\]")
+# 行内代码 / 反引号块，以及不带反引号的常见命令形态
+BACKTICK = re.compile(r"`([^`\n]{2,200})`")
+CODE_FENCE = re.compile(r"```[\w]*\n(.*?)```", re.DOTALL)
+# 疑似"关键载荷"：函数名调用、shell 命令、路径、hex、伪协议
+ARTIFACT_PATTERNS = (
+    re.compile(r"\b[a-zA-Z_][\w]*\s*\("),              # 函数调用 __subclasses__() 等
+    re.compile(r"\b(?:system|exec|passthru|shell_exec|popen|eval|assert)\b"),
+    re.compile(r"\b(?:php|data|phar|gopher|dict|file|expect|zip)://"),
+    re.compile(r"\b(?:[A-Za-z]:)?[/\\][\w./\\-]{4,}"),  # 路径
+    re.compile(r"\b[0-9a-fA-F]{16,}\b"),                # 长 hex（地址/哈希）
+    re.compile(r"\b(?:ROPgadget|pwntools|sqlmap|ffuf|gobuster|readelf|objdump|checksec)\b"),
+    re.compile(r"\b(?:mov|pop|ret|jmp|call|lea|push)\s+[a-z]{2,4}\b"),  # 汇编
+    re.compile(r"\b__[a-z_]+__\b"),                     # 魔术方法
+)
+
+
+@dataclass
+class Step:
+    index: int
+    title: str
+    body: str
+    citations: list[int] = field(default_factory=list)
+    artifacts: list[str] = field(default_factory=list)
+
+
+def parse_steps(text: str) -> list[Step]:
+    """把回答切成步骤。认不出步骤编号时，退化为把整段当一个步骤。"""
+    matches = list(STEP_HEAD.finditer(text))
+    steps: list[Step] = []
+    if not matches:
+        if text.strip():
+            steps.append(Step(1, "（未编号）", text.strip()))
+        return steps
+    for position, match in enumerate(matches):
+        start = match.end()
+        end = matches[position + 1].start() if position + 1 < len(matches) else len(text)
+        body = text[start:end].strip()
+        title = match.group(2).strip() or f"步骤 {match.group(1)}"
+        steps.append(Step(int(match.group(1)), title, body))
+    return steps
+
+
+def extract_artifacts(step: Step) -> list[str]:
+    """从步骤正文里抽出「疑似关键载荷」。宁可漏，不可编。"""
+    candidates: list[str] = []
+    for block in CODE_FENCE.findall(step.body):
+        candidates.extend(line.strip() for line in block.splitlines())
+    candidates.extend(BACKTICK.findall(step.body))
+    for pattern in ARTIFACT_PATTERNS:
+        candidates.extend(pattern.findall(step.body))
+    cleaned: list[str] = []
+    for item in candidates:
+        value = re.sub(r"\s+", " ", item).strip().strip("`")
+        # 太短或纯中文的片段没有判别力，丢掉
+        if len(value) < 3 or not re.search(r"[A-Za-z0-9_$./\\]", value):
+            continue
+        if value not in cleaned:
+            cleaned.append(value)
+    return cleaned
+
+
+# --------------------------------------------------------------------------------------
+# 验证闸门（全确定性，不调用任何模型）
+# --------------------------------------------------------------------------------------
+
+
+@dataclass
+class StepVerdict:
+    index: int
+    title: str
+    cited_valid: list[int]
+    cited_fabricated: list[int]
+    artifacts_total: int
+    artifacts_supported: int
+    unsupported: list[str]
+    status: str  # SUPPORTED / PARTIAL / UNSUPPORTED / UNCITED
+
+
+def verify_step(step: Step, evidence_texts: dict[int, str]) -> StepVerdict:
+    cited_valid = [c for c in step.citations if c in evidence_texts]
+    cited_fabricated = [c for c in step.citations if c not in evidence_texts]
+    if not step.citations:
+        return StepVerdict(step.index, step.title, [], [], len(step.artifacts), 0,
+                           step.artifacts, "UNCITED")
+
+    # 只拿「该步实际引用了的证据」来核对，避免用别处的证据给它背书
+    haystack = "\n".join(evidence_texts[c] for c in cited_valid).casefold()
+    unsupported = [
+        artifact for artifact in step.artifacts
+        if artifact.casefold() not in haystack
+    ]
+    supported = len(step.artifacts) - len(unsupported)
+    if not step.artifacts:
+        status = "SUPPORTED"          # 无载荷可查，但引用有效
+    elif not unsupported:
+        status = "SUPPORTED"
+    elif supported > 0:
+        status = "PARTIAL"
+    else:
+        status = "UNSUPPORTED"
+    return StepVerdict(step.index, step.title, cited_valid, cited_fabricated,
+                       len(step.artifacts), supported, unsupported, status)
+
+
+def overall_verdict(step_verdicts: list[StepVerdict]) -> str:
+    if not step_verdicts:
+        return "UNSUPPORTED"
+    statuses = [item.status for item in step_verdicts]
+    if all(status == "SUPPORTED" for status in statuses):
+        return "SUPPORTED"
+    if any(status == "UNSUPPORTED" for status in statuses) or statuses.count("UNCITED") > len(statuses) / 2:
+        return "UNSUPPORTED"
+    return "PARTIAL"
+
+
+# --------------------------------------------------------------------------------------
+# 检索
+# --------------------------------------------------------------------------------------
+
+SYSTEM_PROMPT = """你是离线安全知识助手。只允许依据 <evidence> 中的证据作答。
+
+输出格式（必须严格遵守）：
+步骤N [E编号]
+说明这一小段用中文写
+关键载荷: `这里放这一步真正的命令/代码/payload`
+
+规则：
+1. 每一个"步骤N"后面必须紧跟至少一个 [E编号]，编号必须来自 <evidence>。
+2. "关键载荷"只能是证据原文里出现过的东西，一个字都不要自己改。
+3. 证据里没有的命令、函数名、路径、参数，一律不要写。
+4. 如果证据不足以完成某个步骤，就写"证据不足"，不要编。
+"""
+
+
+def load_retriever():
+    sys.path.insert(0, str(ROOT / "src"))
+    from secknow.config import get_settings
+    from secknow.retrieval.service import RetrievalService
+
+    return RetrievalService(get_settings())
+
+
+def format_evidence(hits, limit: int = 6) -> tuple[str, dict[int, str]]:
+    lines: list[str] = []
+    mapping: dict[int, str] = {}
+    for number, hit in enumerate(hits[:limit], 1):
+        citation = hit.chunk.citation
+        location = citation.title
+        if citation.page_start:
+            location += f"，第 {citation.page_start} 页"
+        text = hit.chunk.text
+        mapping[number] = text
+        lines.append(f"[E{number}] 来源：{location}\n{text}")
+    return "\n\n".join(lines), mapping
+
+
+def render_answer(query: str, verdict: str, steps: list[StepVerdict], raw: str) -> str:
+    """按判定结果决定给用户看什么。这是本文件存在的意义所在。"""
+    header = {
+        "SUPPORTED": "## 结论：以下步骤均有证据支撑",
+        "PARTIAL": "## 结论：部分步骤有证据支撑，其余无法核实",
+        "UNSUPPORTED": "## 结论：证据不足，**不提供**确定性方案",
+    }[verdict]
+    lines = [header, "", f"问题：{query}", ""]
+    for item in steps:
+        mark = {
+            "SUPPORTED": "有据",
+            "PARTIAL": "部分有据",
+            "UNSUPPORTED": "无据",
+            "UNCITED": "未引用证据",
+        }[item.status]
+        lines.append(f"- 步骤 {item.index}（{mark}）：{item.title}")
+        if item.cited_fabricated:
+            lines.append(f"    - 引用了不存在的证据编号：{[f'E{i}' for i in item.cited_fabricated]}")
+        if item.unsupported:
+            preview = ", ".join(f"`{a}`" for a in item.unsupported[:5])
+            lines.append(f"    - 证据中找不到：{preview}")
+    if verdict == "UNSUPPORTED":
+        lines += ["", "**已拒绝输出完整方案**：核心步骤无法在证据中核实。",
+                  "请补充相关材料后重试，或查阅下列已核实的信息。"]
+    return "\n".join(lines)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="带确定性验证的离线回答")
+    parser.add_argument("--model", default="qwen3:8b")
+    parser.add_argument("--queries", nargs="*", default=None)
+    parser.add_argument("--top-k", type=int, default=6)
+    args = parser.parse_args()
+
+    default_queries = [
+        "PHP 命令执行漏洞怎么利用？给出具体 payload",
+        "文件包含漏洞怎么用 php 伪协议读取源码？",
+        "SSTI 模板注入怎么找可用类并执行命令？",
+        "ROP 链怎么构造？",
+        "这题的 flag 是什么？",
+    ]
+    queries = args.queries or default_queries
+
+    client = OllamaClient()
+    available = client.list_models()
+    log(f"Ollama 模型：{', '.join(available) or '(无)'}")
+    if args.model not in available:
+        raise SystemExit(f"模型 {args.model} 未安装。可用：{available}")
+
+    log("加载检索服务…")
+    service = load_retriever()
+
+    results: list[dict] = []
+    for query in queries:
+        log(f"问题：{query}")
+        response = service.search(query, args.top_k)
+        evidence, mapping = format_evidence(response.hits, args.top_k)
+        user = (
+            f"问题：{query}\n\n<evidence>\n{evidence}\n</evidence>\n\n"
+            "请按指定格式给出分步方案。"
+        )
+        llm = client.chat(args.model, SYSTEM_PROMPT, user)
+        if llm.error:
+            log(f"  模型调用失败：{llm.error}")
+            continue
+
+        steps = parse_steps(llm.text)
+        for step in steps:
+            step.citations = [int(c) for c in CITATION.findall(step.body) + CITATION.findall(step.title)]
+            step.artifacts = extract_artifacts(step)
+        verdicts = [verify_step(step, mapping) for step in steps]
+        verdict = overall_verdict(verdicts)
+
+        total_steps = len(verdicts)
+        fabricated = sum(len(v.cited_fabricated) for v in verdicts)
+        total_cites = sum(len(v.cited_valid) + len(v.cited_fabricated) for v in verdicts)
+        art_total = sum(v.artifacts_total for v in verdicts)
+        art_bad = sum(len(v.unsupported) for v in verdicts)
+        uncited = sum(1 for v in verdicts if v.status == "UNCITED")
+
+        log(f"  判定 {verdict}  步骤 {total_steps}  假引用 {fabricated}/{total_cites}  "
+            f"无据载荷 {art_bad}/{art_total}  耗时 {llm.latency_s:.1f}s")
+
+        results.append({
+            "query": query,
+            "model": args.model,
+            "verdict": verdict,
+            "steps": total_steps,
+            "citations_total": total_cites,
+            "citations_fabricated": fabricated,
+            "artifacts_total": art_total,
+            "artifacts_unsupported": art_bad,
+            "uncited_steps": uncited,
+            "latency_s": round(llm.latency_s, 2),
+            "output_tokens": llm.output_tokens,
+            "raw_answer": llm.text,
+            "rendered": render_answer(query, verdict, verdicts, llm.text),
+        })
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    n = len(results)
+    summary = {
+        "model": args.model,
+        "queries": n,
+        "verdict_counts": {
+            tag: sum(1 for r in results if r["verdict"] == tag)
+            for tag in ("SUPPORTED", "PARTIAL", "UNSUPPORTED")
+        },
+        "fabricated_citation_rate": round(
+            sum(r["citations_fabricated"] for r in results)
+            / max(sum(r["citations_total"] for r in results), 1), 3),
+        "unsupported_artifact_rate": round(
+            sum(r["artifacts_unsupported"] for r in results)
+            / max(sum(r["artifacts_total"] for r in results), 1), 3),
+        "mean_latency_s": round(sum(r["latency_s"] for r in results) / max(n, 1), 1),
+    }
+
+    lines = ["# EXP-0002 — 带确定性验证的离线回答", "",
+             f"模型：{args.model}", "",
+             "## 判据", "",
+             "- `fabricated_citation_rate`：引用了不存在证据编号的比例（模型在编引用）",
+             "- `unsupported_artifact_rate`：声称的关键命令/载荷在**它自己引用的**证据里找不到的比例",
+             "- `verdict`：UNSUPPORTED 表示闸门拒绝了输出完整方案", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题渲染结果", ""]
+    for item in results:
+        lines += [f"### {item['query']}", "", f"判定：**{item['verdict']}**", "",
+                  "```", item["rendered"], "```", ""]
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

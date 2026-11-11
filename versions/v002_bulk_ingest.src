@@ -1,0 +1,400 @@
+"""
+v002_bulk_ingest.src — 外部知识库批量导入
+
+用途
+    把外部知识库（如 Des-CTF-Knowledge，1200+ 篇 markdown）一次性导入 SecKnow 索引。
+
+为什么需要这个单独版本
+    `IngestionPipeline.ingest_path()` 每导入**一个**文档就会：
+      (1) 把「全部已有活跃块 + 本次新块」重新跑一遍 BGE-M3 编码，
+      (2) 重新构建整张 TF-IDF 与知识图。
+    单文档导入时这没问题，但导入 1200 个文件就是 O(n^2)：总编码量正比于 n^2，
+    实测会从几分钟膨胀到几十小时。本文件把流程改成「先全部解析切片 → 一次性编码 →
+    一次性建索引/图」，把复杂度降回 O(n)。
+
+与平台的关系
+    写入的 SQLite 表结构、chunk 内容、TF-IDF 版本、图快照都与 `IngestionPipeline` 完全一致，
+    因此导入后 Web 平台与 CLI 检索立即生效，无需改动平台代码。
+    唯一的有意偏离：markdown 直接用 `parse_markdown`（纯 Python），不优先走 unstructured。
+    unstructured 对 1200 个文件太慢，而 `parse_markdown` 已经正确处理标题层级与代码块。
+
+产出物
+    data/secknow.db                      文档/元素/块/FTS 写入
+    data/tfidf/<hash>/                   全量 TF-IDF 索引
+    data/graph/<hash>.json.gz            全量知识图快照（含语义相似边）
+    data/dense/<hash>.npz                BGE-M3 dense 向量（供本地向量检索使用）
+
+运行
+    python versions/v002_bulk_ingest.src --dry-run
+    python versions/v002_bulk_ingest.src
+    python versions/v002_bulk_ingest.src --roots book/Des-CTF-Knowledge --skip-existing
+
+前置条件
+    模型权重已在 models/ 下就位（bge-m3）。本脚本不联网。
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.config import get_settings  # noqa: E402
+from secknow.domain.models import Chunk, DocumentFormat, ParsedElement  # noqa: E402
+from secknow.graph.builder import KnowledgeGraph  # noqa: E402
+from secknow.graph.entities import EntityExtractor  # noqa: E402
+from secknow.indexing.chunker import SemanticChunker  # noqa: E402
+from secknow.indexing.tfidf import TfidfIndex  # noqa: E402
+from secknow.ingestion.discovery import DocumentDiscovery  # noqa: E402
+from secknow.ingestion.document_parser import (  # noqa: E402
+    PdfExtractor,
+    select_ocr_engine,
+)
+from secknow.ingestion.text_parser import parse_docx, parse_markdown, parse_plain  # noqa: E402
+from secknow.models.bge import BgeM3Encoder  # noqa: E402
+from secknow.stores.metadata import MetadataStore  # noqa: E402
+
+DEFAULT_ROOTS = ["book/Des-CTF-Knowledge"]
+# 这些目录是仓库元数据，不该进索引
+SKIP_PARTS = {".git", "node_modules", "__pycache__", ".claude"}
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 阶段 1：发现 + 解析 + 切片 + 落库
+# --------------------------------------------------------------------------------------
+
+
+def discover(root: Path) -> list:
+    """列出 root 下所有受支持且不在 SKIP_PARTS 里的文档。"""
+    discovery = DocumentDiscovery(root)
+    documents = []
+    for document in discovery.discover():
+        relative = Path(document.relative_path)
+        if SKIP_PARTS & set(relative.parts):
+            continue
+        documents.append(document)
+    return documents
+
+
+def parse_document(document, ocr) -> tuple[ParsedElement, ...]:
+    """按格式选解析器。markdown 有意不走 unstructured（见文件头说明）。"""
+    if document.format is DocumentFormat.PDF:
+        extractor = PdfExtractor(ocr, 240)
+        return extractor.to_elements(document, extractor.extract(document))
+    if document.format is DocumentFormat.DOCX:
+        return parse_docx(document)
+    if document.format is DocumentFormat.MARKDOWN:
+        return parse_markdown(document)
+    if document.format in {DocumentFormat.TEXT, DocumentFormat.PYTHON}:
+        return parse_plain(document)
+    raise ValueError(f"不支持的格式：{document.format}")
+
+
+def ingest_all(
+    settings,
+    store: MetadataStore,
+    roots: list[str],
+    *,
+    limit: int | None,
+    skip_existing: bool,
+    dry_run: bool,
+) -> tuple[list[Chunk], dict]:
+    """阶段 1。返回 (全部新块, 统计信息)。"""
+    ocr = select_ocr_engine(
+        settings.ocr_backend,
+        languages=settings.ocr_languages,
+        executable=settings.tesseract_executable,
+        tessdata_dir=settings.tesseract_tessdata_dir,
+    )
+    if ocr is not None:
+        log(f"OCR 后端：{type(ocr).__name__}")
+    chunker = SemanticChunker(settings.chunk_size, settings.chunk_overlap)
+
+    all_documents = []
+    for root_name in roots:
+        root = (ROOT / root_name).resolve()
+        if not root.is_dir():
+            log(f"跳过不存在的根目录：{root}")
+            continue
+        found = discover(root)
+        log(f"{root_name}: 发现 {len(found)} 个受支持文档")
+        all_documents.extend(found)
+
+    if limit:
+        all_documents = all_documents[:limit]
+    log(f"合计待处理文档：{len(all_documents)}")
+
+    existing_versions = set()
+    existing_absolute: dict[str, tuple[str, str]] = {}
+    if skip_existing:
+        with store.connect() as db:
+            rows = db.execute("SELECT source_id, version_id FROM documents WHERE active=1").fetchall()
+        existing_versions = {(row["source_id"], row["version_id"]) for row in rows}
+
+    # 重复/已索引检测按「物理路径 + 内容哈希」判断，而不是按 (source_id, version_id)。
+    # 原因见 laws/LAW-0005：version_id 的派生方式会让同一份内容拿到不同 id，
+    # 导致 `--skip-existing` 静默失效——统计里显示「跳过 0」，实际全部重做一遍。
+    with store.connect() as db:
+        for row in db.execute(
+            "SELECT absolute_path, relative_path, sha256 FROM documents WHERE active=1"
+        ):
+            existing_absolute[str(row["absolute_path"])] = (
+                str(row["relative_path"]), str(row["sha256"])
+            )
+
+    if skip_existing:
+        log(f"已激活版本文档：{len(existing_versions)}（按 id 匹配，仅供参考）")
+    log(f"库内已索引的物理文件：{len(existing_absolute)}")
+
+    new_chunks: list[Chunk] = []
+    stats = {"documents": 0, "skipped": 0, "failed": 0, "chunks": 0, "elements": 0}
+    failures: list[tuple[str, str]] = []
+    duplicates: list[tuple[str, str]] = []
+    started = time.perf_counter()
+
+    for index, document in enumerate(all_documents, 1):
+        # 已经索引过、且物理内容没变 → 跳过。换过语料根的重复项也在这里被拦下。
+        known = existing_absolute.get(document.absolute_path)
+        if skip_existing and known is not None:
+            previous_path, previous_sha = known
+            if previous_sha == document.sha256:
+                stats["skipped"] += 1
+                if previous_path != document.relative_path:
+                    duplicates.append((document.relative_path, previous_path))
+                continue
+        try:
+            elements = parse_document(document, ocr)
+            if not elements:
+                stats["failed"] += 1
+                failures.append((document.relative_path, "解析后无任何元素"))
+                continue
+            # 语义切片在这里不带 embed：先按规则切片，语义边界在阶段 2 由向量统一决定。
+            # 这样阶段 1 不需要加载模型，解析与编码可以分开观察。
+            chunks = chunker.chunk(document, elements, None)
+            if not chunks:
+                stats["failed"] += 1
+                failures.append((document.relative_path, "切片后无任何块"))
+                continue
+            if not dry_run:
+                store.upsert_document(document, active=False)
+                store.replace_elements(document.source_id, document.version_id, elements)
+                store.replace_chunks(document.source_id, document.version_id, chunks)
+                store.activate_version(document.source_id, document.version_id)
+            new_chunks.extend(chunks)
+            stats["documents"] += 1
+            stats["elements"] += len(elements)
+            stats["chunks"] += len(chunks)
+        except Exception as error:  # noqa: BLE001 - 单个文档失败不能中断整批导入
+            stats["failed"] += 1
+            failures.append((document.relative_path, f"{type(error).__name__}: {error}"))
+
+        if index % 100 == 0 or index == len(all_documents):
+            elapsed = time.perf_counter() - started
+            rate = index / elapsed if elapsed else 0
+            log(
+                f"  解析进度 {index}/{len(all_documents)}"
+                f"  成功 {stats['documents']}  块 {stats['chunks']}"
+                f"  失败 {stats['failed']}  {rate:.1f} doc/s"
+            )
+
+    stats["failures"] = failures[:50]
+    stats["duplicates"] = duplicates[:50]
+    if duplicates:
+        log(f"按绝对路径跳过 {len(duplicates)} 个重复文件（换过语料根，见 LAW-0005）")
+    return new_chunks, stats
+
+
+# --------------------------------------------------------------------------------------
+# 阶段 2：一次性向量化
+# --------------------------------------------------------------------------------------
+
+
+def encode_chunks(settings, chunks: list[Chunk], batch_size: int):
+    """把全部块的文本一次性交给 BGE-M3。返回 (dense, sparse) 或 (None, None)。"""
+    encoder = BgeM3Encoder(
+        settings.bge_model_path,
+        settings.device,
+        batch_size,
+        cache_dir=settings.data_root / "embeddings" / "bge-m3",
+        model_revision=settings.bge_model_revision,
+    )
+    if not encoder.available:
+        log("BGE-M3 不可用，跳过向量化（检索将只剩词法通道）")
+        return None, None
+    texts = [chunk.text for chunk in chunks]
+    log(f"开始向量化 {len(texts)} 个块，batch_size={batch_size}")
+    started = time.perf_counter()
+    dense, sparse = encoder.encode(texts)
+    elapsed = time.perf_counter() - started
+    log(f"向量化完成，用时 {elapsed:.1f}s（{len(texts) / max(elapsed, 1e-9):.1f} 块/s）")
+    return dense, sparse
+
+
+def save_dense(data_root: Path, version: str, chunk_ids: list[str], dense: np.ndarray) -> Path:
+    """把 dense 向量落到本地 npz。Milvus 不可用时，这是本地向量检索的唯一数据来源。"""
+    target = data_root / "dense"
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / f"{version}.npz"
+    np.savez_compressed(
+        path, chunk_ids=np.array(chunk_ids), matrix=dense.astype(np.float32)
+    )
+    log(f"dense 向量已写入 {path}（{dense.shape[0]}×{dense.shape[1]}）")
+    return path
+
+
+# --------------------------------------------------------------------------------------
+# main
+# --------------------------------------------------------------------------------------
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="外部知识库批量导入")
+    parser.add_argument("--roots", nargs="*", default=DEFAULT_ROOTS,
+                        help="相对仓库根目录的语料根，可给多个")
+    parser.add_argument("--limit", type=int, default=None, help="只处理前 N 个文档（调试用）")
+    parser.add_argument("--skip-existing", action="store_true", help="跳过已激活版本的文档")
+    parser.add_argument("--dry-run", action="store_true", help="只解析不写库")
+    parser.add_argument("--batch-size", type=int, default=32, help="BGE 编码批大小")
+    parser.add_argument("--no-encode", action="store_true", help="跳过向量化，只建词法索引与图")
+    parser.add_argument("--ingest-only", action="store_true",
+                        help="只做阶段 1（解析/切片/落库），不碰 TF-IDF 与图。"
+                             "用于先花时间做 OCR，等加速器就绪后再单独建索引。")
+    parser.add_argument("--index-only", action="store_true",
+                        help="跳过阶段 1，直接用库里已有的活跃块重建 FTS / 向量 / TF-IDF / 图。"
+                             "改过分词规则、或只想刷新索引时用这个。")
+    args = parser.parse_args()
+
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+    store.initialize()
+
+    started = time.perf_counter()
+
+    log("=" * 70)
+    log("阶段 1 / 5：解析、切片、落库")
+    log("=" * 70)
+    if args.index_only:
+        log("--index-only：跳过阶段 1，直接沿用库中已有的活跃块")
+        new_chunks, stats = [], {"documents": 0, "skipped": 0, "failed": 0,
+                                 "chunks": 0, "elements": 0, "failures": []}
+    else:
+        new_chunks, stats = ingest_all(
+            settings, store, args.roots,
+            limit=args.limit, skip_existing=args.skip_existing, dry_run=args.dry_run,
+        )
+        log(
+            f"阶段 1 完成：文档 {stats['documents']}，元素 {stats['elements']}，"
+            f"新块 {stats['chunks']}，跳过 {stats['skipped']}，失败 {stats['failed']}"
+        )
+        if stats["failures"]:
+            log(f"失败样例（最多 50 条）：{json.dumps(stats['failures'][:10], ensure_ascii=False)}")
+        if args.dry_run:
+            log("dry-run 结束，未写入任何数据。")
+            return
+        if args.ingest_only:
+            log("--ingest-only：阶段 1 结束即退出，TF-IDF 与图留待后续单独构建。")
+            (ROOT / "experiments" / "EXP-0001").mkdir(parents=True, exist_ok=True)
+            (ROOT / "experiments" / "EXP-0001" / "bulk_ingest_phase1.json").write_text(
+                json.dumps({"summary": stats}, ensure_ascii=False, indent=2), encoding="utf-8")
+            return
+
+    active_chunks = store.active_chunks()
+    log(f"库中当前活跃块总数：{len(active_chunks)}")
+    if not active_chunks:
+        raise SystemExit("没有活跃块，终止。")
+
+    log("=" * 70)
+    log("阶段 2 / 5：重建 FTS 全文索引（按 jieba 中文切分）")
+    log("=" * 70)
+    # 分词规则变了以后，未被重新导入的旧行仍带着老的分词，必须整体重刷，
+    # 否则中文查询会在这些行上整片失配（见 LAW-0006）。
+    refreshed = store.rebuild_fts()
+    log(f"FTS 已重刷 {refreshed} 个块")
+
+    log("=" * 70)
+    log("阶段 3 / 5：全量向量化")
+    log("=" * 70)
+    dense = sparse = None
+    if args.no_encode:
+        log("按 --no-encode 跳过")
+    else:
+        dense, sparse = encode_chunks(settings, list(active_chunks), args.batch_size)
+
+    log("=" * 70)
+    log("阶段 4 / 5：构建 TF-IDF")
+    log("=" * 70)
+    tfidf = TfidfIndex()
+    tfidf_version = tfidf.fit(active_chunks)
+    tfidf.save(settings.data_root / "tfidf")
+    log(f"TF-IDF 版本 {tfidf_version}")
+
+    if dense is not None:
+        save_dense(
+            settings.data_root, tfidf_version,
+            [chunk.chunk_id for chunk in active_chunks], dense,
+        )
+
+    log("=" * 70)
+    log("阶段 5 / 5：构建知识图")
+    log("=" * 70)
+    extractor = EntityExtractor.from_yaml(
+        settings.source_manifest.parent / "security_entities.yaml"
+    )
+    graph = KnowledgeGraph(extractor)
+    graph.build(active_chunks)
+    if dense is not None:
+        log("加入语义相似边…")
+        graph.add_semantic_edges(
+            [chunk.chunk_id for chunk in active_chunks],
+            dense,
+            top_k=settings.semantic_edge_top_k,
+            threshold=settings.semantic_edge_threshold,
+            block_size=settings.semantic_edge_block_size,
+        )
+    graph_path = settings.data_root / "graph" / f"{tfidf_version}.json.gz"
+    graph_version = graph.save(graph_path)
+    final_path = settings.data_root / "graph" / f"{graph_version}.json.gz"
+    if final_path != graph_path:
+        graph_path.replace(final_path)
+    store.set_setting("active_graph_version", graph_version)
+    store.set_setting("active_tfidf_version", tfidf_version)
+    log(f"图版本 {graph_version}，节点 {graph.graph.number_of_nodes()}，边 {graph.graph.number_of_edges()}")
+
+    elapsed = time.perf_counter() - started
+    summary = {
+        "elapsed_s": round(elapsed, 1),
+        "documents": stats["documents"],
+        "chunks_new": stats["chunks"],
+        "chunks_active": len(active_chunks),
+        "failed": stats["failed"],
+        "tfidf_version": tfidf_version,
+        "graph_version": graph_version,
+        "graph_nodes": graph.graph.number_of_nodes(),
+        "graph_edges": graph.graph.number_of_edges(),
+        "dense_saved": dense is not None,
+    }
+    log("=" * 70)
+    log("导入完成")
+    log(json.dumps(summary, ensure_ascii=False, indent=2))
+
+    (ROOT / "experiments" / "EXP-0001").mkdir(parents=True, exist_ok=True)
+    (ROOT / "experiments" / "EXP-0001" / "bulk_ingest_summary.json").write_text(
+        json.dumps({"summary": summary, "failures": stats["failures"]}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+if __name__ == "__main__":
+    main()

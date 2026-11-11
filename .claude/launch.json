@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "secknow-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "D:/SecKnow/frontend"],
+      "port": 5173
+    },
+    {
+      "name": "secknow-api-strict",
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:SECKNOW_MODE='strict-lexical'; $env:PYTHONDONTWRITEBYTECODE='1'; & 'D:/SecKnow/.venv/Scripts/python.exe' -B -m secknow.main"
+      ],
+      "port": 8765
+    }
+  ]
+}

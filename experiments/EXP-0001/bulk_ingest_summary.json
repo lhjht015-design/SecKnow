@@ -1,0 +1,15 @@
+{
+  "summary": {
+    "elapsed_s": 383.7,
+    "documents": 0,
+    "chunks_new": 0,
+    "chunks_active": 16361,
+    "failed": 0,
+    "tfidf_version": "c983c0f60f393c5d602d27f7465301dc60a2d64918c2a68f6fb21b681c19f56c",
+    "graph_version": "7324b933996406c7a08594fe27e18760129a340163b80dc142b878adb5998409",
+    "graph_nodes": 66947,
+    "graph_edges": 607214,
+    "dense_saved": true
+  },
+  "failures": []
+}

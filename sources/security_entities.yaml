@@ -1,0 +1,39 @@
+register:
+  - eax
+  - ebx
+  - ecx
+  - edx
+  - esp
+  - ebp
+  - eip
+  - rax
+  - rbx
+  - rcx
+  - rdx
+  - rsp
+  - rbp
+  - rip
+tool:
+  - IDA Pro
+  - Ghidra
+  - gdb
+  - pwndbg
+  - radare2
+  - Rizin
+  - angr
+  - Burp Suite
+file_format:
+  - ELF
+  - PE
+  - Mach-O
+  - DWARF
+technique:
+  - ROP
+  - ret2libc
+  - use-after-free
+  - buffer overflow
+  - format string
+  - heap spray
+  - ASLR
+  - NX
+  - PIE

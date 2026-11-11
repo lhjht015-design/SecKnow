@@ -1,0 +1,262 @@
+{
+  "summaries": [
+    {
+      "model": "qwen3:8b",
+      "total": 9,
+      "A_tasks": 9,
+      "A_solved_by_exec": 1,
+      "A_solved_inline_only": 0,
+      "A_solve_rate": 0.111,
+      "A_exec_rate": 0.111,
+      "A_false_positive_rate": 0.667,
+      "A_mean_latency_s": 13.1,
+      "A_mean_attempts": 1.0,
+      "A_solved_on_first_try": 1
+    }
+  ],
+  "results": [
+    {
+      "task": "A1",
+      "category": "encoding",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{b4se64_ch41n_1s_e4sy}",
+      "claimed_flag": null,
+      "executed_flag": null,
+      "false_positive": false,
+      "run_ok": true,
+      "exec_stderr": "",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": true,
+          "flag": null,
+          "stderr": "",
+          "stdout_tail": "Wm14aFozdGlOSE5sTmpSZlkyZzBNVzVmTVhOZlpUUnplWDA9\n"
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 3.43,
+      "output_tokens": 80,
+      "llm_error": null,
+      "code": "import base64\n\ns = \"V20xNGFGb3pkR2xPU0U1c1RtcFNabGt5WnpCTlZ6Vm1UVmhPWmxwVVVucGxXREE5\"\nresult = base64.b64decode(s).decode('utf-8')\nprint(result)",
+      "stdout_tail": "Wm14aFozdGlOSE5sTmpSZlkyZzBNVzVmTVhOZlpUUnplWDA9\n"
+    },
+    {
+      "task": "A2",
+      "category": "crypto",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{x0r_w1th_s1ngle_byte}",
+      "claimed_flag": "flag{flag{x0r_w1th_s1ngle_byte}",
+      "executed_flag": "flag{flag{x0r_w1th_s1ngle_byte}",
+      "false_positive": true,
+      "run_ok": true,
+      "exec_stderr": "",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": true,
+          "flag": "flag{flag{x0r_w1th_s1ngle_byte}",
+          "stderr": "",
+          "stdout_tail": "flag{flag{x0r_w1th_s1ngle_byte}}\n"
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 4.51,
+      "output_tokens": 120,
+      "llm_error": null,
+      "code": "import itertools\n\nhex_data = \"3c363b3d21226a28052d6b2e3205296b343d363f0538232e3f27\"\nbyte_data = bytes.fromhex(hex_data)\n\nfor key in range(256):\n    plain = bytes([b ^ key for b in byte_data])\n    if b'flag{' in plain:\n        print(f\"flag{{{plain.decode()}}}\")\n        break",
+      "stdout_tail": "flag{flag{x0r_w1th_s1ngle_byte}}\n"
+    },
+    {
+      "task": "A3",
+      "category": "crypto",
+      "model": "qwen3:8b",
+      "verdict": "solved_by_exec",
+      "expected_flag": "flag{caesar_shifts_by_13}",
+      "claimed_flag": "flag{caesar_shifts_by_13}",
+      "executed_flag": "flag{caesar_shifts_by_13}",
+      "false_positive": false,
+      "run_ok": true,
+      "exec_stderr": "",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": true,
+          "flag": "flag{caesar_shifts_by_13}",
+          "stderr": "",
+          "stdout_tail": "flag{caesar_shifts_by_13}\n"
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 4.55,
+      "output_tokens": 117,
+      "llm_error": null,
+      "code": "import base64\n\ncipher = \"synt{pnrfne_fuvsgf_ol_13}\"\n# Caesar cipher with shift 13 (ROT13)\nplain = ''.join([chr((ord(c) - ord('a') + 13) % 26 + ord('a')) if c.islower() else chr((ord(c) - ord('A') + 13) % 26 + ord('A')) if c.isupper() else c for c in cipher])\nprint(plain)",
+      "stdout_tail": "flag{caesar_shifts_by_13}\n"
+    },
+    {
+      "task": "A4",
+      "category": "crypto",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{rsa_small_e_no_padding}",
+      "claimed_flag": "flag{{{m}",
+      "executed_flag": null,
+      "false_positive": true,
+      "run_ok": false,
+      "exec_stderr": "NameError: name 'random' is not defined",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": false,
+          "flag": null,
+          "stderr": "NameError: name 'random' is not defined",
+          "stdout_tail": ""
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 47.72,
+      "output_tokens": 1171,
+      "llm_error": null,
+      "code": "import math\n\nn = 32317006071311007300714876688669951960444102669715484032130345427524655138867890893197201411522913463688717960921898019494119559150490921095088152386448283120630877367300996091750197750389652106796057638384067568276792218642619756161838094338476170470581645852036305042887575891541065808607552399123930385521914333389668342420684974786564569494856176035326322058077805659331026192708460314150258592864177116725943603718461857357598351152301645904403697613233287231227125684710820209725157101726931323469678542580656697935045997268352998638215525166389437335543602135433229604640433428200823324057627943945151095757721\ne = 3\nc = 1254972654399045217596767030584957419251576703649888223587543779647722804433340859652054759909740900322127878888726083923776003603148593530841068805815581933373151647012323241363856386012811081384897125\n\n# Find factors of n\ndef is_prime(num):\n    if num < 2:\n        return False\n    for i in range(2, int(math.isqrt(num)) + 1):\n        if num % i == 0:\n            return False\n    return True\n\ndef pollards_rho(n):\n    if n % 2 == 0:\n        return 2\n    if n % 3 == 0:\n        return 3\n    if n % 5 == 0:\n        return 5\n    while True:\n        c = random.randint(1, n-1)\n        f = lambda x: (pow(x, 2, n) + c) % n\n        x, y, d = 2, 2, 1\n        while d == 1:\n            x = f(x)\n            y = f(f(y))\n            d = math.gcd(abs(x - y), n)\n        if d != n:\n            return d\n\ndef factor(n):\n    factors = []\n    def _factor(n):\n        if n == 1:\n            return\n        if is_prime(n):\n            factors.append(n)\n            return\n        d = pollards_rho(n)\n        _factor(d)\n        _factor(n // d)\n    _factor(n)\n    return factors\n\nfactors = factor(n)\np = factors[0]\nq = n // p\n\nphi = (p - 1) * (q - 1)\nd = pow(e, -1, phi)\n\nm = pow(c, d, n)\nprint(f\"flag{{{m}}}\")",
+      "stdout_tail": ""
+    },
+    {
+      "task": "A5",
+      "category": "encoding",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{b1n4ry_t0_4sc11}",
+      "claimed_flag": "flag{011001100110110001100001011001110111101101100010001100010110111000110100011100100111100101011111011101000011000001011111001101000111001101100011001100010011000101111101}",
+      "executed_flag": "flag{011001100110110001100001011001110111101101100010001100010110111000110100011100100111100101011111011101000011000001011111001101000111001101100011001100010011000101111101}",
+      "false_positive": true,
+      "run_ok": true,
+      "exec_stderr": "",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": true,
+          "flag": "flag{011001100110110001100001011001110111101101100010001100010110111000110100011100100111100101011111011101000011000001011111001101000111001101100011001100010011000101111101}",
+          "stderr": "",
+          "stdout_tail": "flag{011001100110110001100001011001110111101101100010001100010110111000110100011100100111100101011111011101000011000001011111001101000111001101100011001100010011000101111101}\n"
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 8.74,
+      "output_tokens": 225,
+      "llm_error": null,
+      "code": "import base64\n\nbinary_str = \"01100110 01101100 01100001 01100111 01111011 01100010 00110001 01101110 00110100 01110010 01111001 01011111 01110100 00110000 01011111 00110100 01110011 01100011 00110001 00110001 01111101\"\nbinary_list = binary_str.split()\ntext = ''.join(binary_list)\nprint(f\"flag{{{text}}}\")",
+      "stdout_tail": "flag{011001100110110001100001011001110111101101100010001100010110111000110100011100100111100101011111011101000011000001011111001101000111001101100011001100010011000101111101}\n"
+    },
+    {
+      "task": "A6",
+      "category": "reverse",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{rev3rs1ng_l0g1c}",
+      "claimed_flag": null,
+      "executed_flag": null,
+      "false_positive": false,
+      "run_ok": false,
+      "exec_stderr": "error: Error -3 while decompressing data: incorrect header check",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": false,
+          "flag": null,
+          "stderr": "error: Error -3 while decompressing data: incorrect header check",
+          "stdout_tail": ""
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 4.9,
+      "output_tokens": 127,
+      "llm_error": null,
+      "code": "import zlib\n\ndata = [81, 91, 86, 80, 76, 69, 82, 65, 4, 69, 68, 6, 89, 80, 104, 91, 7, 80, 6, 84, 74]\nkey = 0x37\ninput_bytes = [ch ^ key for ch in data]\ninput_str = zlib.decompress(bytes(input_bytes)).decode()\nprint(input_str)",
+      "stdout_tail": ""
+    },
+    {
+      "task": "A7",
+      "category": "misc",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{ctfz}",
+      "claimed_flag": "flag{{{s}",
+      "executed_flag": null,
+      "false_positive": true,
+      "run_ok": false,
+      "exec_stderr": "TypeError: a bytes-like object is required, not 'str'",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": false,
+          "flag": null,
+          "stderr": "TypeError: a bytes-like object is required, not 'str'",
+          "stdout_tail": ""
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 4.97,
+      "output_tokens": 127,
+      "llm_error": null,
+      "code": "import zlib\n\ncrc = 0xD858137E\nfor a in range(26):\n    for b in range(26):\n        for c in range(26):\n            for d in range(26):\n                s = chr(a + ord('a')) + chr(b + ord('a')) + chr(c + ord('a')) + chr(d + ord('a'))\n                crc_calculated = zlib.crc32(s) & 0xFFFFFFFF\n                if crc_calculated == crc:\n                    print(f\"flag{{{s}}}\")\n                    exit()",
+      "stdout_tail": ""
+    },
+    {
+      "task": "A8",
+      "category": "crypto",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{fermat_factors_close_primes}",
+      "claimed_flag": "flag{{{flag}",
+      "executed_flag": null,
+      "false_positive": true,
+      "run_ok": true,
+      "exec_stderr": "",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": true,
+          "flag": null,
+          "stderr": "",
+          "stdout_tail": "flag{}semirp_esolc_srotcaf_tamref{galf\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000}\n"
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 30.34,
+      "output_tokens": 795,
+      "llm_error": null,
+      "code": "import math\n\nn = 44942328371557897693232629769725618340449424473557664318357520289433168951375240783177119330601884005280028469967848339414697442203604155623211857659874698686089746950882175370574729589530164038140743238975004280473649682039449551977807139812363584867575042325912358143379538270713424498384198560948854808263\ne = 65537\nc = 10629833728482368425649128153345308554741489776239128402301783403696565613749154659230046759741339483137560624887168699846895265914055541729854455850099551650760582379647137971487478875300630159148302697114408278366923130645162162219478773096373626881722631809812141202665053597994081114703011786943753756529\n\n# Find two primes p and q\n# Since p and q are very close, we can try to find them by checking numbers around sqrt(n)\nsqrt_n = int(math.isqrt(n))\nfor i in range(1, 1000):\n    p = sqrt_n + i\n    if n % p == 0:\n        q = n // p\n        break\n\nphi = (p - 1) * (q - 1)\nd = pow(e, -1, phi)\n\n# Decrypt the ciphertext\nm = pow(c, d, n)\nflag = ''.join([chr(m >> (i * 8) & 0xff) for i in range(100)])\nprint(f\"flag{{{flag}}}\")",
+      "stdout_tail": "flag{}semirp_esolc_srotcaf_tamref{galf\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000}\n"
+    },
+    {
+      "task": "A9",
+      "category": "crypto",
+      "model": "qwen3:8b",
+      "verdict": "failed",
+      "expected_flag": "flag{repeating_key_xor_needs_crib}",
+      "claimed_flag": "flag{{{zlib.decompress(decrypted).decode()}",
+      "executed_flag": null,
+      "false_positive": true,
+      "run_ok": false,
+      "exec_stderr": "timeout: exceeded 60s",
+      "attempts": [
+        {
+          "attempt": 0,
+          "ok": false,
+          "flag": null,
+          "stderr": "timeout: exceeded 60s",
+          "stdout_tail": ""
+        }
+      ],
+      "attempt_count": 1,
+      "latency_s": 8.87,
+      "output_tokens": 226,
+      "llm_error": null,
+      "code": "import zlib\n\nhex_data = \"755bdf886845db9f7656ca867d50e184764ee1977c45e1817652da9c4c54cc86714a\"\ndata = bytes.fromhex(hex_data)\n\ndef xor_decrypt(data, key):\n    return bytes([b ^ k for b, k in zip(data, key * (len(data) // len(key) + 1))])\n\nfor key in range(256 ** 4):\n    key_bytes = bytes([key >> 24 & 0xFF, key >> 16 & 0xFF, key >> 8 & 0xFF, key & 0xFF])\n    decrypted = xor_decrypt(data, key_bytes)\n    try:\n        if zlib.decompress(decrypted).startswith(b'flag{'):\n            print(f\"flag{{{zlib.decompress(decrypted).decode()}}}\")\n            break\n    except:\n        continue",
+      "stdout_tail": ""
+    }
+  ]
+}

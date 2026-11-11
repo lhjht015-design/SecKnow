@@ -1,0 +1,497 @@
+"""
+v004_retrieval_bench.src — 用真实 meta WP 做真值，客观度量检索质量
+
+为什么需要这个
+    CTF 比赛现场不允许用 AI，所以平台的价值是「给人用的知识库」。
+    那核心问题就不是「AI 能不能自己解题」，而是：
+        **拿到一道题，系统能不能把它该看的 WP、知识章节、payload 找出来？**
+    这个问题有真值，可以大规模自动评分——比让 LLM 自评可靠得多。
+
+真值来源
+    `book/Des-CTF-Knowledge/CTF大赛WP集合/articles/*.meta.md`（1156 篇）
+    每篇 11 个字段：title / contest / year / difficulty / vuln_type / tags /
+    attack_chain / key_payload / one_liner / lesson / quality
+
+查询构造（关键，防泄漏）
+    查询只用 `title + contest + difficulty + vuln_type` 拼成。
+    **绝不包含** tags / one_liner / attack_chain / key_payload —— 那些就是答案本身。
+    这和真实比赛一致：你手上只有题目标题和类型，没有解题思路。
+
+指标
+    tag_recall@K      检索到的文本覆盖了真值 tags 的多大比例（找没找到该用的技术）
+    similar_wp@K      Top-K 里是否命中「同类型且标签重叠」的**其它** WP（找相似题）
+    self_leak@K       是否检索到该题自己的 meta 文件。单独统计：
+                      对真人用户这当然有用，但对评测是泄漏，必须和上面两个指标分开看
+    vuln_type_hit@K   Top-K 里是否出现了同 vuln_type 的 WP
+
+运行
+    python versions/v004_retrieval_bench.src --sample 120
+    python versions/v004_retrieval_bench.src --sample 0      # 全部 1156 篇
+
+产出物
+    experiments/EXP-0003/results.json
+    experiments/EXP-0003/report.md
+
+前置条件
+    SecKnow 索引已构建（TF-IDF 与图已激活）。GPU 可用时单次检索约 3 秒。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import re
+import statistics
+import sys
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0003"
+META_GLOB = "book/Des-CTF-Knowledge/CTF大赛WP集合/articles/*.meta.md"
+
+FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 真值：解析 meta WP
+# --------------------------------------------------------------------------------------
+
+
+def as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [str(value)]
+
+
+FIELD_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+
+
+def _clean_scalar(raw: str) -> str:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    return text.strip()
+
+
+def _split_inline_list(raw: str) -> list[str] | None:
+    text = raw.strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        return None
+    inner = text[1:-1]
+    return [_clean_scalar(item) for item in inner.split(",") if item.strip()]
+
+
+def parse_frontmatter_lenient(block: str) -> dict:
+    """不依赖 YAML 的字段抽取。
+
+    仓库里约 28% 的 meta 文件（325/1156）前言的取值里带未转义的冒号
+    （例如 `- Web1: phar`）或中文标题里的 `：`，严格 YAML 会直接报错。
+    这些文件的内容其实是好的，只是格式不规范，所以这里退回逐行抽取。
+    """
+    out: dict = {}
+    current: str | None = None
+    for raw_line in block.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+        match = FIELD_LINE.match(line)
+        if match:
+            current = match.group(1)
+            out[current] = match.group(2).strip()
+            continue
+        stripped = line.strip()
+        if current and stripped.startswith("- "):
+            item = _clean_scalar(stripped[2:])
+            if not item:
+                continue
+            previous = out.get(current)
+            if isinstance(previous, list):
+                previous.append(item)
+            elif isinstance(previous, str) and previous.strip():
+                out[current] = [_clean_scalar(previous), item]
+            else:
+                out[current] = [item]
+    # 归一化：行内 [a, b] 形式、空串、引号
+    for key, value in list(out.items()):
+        if isinstance(value, str):
+            inline = _split_inline_list(value)
+            if inline is not None:
+                out[key] = inline
+            else:
+                out[key] = _clean_scalar(value)
+    return out
+
+
+def parse_frontmatter(text: str) -> dict:
+    match = FRONTMATTER.match(text)
+    if not match:
+        return {}
+    block = match.group(1)
+    try:
+        payload = yaml.safe_load(block)
+        if isinstance(payload, dict) and payload.get("title"):
+            return payload
+    except yaml.YAMLError:
+        pass
+    return parse_frontmatter_lenient(block)
+
+
+def load_meta_wps() -> list[dict]:
+    """读出全部 meta WP 的结构化字段。"""
+    entries: list[dict] = []
+    for path in sorted(ROOT.glob(META_GLOB)):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        payload = parse_frontmatter(text)
+        if not isinstance(payload, dict) or not payload.get("title"):
+            continue
+        entries.append({
+            "path": path,
+            "relative_path": path.relative_to(ROOT / "book").as_posix(),
+            "title": str(payload.get("title", "")).strip(),
+            "contest": str(payload.get("contest", "")).strip(),
+            "year": payload.get("year"),
+            "difficulty": str(payload.get("difficulty", "")).strip(),
+            "vuln_type": as_list(payload.get("vuln_type")),
+            "tags": as_list(payload.get("tags")),
+            "quality": str(payload.get("quality", "")).strip(),
+        })
+    return entries
+
+
+def build_query(entry: dict) -> str:
+    """只用题面信息构造查询，刻意排除 tags / one_liner / attack_chain 等答案字段。"""
+    parts = [entry["title"]]
+    if entry["vuln_type"]:
+        parts.append("类型：" + " ".join(entry["vuln_type"]))
+    if entry["difficulty"]:
+        parts.append(f"难度：{entry['difficulty']}")
+    if entry["contest"]:
+        parts.append(f"比赛：{entry['contest']}")
+    return "  ".join(parts)
+
+
+def bucket_key(entry: dict) -> str:
+    """把 vuln_type 归到粗粒度方向，否则会出现大量 n=1 的组，分层失去意义。
+
+    原始标签形如 web_unknown / pwn_unknown / heap_exploit / crypto_rsa，
+    只取第一段就得到 web / pwn / heap / crypto 这种可用的方向。
+    """
+    if not entry["vuln_type"]:
+        return "unknown"
+    return entry["vuln_type"][0].split("_")[0].strip().casefold() or "unknown"
+
+
+def stratified_sample(entries: list[dict], size: int, seed: int = 20260921) -> list[dict]:
+    """按方向分层轮询抽样，避免抽出来全是同一个方向。"""
+    if size <= 0 or size >= len(entries):
+        return entries
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        buckets[bucket_key(entry)].append(entry)
+    rng = random.Random(seed)
+    for bucket in buckets.values():
+        rng.shuffle(bucket)
+    chosen: list[dict] = []
+    keys = sorted(buckets, key=lambda k: -len(buckets[k]))
+    index = 0
+    while len(chosen) < size and any(buckets[k] for k in keys):
+        key = keys[index % len(keys)]
+        if buckets[key]:
+            chosen.append(buckets[key].pop())
+        index += 1
+    return chosen
+
+
+# --------------------------------------------------------------------------------------
+# 评分
+# --------------------------------------------------------------------------------------
+
+
+def compute_similar_ground_truth(entries: list[dict]) -> dict[str, bool]:
+    """预先算出「这道题在语料里到底有没有近似题」。
+
+    这一步是评测有效性的兜底，和 v001 的 --oracle 是同一个道理：
+    如果真值本身就不存在，那么 the 指标低是**语料的性质**，不是检索的失败，
+    两者必须分开报告，否则会得出错误的优化方向。
+    实测 120 题里有 80 题（67%）在全部 1156 篇 WP 中找不到一篇共享 ≥2 个标签的近似题。
+    """
+    tag_sets = {e["relative_path"]: set(t.casefold() for t in e["tags"]) for e in entries}
+    ground_truth: dict[str, bool] = {}
+    paths = list(tag_sets)
+    for path in paths:
+        own = tag_sets[path]
+        found = False
+        for other in paths:
+            if other == path:
+                continue
+            if len(own & tag_sets[other]) >= 2:
+                found = True
+                break
+        ground_truth[path] = found
+    return ground_truth
+
+
+def score_one(entry: dict, hits, tag_index: dict[str, set[str]],
+              has_similar_ground_truth: bool) -> dict:
+    """tag_index: relative_path -> 该 WP 的 tags 集合，用于判断"命中了哪篇 WP"。"""
+    retrieved_text = " ".join(hit.chunk.text for hit in hits).casefold()
+
+    tags = [t for t in entry["tags"] if len(t) >= 2]
+    found_tags = [t for t in tags if t.casefold() in retrieved_text]
+    tag_recall = len(found_tags) / len(tags) if tags else None
+
+    own_path = entry["relative_path"]
+    own_tags = set(t.casefold() for t in entry["tags"])
+    same_vuln = set(t.casefold() for t in entry["vuln_type"])
+
+    self_leak = False
+    similar = False
+    similar_titles: list[str] = []
+    vuln_hit = False
+
+    for hit in hits:
+        citation = hit.chunk.citation
+        path = getattr(citation, "relative_path", "") or ""
+        path = path.replace("\\", "/")
+        if not path.endswith(".meta.md"):
+            continue
+        if path == own_path:
+            self_leak = True
+            continue
+        other_tags = tag_index.get(path)
+        if other_tags is None:
+            continue
+        # 同类型（vuln_type 字符串出现在对方 tags 或标题里）或标签重叠
+        union = own_tags | other_tags
+        overlap = own_tags & other_tags
+        jaccard = len(overlap) / len(union) if union else 0.0
+        if len(overlap) >= 2 or jaccard >= 0.15:
+            similar = True
+            if len(similar_titles) < 3:
+                similar_titles.append(path)
+        if same_vuln & other_tags:
+            vuln_hit = True
+
+    return {
+        "title": entry["title"],
+        "vuln_type": entry["vuln_type"],
+        "difficulty": entry["difficulty"],
+        "quality": entry["quality"],
+        "tags_total": len(tags),
+        "tags_found": len(found_tags),
+        "found_tags": found_tags,
+        "missing_tags": [t for t in tags if t not in found_tags],
+        "tag_recall": tag_recall,
+        "self_leak": self_leak,
+        "similar_wp": similar,
+        "similar_ground_truth_exists": has_similar_ground_truth,
+        "similar_examples": similar_titles,
+        "vuln_type_hit": vuln_hit,
+        "top1_title": hits[0].chunk.citation.title if hits else None,
+        "top_k_sources": list(dict.fromkeys(
+            (h.chunk.citation.relative_path or h.chunk.citation.title) for h in hits
+        ))[:8],
+    }
+
+
+def mean(values) -> float | None:
+    values = [v for v in values if v is not None]
+    return round(statistics.fmean(values), 4) if values else None
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="基于 meta WP 真值的检索质量评测")
+    parser.add_argument("--sample", type=int, default=120, help="抽样题数；0 表示全部")
+    parser.add_argument("--top-k", type=int, default=8)
+    parser.add_argument("--mode", default=None, help="覆盖运行模式（strict-lexical/competition/enhanced）")
+    args = parser.parse_args()
+
+    entries = load_meta_wps()
+    log(f"载入 meta WP：{len(entries)} 篇")
+    if not entries:
+        raise SystemExit("没有找到任何 meta WP，检查路径。")
+
+    tag_index = {
+        e["relative_path"]: set(t.casefold() for t in e["tags"]) for e in entries
+    }
+    log("计算「是否存在近似题」的真值（评测有效性兜底）…")
+    similar_truth = compute_similar_ground_truth(entries)
+    have_truth = sum(1 for v in similar_truth.values() if v)
+    log(f"  1156 篇中只有 {have_truth} 篇（{have_truth / len(entries):.0%}）存在共享 ≥2 标签的近似题")
+    selected = stratified_sample(entries, args.sample)
+    log(f"抽样：{len(selected)} 篇，Top-K={args.top_k}")
+
+    sys.path.insert(0, str(ROOT / "src"))
+    from secknow.config import get_settings
+    from secknow.retrieval.service import RetrievalService
+
+    settings = get_settings()
+    if args.mode:
+        settings = settings.model_copy(update={"mode": args.mode})
+    service = RetrievalService(settings)
+    log("检索服务就绪，开始评测…")
+
+    rows: list[dict] = []
+    started = time.perf_counter()
+    for index, entry in enumerate(selected, 1):
+        query = build_query(entry)
+        try:
+            response = service.search(query, args.top_k)
+        except Exception as error:  # noqa: BLE001 - 单题失败不能中断整轮评测
+            log(f"  检索失败：{entry['title'][:40]} {type(error).__name__}: {error}")
+            continue
+        row = score_one(
+            entry, response.hits, tag_index,
+            similar_truth.get(entry["relative_path"], False),
+        )
+        rows.append(row)
+        if index % 20 == 0 or index == len(selected):
+            elapsed = time.perf_counter() - started
+            log(f"  {index}/{len(selected)}  用时 {elapsed:.0f}s  "
+                f"({elapsed / max(index, 1):.1f}s/题)")
+
+    if not rows:
+        raise SystemExit("没有任何评测结果。")
+
+    conditioned = [r for r in rows if r["similar_ground_truth_exists"]]
+    overall = {
+        "queries": len(rows),
+        "top_k": args.top_k,
+        "mode": settings.mode.value,
+        "tag_recall_at_k": mean([r["tag_recall"] for r in rows]),
+        "self_leak_rate": mean([1.0 if r["self_leak"] else 0.0 for r in rows]),
+        "similar_wp_rate": mean([1.0 if r["similar_wp"] else 0.0 for r in rows]),
+        "similar_wp_ground_truth_exists_rate": mean(
+            [1.0 if r["similar_ground_truth_exists"] else 0.0 for r in rows]
+        ),
+        # 只在「确实存在近似题」的子集上算，这才是检索真正的能力上限内表现
+        "similar_wp_rate_conditional": mean(
+            [1.0 if r["similar_wp"] else 0.0 for r in conditioned]
+        ) if conditioned else None,
+        "similar_wp_subset_size": len(conditioned),
+        "vuln_type_hit_rate": mean([1.0 if r["vuln_type_hit"] else 0.0 for r in rows]),
+        "elapsed_s": round(time.perf_counter() - started, 1),
+    }
+
+    # Top-K 的来源构成：用来判断「大部头 PDF 是否淹没了小 WP」
+    composition: Counter = Counter()
+    wp_per_query: list[int] = []
+    for row in rows:
+        kinds = []
+        for source in row["top_k_sources"]:
+            path = (source or "").replace("\\", "/")
+            kinds.append("meta_WP" if path.endswith(".meta.md")
+                         else "book_PDF" if path.lower().endswith(".pdf") else "other")
+        composition.update(kinds)
+        wp_per_query.append(kinds.count("meta_WP"))
+    total_slots = sum(composition.values()) or 1
+    overall["top_k_composition"] = {
+        k: round(v / total_slots, 3) for k, v in composition.most_common()
+    }
+    overall["mean_meta_wp_per_query"] = mean([float(x) for x in wp_per_query])
+    overall["queries_with_zero_wp"] = sum(1 for x in wp_per_query if x == 0)
+
+    # 最常被漏掉的 tags：直接指出知识库的覆盖缺口
+    missing_counter: Counter = Counter()
+    for row in rows:
+        missing_counter.update(row["missing_tags"])
+    overall["most_missed_tags"] = missing_counter.most_common(20)
+
+    # 分维度拆解：哪类题找得好、哪类差
+    by_type: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_type[bucket_key(row)].append(row)
+    breakdown = {
+        key: {
+            "n": len(group),
+            "tag_recall": mean([r["tag_recall"] for r in group]),
+            "similar_wp_rate": mean([1.0 if r["similar_wp"] else 0.0 for r in group]),
+            "self_leak_rate": mean([1.0 if r["self_leak"] else 0.0 for r in group]),
+        }
+        for key, group in sorted(by_type.items(), key=lambda kv: -len(kv[1]))
+    }
+    worst = sorted(
+        (r for r in rows if r["tag_recall"] is not None),
+        key=lambda r: r["tag_recall"],
+    )[:15]
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"overall": overall, "breakdown": breakdown, "rows": rows},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    lines = [
+        "# EXP-0003 — 基于 meta WP 真值的检索质量评测",
+        "",
+        f"生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"样本：{overall['queries']} 题  Top-K：{args.top_k}  模式：{overall['mode']}",
+        "",
+        "## 判据",
+        "",
+        "- `tag_recall_at_k`：检索到的文本覆盖了真值 tags 的比例。**这是「有没有找对技术」的主指标。**",
+        "- `similar_wp_rate`：Top-K 里是否命中「同类型且标签重叠」的**其它** WP，即「找相似题」能力。",
+        "- `similar_wp_rate_conditional`：只在**确实存在**近似题的子集上算这个比例。",
+        "  单独给出原始值是因为实测 67% 的题在全部 1156 篇里根本没有近似题——",
+        "  那种情况下指标低是语料的性质，不是检索的失败，两者必须分开看。",
+        "- `top_k_composition`：Top-K 各命中位来自 meta WP / 大部头 PDF / 其它 的比例，",
+        "  用来判断检索是否被长文档淹没。",
+        "- `vuln_type_hit_rate`：Top-K 是否出现同漏洞类型的 WP。",
+        "- `self_leak_rate`：是否检索到题目自己的 meta 文件。对真人用户这有用，对评测是泄漏，因此单列。",
+        "",
+        "## 汇总",
+        "",
+        "```json",
+        json.dumps(overall, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## 分类型拆解",
+        "",
+        "| 类型 | 题数 | tag_recall | similar_wp | self_leak |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for key, stat in breakdown.items():
+        lines.append(
+            f"| {key} | {stat['n']} | {stat['tag_recall']} | {stat['similar_wp_rate']} "
+            f"| {stat['self_leak_rate']} |"
+        )
+    lines += ["", "## 检索最差的 15 题（优先排查对象）", "",
+              "| 题目 | 类型 | tag_recall | 漏掉的 tags |", "| --- | --- | --- | --- |"]
+    for row in worst:
+        missing = ", ".join(row["missing_tags"][:6])
+        lines.append(
+            f"| {row['title'][:48]} | {'/'.join(row['vuln_type'])} "
+            f"| {row['tag_recall']} | {missing} |"
+        )
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+
+    log("汇总：" + json.dumps(overall, ensure_ascii=False))
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

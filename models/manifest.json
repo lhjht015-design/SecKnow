@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "automatic_downloads": false,
+    "offline_only_at_runtime": true,
+    "require_revision_pin_before_import": true,
+    "require_sha256_manifest_before_import": true
+  },
+  "models": [
+    {
+      "id": "bge-m3",
+      "purpose": "dense and lexical sparse encoding",
+      "upstream": "https://huggingface.co/BAAI/bge-m3",
+      "license": "MIT",
+      "local_path": "bge-m3",
+      "required": false,
+      "modes": [
+        "competition",
+        "enhanced",
+        "llm"
+      ],
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "sha256_manifest": "bge-m3/SHA256SUMS"
+    },
+    {
+      "id": "bge-reranker-v2-m3",
+      "purpose": "optional cross-encoder reranking",
+      "upstream": "https://huggingface.co/BAAI/bge-reranker-v2-m3",
+      "license": "Apache-2.0",
+      "local_path": "bge-reranker-v2-m3",
+      "required": false,
+      "modes": [
+        "competition",
+        "enhanced",
+        "llm"
+      ],
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+      "sha256_manifest": "bge-reranker-v2-m3/SHA256SUMS"
+    }
+  ],
+  "runtime_assets": [
+    {
+      "id": "tesseract-windows-x64",
+      "purpose": "optional offline OCR runtime for damaged or image-only PDF pages",
+      "license": "Apache-2.0",
+      "local_path": "../runtime/tesseract",
+      "required": false,
+      "modes": [
+        "strict-lexical",
+        "competition",
+        "enhanced",
+        "llm"
+      ],
+      "automatic_download": false,
+      "operator_supplied": true,
+      "required_files": [
+        "tesseract.exe",
+        "tessdata/chi_sim.traineddata",
+        "tessdata/eng.traineddata",
+        "tessdata/osd.traineddata",
+        "VERSION",
+        "SHA256SUMS"
+      ],
+      "version": null,
+      "sha256_manifest": null
+    }
+  ],
+  "external_models": [
+    {
+      "id": "phi-4-compatible-endpoint",
+      "managed_by_secknow": false,
+      "installed_by_secknow": false,
+      "enabled_by_default": false,
+      "mode": "llm"
+    }
+  ]
+}

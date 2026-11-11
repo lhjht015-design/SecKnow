@@ -1,0 +1,196 @@
+version: 1
+sources:
+  - id: cve-list-v5
+    name: CVE List V5
+    description: Official CVE records in the CVE JSON 5 format.
+    homepage: https://www.cve.org/Downloads
+    adapter: cve_list_v5
+    risk_state: default
+    license:
+      expression: CVE-Terms-of-Use
+      name: CVE Program Terms of Use
+      url: https://www.cve.org/Legal/TermsOfUse
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/CVEProject/cvelistV5
+        kind: git
+        media_type: application/json
+  - id: nvd
+    name: National Vulnerability Database
+    description: NVD vulnerability feeds using the JSON 2.0 schema.
+    homepage: https://nvd.nist.gov/vuln/data-feeds
+    adapter: nvd_json_20
+    risk_state: default
+    license:
+      expression: LicenseRef-NIST-Public-Domain
+      name: NVD public domain data
+      url: https://nvd.nist.gov/general/faq#data
+      attribution_required: false
+      redistribution_allowed: true
+    locations:
+      - url: https://nvd.nist.gov/vuln/data-feeds
+        kind: index
+        media_type: application/json
+  - id: cisa-kev
+    name: CISA Known Exploited Vulnerabilities Catalog
+    description: CISA catalog of vulnerabilities known to be exploited in the wild.
+    homepage: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+    adapter: cisa_kev_json
+    risk_state: default
+    license:
+      expression: LicenseRef-US-Government-Work
+      name: United States Government Work
+      url: https://www.cisa.gov/about/website-policies
+      attribution_required: false
+      redistribution_allowed: true
+    locations:
+      - url: https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+        kind: file
+        media_type: application/json
+  - id: cwe
+    name: Common Weakness Enumeration
+    description: Official MITRE CWE catalog XML.
+    homepage: https://cwe.mitre.org/data/downloads.html
+    adapter: cwe_xml
+    risk_state: default
+    license:
+      expression: LicenseRef-CWE-Terms-of-Use
+      name: CWE Terms of Use
+      url: https://cwe.mitre.org/about/termsofuse.html
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://cwe.mitre.org/data/xml/cwec_latest.xml.zip
+        kind: archive
+        media_type: application/zip
+        archive: zip
+  - id: capec
+    name: Common Attack Pattern Enumeration and Classification
+    description: Official MITRE CAPEC catalog XML.
+    homepage: https://capec.mitre.org/data/index.html
+    adapter: capec_xml
+    risk_state: default
+    license:
+      expression: LicenseRef-CAPEC-Terms-of-Use
+      name: CAPEC Terms of Use
+      url: https://capec.mitre.org/about/termsofuse.html
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://capec.mitre.org/data/xml/capec_latest.xml
+        kind: file
+        media_type: application/xml
+  - id: mitre-attack
+    name: MITRE ATT&CK
+    description: Official ATT&CK STIX data repository.
+    homepage: https://attack.mitre.org/resources/attack-data-and-tools/
+    adapter: attack_stix
+    risk_state: default
+    license:
+      expression: Apache-2.0
+      name: Apache License 2.0
+      url: https://github.com/mitre-attack/attack-stix-data/blob/master/LICENSE
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/mitre-attack/attack-stix-data
+        kind: git
+        media_type: application/stix+json
+  - id: epss
+    name: Exploit Prediction Scoring System
+    description: Official FIRST EPSS daily score data.
+    homepage: https://www.first.org/epss/data_stats
+    adapter: epss_csv
+    risk_state: default
+    license:
+      expression: CC-BY-4.0
+      name: Creative Commons Attribution 4.0 International
+      url: https://www.first.org/epss/model
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://epss.empiricalsecurity.com/epss_scores-current.csv.gz
+        kind: archive
+        media_type: application/gzip
+        archive: gzip
+  - id: osv
+    name: Open Source Vulnerabilities
+    description: OSV database exports in the OSV JSON schema.
+    homepage: https://osv.dev/docs/data-sources/
+    adapter: osv_json
+    risk_state: default
+    license:
+      expression: CC-BY-4.0
+      name: Creative Commons Attribution 4.0 International
+      url: https://google.github.io/osv.dev/data/
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://osv-vulnerabilities.storage.googleapis.com/
+        kind: index
+        media_type: application/json
+  - id: rizin-book
+    name: Rizin Book
+    description: Official Rizin reverse engineering book.
+    homepage: https://book.rizin.re/
+    adapter: git_markdown
+    risk_state: opt-in
+    license:
+      expression: GFDL-3.0-or-later
+      name: GNU Free Documentation License 3.0 or later
+      url: https://github.com/rizinorg/book/blob/master/LICENSE
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/rizinorg/book
+        kind: git
+        media_type: text/markdown
+  - id: ghidra-docs
+    name: Ghidra Documentation
+    description: Documentation distributed in the official Ghidra repository.
+    homepage: https://ghidra-sre.org/
+    adapter: git_markdown
+    risk_state: opt-in
+    license:
+      expression: Apache-2.0
+      name: Apache License 2.0
+      url: https://github.com/NationalSecurityAgency/ghidra/blob/master/LICENSE
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/NationalSecurityAgency/ghidra/tree/master/GhidraDocs
+        kind: git
+        media_type: text/markdown
+  - id: pwndbg-docs
+    name: pwndbg Documentation
+    description: Documentation from the official pwndbg repository.
+    homepage: https://pwndbg.re/
+    adapter: git_markdown
+    risk_state: opt-in
+    license:
+      expression: MIT
+      name: MIT License
+      url: https://github.com/pwndbg/pwndbg/blob/dev/LICENSE.md
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/pwndbg/pwndbg/tree/dev/docs
+        kind: git
+        media_type: text/markdown
+  - id: capa-rules
+    name: capa Rules
+    description: Official capa capability-detection rule corpus.
+    homepage: https://github.com/mandiant/capa-rules
+    adapter: capa_yaml
+    risk_state: quarantine
+    license:
+      expression: Apache-2.0
+      name: Apache License 2.0
+      url: https://github.com/mandiant/capa-rules/blob/master/LICENSE.txt
+      attribution_required: true
+      redistribution_allowed: true
+    locations:
+      - url: https://github.com/mandiant/capa-rules
+        kind: git
+        media_type: application/yaml
