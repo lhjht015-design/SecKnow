@@ -1,0 +1,89 @@
+{
+  "summary": {
+    "positive_total": 3,
+    "positive_solved": 3,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "total_probes": 1177,
+    "mean_elapsed_ms": 4080.2
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "note": "ELF 每匹配一字节 sleep 6ms",
+      "negative": false,
+      "path": [
+        "solve_timing_checker"
+      ],
+      "refusals": [],
+      "probes": 384,
+      "mode": "timing",
+      "detect_ms": 1604.8,
+      "reason": null,
+      "recovered": "flag{t1ming}",
+      "delay_ms": 6.43,
+      "solved": true,
+      "elapsed_ms": 10390.7
+    },
+    {
+      "id": "T2",
+      "note": "Python 每匹配一字节 sleep 2ms",
+      "negative": false,
+      "path": [
+        "solve_timing_checker"
+      ],
+      "refusals": [],
+      "probes": 374,
+      "mode": "timing",
+      "detect_ms": 152.0,
+      "reason": null,
+      "recovered": "flag{t1m3}",
+      "delay_ms": 2.4,
+      "solved": true,
+      "elapsed_ms": 2803.5
+    },
+    {
+      "id": "R1",
+      "note": "数字前缀校验器（v023 回归）",
+      "negative": false,
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 419,
+      "mode": "check_num",
+      "detect_ms": 831.8,
+      "reason": null,
+      "recovered": "flag{elf_prefix_int}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 3198.9
+    },
+    {
+      "id": "N1",
+      "note": "恒定 sleep 5ms，与输入无关",
+      "negative": true,
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "mode": "none",
+      "detect_ms": 2485.0,
+      "reason": "no_prefix_signal",
+      "refused": true,
+      "elapsed_ms": 2485.1
+    },
+    {
+      "id": "N2",
+      "note": "每字节 0.2ms，埋在进程噪声里",
+      "negative": true,
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "mode": "none",
+      "detect_ms": 1522.9,
+      "reason": "no_prefix_signal",
+      "refused": true,
+      "elapsed_ms": 1522.9
+    }
+  ]
+}

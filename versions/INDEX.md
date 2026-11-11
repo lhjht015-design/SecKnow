@@ -33,6 +33,7 @@
 | v021 | [v021_text_recall_kit.src](v021_text_recall_kit.src) | 文本召回库 + 黑盒单元统一：一个库、两套输入、同一规划器 | 纯 Python（子进程 oracle） | 正样本 11/11，负样本 4/4 |
 | v022 | [v022_attachment_entry.src](v022_attachment_entry.src) | 按附件后缀/魔数自动建立 oracle 入口（脚本/zip/ELF/文本） | Python + WSL | 正样本 6/6，负样本 4/4 |
 | v023 | [v023_elf_prefix.src](v023_elf_prefix.src) | ELF 校验器前缀接口：enc/check_num/check_exit 检测与归一 | Python + WSL | 正样本 4/4，负样本 2/2 |
+| v024 | [v024_timing_channel.src](v024_timing_channel.src) | 时序侧信道前缀爬坡：基线 + 频率序早停 + 结束验证 | Python + WSL | 正样本 3/3，负样本 2/2 |
 
 ## 各版本说明
 
@@ -845,3 +846,49 @@ python versions/v023_elf_prefix.src --only E3
 ```
 
 **产出**：`experiments/EXP-0021/{lab/,results.json,report.md}`
+
+### v024_timing_channel.src
+
+**回答的问题**：有些校验器 stdout、退出码都恒定，只有"每匹配一个字节多花一点时间"。
+能不能把耗时做成第四种前缀信道？
+
+**接口检测新增 `timing`**：对 100 个探测测耗时；峰值 − 中位数 > 阈值
+（ELF 4ms / Python 2ms）且峰值 > 1.5×中位数，再对峰值输入**复测 3 次**确认。
+
+**爬坡单元 `solve_timing_checker`**：
+
+1. 每个位置先用 `0x01`（必不匹配）测基线；
+2. 按 `flag{}_` + 字母频率序 + 数字 + 大写 + 标点扫描，命中即确认并**早停**；
+3. 每步要求"确认中位数 − 基线" > 0.5×单字节延迟，否则 `timing_signal_weak`；
+4. 结束验证：完整候选 vs 首字节打错，耗时差需 ≥ 0.5×len×delay。
+
+**结果（连续 3 次一致）**
+
+| 题 | 接口 | 结果 | 探测数 |
+| --- | --- | --- | --- |
+| T1 ELF 6ms/byte | `timing` | ✓ 约 11 s | 387 |
+| T2 Python 2ms/byte | `timing` | ✓ 约 3 s | 377 |
+| R1 数字前缀（v023 回归） | `check_num` | ✓ | 419 |
+| N1 恒定 sleep 5ms | `none` | ✓ 拒绝 | 0 |
+| N2 每字节 0.2ms | `none` | ✓ 拒绝 | 0 |
+
+正样本 3/3，负样本 2/2，平均约 4.1 s/题。
+
+**五个关键点**（见 `laws/LAW-0028.md`）：
+1. 时序的成本结构是平方级：每次探测重放已知前缀。第一版全字符集扫描，
+   27 字符的 Python 题跑了 **447 秒**——这是算法问题，不是参数问题。
+2. 基线（0x01）+ 频率序早停把时间压到 2.8 秒；演示密钥缩短到 11–12 字符。
+3. 检测必须复测峰值：0.2ms 的弱信号曾被一次噪声尖峰误判成 timing。
+4. 位置级 margin 是时序版的执行验证，噪声不会把错误字符写进结果。
+5. 结束验证检查整串长度（完整 vs 首字节打错），不是只看最后一个字节。
+
+**边界**：要求逐字节早退比较；常数时间/先哈希的校验器会返回
+`no_prefix_signal`；ELF 需要 ≥6ms/字节才能压过进程启动噪声；代价随前缀增长。
+
+**运行**
+```bash
+python versions/v024_timing_channel.src
+python versions/v024_timing_channel.src --only T1
+```
+
+**产出**：`experiments/EXP-0022/{lab/,chal/,results.json,report.md}`

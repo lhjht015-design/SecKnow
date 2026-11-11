@@ -8,6 +8,7 @@
 之后按行服务：
     E <hex> → O <hex>   调用 enc
     C <hex> → O <int>   调用 check
+    T <hex> → O <us>    调用一次，只回耗时（微秒），用于时序侧信道
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 import importlib.machinery
 import importlib.util
 import sys
+import time
 
 
 def load_module(path: str):
@@ -46,13 +48,20 @@ def main() -> None:
             continue
         try:
             parts = line.split(" ", 1)
+            op = parts[0]
             payload = parts[1] if len(parts) > 1 else ""
             data = bytes.fromhex(payload)
-            result = function(data)
-            if isinstance(result, (bytes, bytearray)):
-                sys.stdout.write("O " + bytes(result).hex() + "\n")
+            if op == "T":
+                started = time.perf_counter()
+                function(data)
+                elapsed_us = int((time.perf_counter() - started) * 1_000_000)
+                sys.stdout.write("O " + str(elapsed_us) + "\n")
             else:
-                sys.stdout.write("O " + str(int(result)) + "\n")
+                result = function(data)
+                if isinstance(result, (bytes, bytearray)):
+                    sys.stdout.write("O " + bytes(result).hex() + "\n")
+                else:
+                    sys.stdout.write("O " + str(int(result)) + "\n")
         except Exception as exc:  # noqa: BLE001
             sys.stdout.write("X " + repr(exc) + "\n")
         sys.stdout.flush()

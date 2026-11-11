@@ -1,0 +1,18 @@
+"""EXP-0022 T2：Python 时序侧信道校验器。
+
+逐字节比较，每匹配一个字节 time.sleep(2ms)，然后返回常量 0。
+没有数字前缀、没有退出码信号，唯一的信息是调用耗时。
+"""
+
+import time
+
+SECRET = b"flag{t1m3}"
+
+
+def check(data):
+    limit = min(len(data), len(SECRET))
+    index = 0
+    while index < limit and data[index] == SECRET[index]:
+        index += 1
+        time.sleep(0.002)
+    return 0
