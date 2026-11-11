@@ -13,6 +13,36 @@
 | EXP-0006 | 2026-11-11 | 分布漂移测试（15 题：L1 自编 / L2 改名换格式 / L3 抽象描述） | keyword 召回 6/15（L2 1/5、L3 0/5）；数据形态路由 15/15 | `EXP-0006/report.md` |
 | EXP-0007 | 2026-11-11 | 多步组合验证（深度 1–4 + 负样本 + 可扩展性扫描） | beam：20 单元下仍 8/8；BFS 12 单元掉到 6/8；负样本始终正确失败 | `EXP-0007/report.md` |
 | EXP-0008 | 2026-11-11 | 混合场景：解码 → 解析参数 → RSA | 正样本 8/8（含 5 步链），负样本 4/4 正确失败 | `EXP-0008/report.md` |
+| EXP-0009 | 2026-11-11 | 文件型载荷：zip / png / pcap / elf | 正样本 12/12，负样本 4/4；平均 2.9 节点 | `EXP-0009/report.md` |
+
+---
+
+## EXP-0009 — 文件型载荷
+
+**要回答的问题**：真实比赛给的是附件，不是题面里的字符串。规划器能不能从"一个文件"出发？
+
+**改动**：状态值新增 `FileRef`；按**魔数**识别类型；新增 `unzip`（支持嵌套）、`read_text`、
+`png_text`（tEXt/iTXt/zTXt）、`pcap_strings`、`elf_strings`、`bin_strings`。
+
+**结果**
+
+| 题 | 实际路径 | 结果 |
+| --- | --- | --- |
+| F1 文本附件 | `read_text` | ✓ |
+| F2 zip 内文本 | `unzip → read_text` | ✓ |
+| F3 zip 内 PNG 的 tEXt 藏 base64 | `unzip → png_text → b64_decode` | ✓ |
+| F4 zip 套 zip | `unzip → unzip → read_text` | ✓ |
+| F5 pcap 明文 | `pcap_strings` | ✓ |
+| F6 ELF 字符串表 | `elf_strings` | ✓ |
+| N1 随机二进制 / N2 无关 PNG 文本块 | 无路径 | ✓ 正确失败 |
+
+正样本 **12/12**（6 题 × 2 种题面），负样本 **4/4**。
+
+**首轮出现过一个假通过**：`read_text` 当时接受所有文件类型，把二进制按 latin-1 解码，
+flag 是明文就被"蒙对"了——F5/F6 一步完成，**等于没验证 pcap/elf 路由**。
+把 `read_text` 收紧到只接受 `file:bin` 后重跑，路径才变成
+`pcap_strings` / `elf_strings`，通过率不变但验证才成立。
+→ 结论：**看路径，不只看结果。**（`laws/LAW-0015.md`）
 
 ---
 

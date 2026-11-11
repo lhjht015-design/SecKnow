@@ -20,6 +20,7 @@
 | v008 | [v008_shift_test.src](v008_shift_test.src) | 分布漂移测试（改名 / 换格式 / 抽象描述） | 无（纯 Python） | keyword 6/15，shape 15/15 |
 | v009 | [v009_compose.src](v009_compose.src) | 多步组合：类型化搜索把单元串成流水线 | 无（纯 Python） | BFS 8/8→6/8；beam 8/8 |
 | v010 | [v010_compose_mixed.src](v010_compose_mixed.src) | 混合场景：解码 → 解析参数 → RSA | 无（纯 Python） | 正样本 8/8，负样本 4/4 |
+| v011 | [v011_file_payload.src](v011_file_payload.src) | 文件型载荷：魔数识别 + zip/png/pcap/elf | 无（纯 Python） | 12/12 正样本，4/4 负样本 |
 
 ## 各版本说明
 
@@ -277,3 +278,41 @@ python versions/v010_compose_mixed.src --search bfs --decoys 9
 ```
 
 **产出**：`experiments/EXP-0008/{results.json,report.md}`
+
+### v011_file_payload.src
+
+**回答的问题**：真实比赛给的是**附件**（zip/png/pcap/elf），不是题面里的字符串。
+规划器不认文件，前面所有能力在真题面前都等于零。
+
+**改动**：
+1. 状态值新增 `FileRef`；
+2. 按**魔数**识别 zip / png / pdf / elf / pcap / jpeg / gif / bin；
+3. 文件类单元：`unzip`（支持嵌套）、`read_text`、`png_text`（tEXt/iTXt/zTXt）、
+   `pcap_strings`、`elf_strings`、`bin_strings`；
+4. 载荷抽取支持"题面里给了附件路径"。
+
+**结果**
+
+| 题 | 实际路径 | 结果 |
+| --- | --- | --- |
+| F1 文本附件 | `read_text` | ✓ |
+| F2 zip 内文本 | `unzip → read_text` | ✓ |
+| F3 zip 内 PNG 的 tEXt 藏 base64 | `unzip → png_text → b64_decode` | ✓ |
+| F4 zip 套 zip | `unzip → unzip → read_text` | ✓ |
+| F5 pcap 明文 | `pcap_strings` | ✓ |
+| F6 ELF 字符串表 | `elf_strings` | ✓ |
+| N1 随机二进制 / N2 无关 PNG 文本块 | 无路径 | ✓ 正确失败 |
+
+正样本 **12/12**（6 题 × 2 种题面），负样本 **4/4**。平均 2.9 个节点、约 1.1 ms/题。
+
+**一个重要的自我修正**：首轮 `read_text` 接受所有文件类型，把二进制按 latin-1 解码，
+flag 恰好是明文就被"蒙对"——F5/F6 一步解决，**等于没验证 pcap/elf 路由**。
+收紧到只接受 `file:bin` 后重跑，路径才走对。见 `laws/LAW-0015.md`。
+
+**运行**
+```bash
+python versions/v011_file_payload.src
+python versions/v011_file_payload.src --search bfs
+```
+
+**产出**：`experiments/EXP-0009/{artifacts/,results.json,report.md}`

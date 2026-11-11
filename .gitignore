@@ -29,6 +29,7 @@ offline/
 runtime/
 backups/
 experiments/**/*.log
+experiments/**/_extracted/
 
 # ---- 前端 ----
 frontend/node_modules/

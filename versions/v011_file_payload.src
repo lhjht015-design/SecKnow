@@ -1,0 +1,590 @@
+"""
+v011_file_payload.src — 文件型载荷：真实赛题给的是附件，不是题面里的字符串
+
+为什么必须做这一步
+    v009/v010 的载荷都是从题面文本里抠出来的字符串。
+    但真实比赛给的是**附件**：一个 zip、一张 png、一段 pcap、一个 elf。
+    如果规划器不认文件，前面所有能力在真实题面前都等于零。
+
+本文件新增
+    1. 状态值新增 `FileRef`（指向磁盘上的一个附件）；
+    2. 按**魔数**识别文件类型：zip / png / pcap / elf / pdf / jpeg / gif / bin；
+    3. 新增文件类单元：
+         unzip        : file:zip   → file:<member>（支持嵌套 zip）
+         read_text    : file:*     → text（UTF-8/GBK 文本）
+         png_text     : file:png   → text（tEXt / iTXt 块——真实 CTF 常见藏 flag 位置）
+         pcap_strings : file:pcap  → text（可打印字节串）
+         elf_strings  : file:elf   → text（可打印字节串，相当于 strings）
+         bin_strings  : file:bin   → text（兜底）
+    4. 载荷抽取支持"题面里给了附件路径"的情形。
+
+测什么
+    F1  文本附件                     → read_text → flag
+    F2  zip 内单个文本文件            → unzip → read_text → flag
+    F3  zip 内 PNG，tEXt 块藏 base64  → unzip → png_text → b64_decode → flag
+    F4  zip 套 zip                   → unzip → unzip → read_text → flag
+    F5  pcap 里含 flag                → pcap_strings → flag
+    F6  elf 的字符串表含 flag         → elf_strings → flag
+    N1  负样本：随机二进制，不含 flag → **应当失败**
+    N2  负样本：png 但 tEXt 里是无关内容 → **应当失败**
+
+运行
+    python versions/v011_file_payload.src
+    python versions/v011_file_payload.src --search bfs
+
+产出物
+    experiments/EXP-0009/artifacts/   生成的附件（保留作证据）
+    experiments/EXP-0009/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+import os
+import re
+import struct
+import sys
+import time
+import zipfile
+import zlib
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0009"
+ARTIFACT_ROOT = OUT_DIR / "artifacts"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 状态：文件引用
+# --------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FileRef:
+    path: str
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+HEX_ONLY = re.compile(r"^[0-9a-fA-F\s]+$")
+
+MAGIC = [
+    (b"PK\x03\x04", "file:zip"),
+    (b"\x89PNG\r\n\x1a\n", "file:png"),
+    (b"%PDF", "file:pdf"),
+    (b"\x7fELF", "file:elf"),
+    (b"\xd4\xc3\xb2\xa1", "file:pcap"),
+    (b"\xa1\xb2\xc3\xd4", "file:pcap"),
+    (b"\xff\xd8\xff", "file:jpeg"),
+    (b"GIF8", "file:gif"),
+]
+
+
+def sniff(path: str) -> str:
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(16)
+    except OSError:
+        return "file:missing"
+    for magic, kind in MAGIC:
+        if head.startswith(magic):
+            return kind
+    return "file:bin"
+
+
+def detect_type(value) -> str:
+    if isinstance(value, FileRef):
+        return sniff(value.path)
+    if isinstance(value, dict):
+        return "int_fields"
+    text = value.strip()
+    if FLAG_RE.search(text):
+        return "flag"
+    if len(text) >= 16 and HEX_ONLY.match(text) and len(text.replace(" ", "")) % 2 == 0:
+        return "hex"
+    if len(text) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", text) and len(text) % 4 == 0:
+        return "base64"
+    return "text"
+
+
+def value_key(value) -> str:
+    if isinstance(value, FileRef):
+        return "file:" + value.path
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    return value
+
+
+# --------------------------------------------------------------------------------------
+# 单元
+# --------------------------------------------------------------------------------------
+
+TEXT_TYPES = {"text", "hex", "base64"}
+
+
+def _workdir(path: str) -> Path:
+    target = ARTIFACT_ROOT / "_extracted" / Path(path).stem
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def unzip(ref: FileRef) -> FileRef:
+    """解压 zip，返回第一个非目录成员的文件引用（支持嵌套）。"""
+    target = _workdir(ref.path)
+    with zipfile.ZipFile(ref.path) as archive:
+        members = [m for m in archive.infolist() if not m.is_dir()]
+        if not members:
+            raise ValueError("zip 里没有文件")
+        archive.extract(members[0], target)
+    return FileRef(str(target / members[0].filename))
+
+
+def read_text(value) -> str:
+    path = value.path if isinstance(value, FileRef) else value
+    raw = Path(path).read_bytes()
+    for encoding in ("utf-8", "gbk", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+            if FLAG_RE.search(text) or len(text.strip()) > 0:
+                return text
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("无法解码为文本")
+
+
+def _printable_runs(raw: bytes, min_len: int = 6) -> str:
+    text = raw.decode("latin-1", errors="replace")
+    runs = re.findall(r"[\x20-\x7e]{%d,}" % min_len, text)
+    if not runs:
+        raise ValueError("没有可打印字符串")
+    return "\n".join(runs)
+
+
+def png_text(ref: FileRef) -> str:
+    """解析 PNG 的 tEXt / iTXt / zTXt 块。"""
+    raw = Path(ref.path).read_bytes()
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("不是 PNG")
+    offset = 8
+    texts: list[str] = []
+    while offset + 8 <= len(raw):
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        chunk_type = raw[offset + 4:offset + 8]
+        data = raw[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b"tEXt":
+            _keyword, _, value = data.partition(b"\x00")
+            texts.append(value.decode("latin-1", errors="replace"))
+        elif chunk_type == b"zTXt":
+            _keyword, _, rest = data.partition(b"\x00")
+            try:
+                texts.append(zlib.decompress(rest[1:]).decode("latin-1", errors="replace"))
+            except zlib.error:
+                continue
+        elif chunk_type == b"iTXt":
+            parts = data.split(b"\x00", 2)
+            if len(parts) == 3:
+                texts.append(parts[2].decode("utf-8", errors="replace"))
+        elif chunk_type == b"IEND":
+            break
+    if not texts:
+        raise ValueError("PNG 里没有文本块")
+    return "\n".join(texts)
+
+
+def pcap_strings(ref: FileRef) -> str:
+    raw = Path(ref.path).read_bytes()
+    # 跳过 24 字节全局头，逐包取包体
+    offset = 24
+    payloads: list[bytes] = []
+    while offset + 16 <= len(raw):
+        incl_len = struct.unpack("<I", raw[offset + 8:offset + 12])[0]
+        payloads.append(raw[offset + 16:offset + 16 + incl_len])
+        offset += 16 + incl_len
+    if not payloads:
+        payloads = [raw]
+    return _printable_runs(b"".join(payloads))
+
+
+def elf_strings(ref: FileRef) -> str:
+    return _printable_runs(Path(ref.path).read_bytes())
+
+
+def bin_strings(ref: FileRef) -> str:
+    return _printable_runs(Path(ref.path).read_bytes())
+
+
+def b64_decode(data: str) -> str:
+    raw = data.strip()
+    raw += "=" * (-len(raw) % 4)
+    return base64.b64decode(raw, validate=True).decode("utf-8")
+
+
+def hex_decode(data: str) -> str:
+    return bytes.fromhex(data.strip().replace(" ", "")).decode("utf-8")
+
+
+LABEL_VALUE = re.compile(
+    r"(?P<label>公钥指数|密文值|模数|指数|密文|modulus|exponent|ciphertext|\b[a-zA-Z]{1,3}\b)"
+    r"\s*[=:：]\s*(?P<value>0x[0-9a-fA-F]+|\d+)"
+)
+LABEL_MAP = {"n": "n", "模数": "n", "modulus": "n", "e": "e", "指数": "e",
+             "公钥指数": "e", "exponent": "e", "c": "c", "密文": "c",
+             "密文值": "c", "ciphertext": "c"}
+
+
+def parse_int_fields(data: str) -> dict[str, int]:
+    fields: dict[str, int] = {}
+    for match in LABEL_VALUE.finditer(data):
+        role = LABEL_MAP.get(match.group("label").strip().casefold())
+        if role is None:
+            continue
+        token = match.group("value")
+        value = int(token, 16) if token.lower().startswith("0x") else int(token, 10)
+        fields.setdefault(role, value)
+    if len(fields) < 2:
+        raise ValueError("字段不足")
+    return fields
+
+
+def rsa_small_e(fields: dict[str, int]) -> str:
+    if not {"n", "e", "c"} <= set(fields):
+        raise ValueError("缺少 n/e/c")
+    import gmpy2
+
+    n, e, c = fields["n"], fields["e"], fields["c"]
+    if e > 64:
+        raise ValueError(f"e={e} 过大，不适用小公钥指数攻击")
+    root, exact = gmpy2.iroot(c, e)
+    if not exact:
+        raise ValueError("c 不是完全 e 次方")
+    return int(root).to_bytes((int(root).bit_length() + 7) // 8, "big").decode("utf-8", "replace")
+
+
+UNITS: list[dict] = [
+    {"id": "unzip", "accepts": {"file:zip"}, "produces": "file", "fn": unzip,
+     "direction": "decode", "note": "解压 zip"},
+    # read_text 只接受「未知二进制」这一个类型。
+    # 如果允许它吃 png/pcap/elf，它会直接把整个文件按 latin-1 解码，
+    # 只要 flag 恰好是明文就能"蒙对"——那样就绕过了真正的类型路由，测试也就失去意义。
+    {"id": "read_text", "accepts": {"file:bin"},
+     "produces": "text", "fn": read_text, "direction": "decode", "note": "按文本读取"},
+    {"id": "png_text", "accepts": {"file:png"}, "produces": "text", "fn": png_text,
+     "direction": "decode", "note": "PNG 文本块"},
+    {"id": "pcap_strings", "accepts": {"file:pcap"}, "produces": "text", "fn": pcap_strings,
+     "direction": "decode", "note": "pcap 可打印串"},
+    {"id": "elf_strings", "accepts": {"file:elf"}, "produces": "text", "fn": elf_strings,
+     "direction": "decode", "note": "ELF 可打印串"},
+    {"id": "bin_strings", "accepts": {"file:bin"}, "produces": "text", "fn": bin_strings,
+     "direction": "decode", "note": "通用可打印串"},
+    {"id": "b64_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": b64_decode,
+     "direction": "decode", "note": "解 Base64"},
+    {"id": "hex_decode", "accepts": TEXT_TYPES, "produces": "text", "fn": hex_decode,
+     "direction": "decode", "note": "解 hex"},
+    {"id": "parse_int_fields", "accepts": {"text"}, "produces": "int_fields",
+     "fn": parse_int_fields, "direction": "decode", "note": "文本 → 整数"},
+    {"id": "rsa_small_e", "accepts": {"int_fields"}, "produces": "flag",
+     "fn": rsa_small_e, "direction": "solver", "note": "RSA 小指数"},
+]
+BASE_UNITS = list(UNITS)
+
+
+# --------------------------------------------------------------------------------------
+# 附件生成
+# --------------------------------------------------------------------------------------
+
+def make_png(path: Path, text_chunk: str) -> None:
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+    pixels = zlib.compress(b"\x00\xff\xff\xff")
+    blob = (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", header)
+            + chunk(b"tEXt", b"Comment\x00" + text_chunk.encode())
+            + chunk(b"IDAT", pixels)
+            + chunk(b"IEND", b""))
+    path.write_bytes(blob)
+
+
+def make_pcap(path: Path, payload: bytes) -> None:
+    global_header = struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 1)
+    frame = (b"\xaa" * 6 + b"\xbb" * 6 + b"\x08\x00"
+             + b"\x45\x00" + struct.pack(">H", 20 + len(payload)) + b"\x00\x00\x00\x00"
+             + b"\x40\x06\x00\x00" + b"\x0a\x00\x00\x01" + b"\x0a\x00\x00\x02"
+             + struct.pack(">HH", 1234, 80) + b"\x00" * 12 + payload)
+    packet_header = struct.pack("<IIII", 1700000000, 0, len(frame), len(frame))
+    path.write_bytes(global_header + packet_header + frame)
+
+
+def make_elf_like(path: Path, payload: bytes) -> None:
+    # 只保证魔数正确、字符串可被 strings 提取；不追求可执行
+    header = b"\x7fELF" + b"\x02\x01\x01" + b"\x00" * 9 + b"\x02\x00\x3e\x00"
+    path.write_bytes(header + b"\x00" * 64 + payload + b"\x00" * 16)
+
+
+def prepare_artifacts() -> dict[str, Path]:
+    ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+    made: dict[str, Path] = {}
+
+    # F1 文本
+    p = ARTIFACT_ROOT / "F1_note.txt"
+    p.write_text("flag{file_payload_text}\n", encoding="utf-8")
+    made["F1"] = p
+
+    # F2 zip 内文本
+    p = ARTIFACT_ROOT / "F2_archive.zip"
+    with zipfile.ZipFile(p, "w") as archive:
+        archive.writestr("readme.txt", "flag{file_payload_zip_text}\n")
+    made["F2"] = p
+
+    # F3 zip 内 PNG，tEXt 里放 base64
+    flag3 = "flag{file_payload_png_text}"
+    inner_png = ARTIFACT_ROOT / "F3_inner.png"
+    make_png(inner_png, base64.b64encode(flag3.encode()).decode())
+    p = ARTIFACT_ROOT / "F3_archive.zip"
+    with zipfile.ZipFile(p, "w") as archive:
+        archive.write(inner_png, "secret.png")
+    made["F3"] = p
+
+    # F4 zip 套 zip
+    inner_zip = ARTIFACT_ROOT / "F4_inner.zip"
+    with zipfile.ZipFile(inner_zip, "w") as archive:
+        archive.writestr("flag.txt", "flag{file_payload_nested_zip}\n")
+    p = ARTIFACT_ROOT / "F4_outer.zip"
+    with zipfile.ZipFile(p, "w") as archive:
+        archive.write(inner_zip, "inner.zip")
+    made["F4"] = p
+
+    # F5 pcap
+    p = ARTIFACT_ROOT / "F5_capture.pcap"
+    make_pcap(p, b"GET /flag HTTP/1.1\r\nHost: ctf\r\n\r\nflag{file_payload_pcap}\r\n")
+    made["F5"] = p
+
+    # F6 elf 风格
+    p = ARTIFACT_ROOT / "F6_sample.bin"
+    make_elf_like(p, b"flag{file_payload_elf}\x00")
+    made["F6"] = p
+
+    # N1 随机二进制
+    p = ARTIFACT_ROOT / "N1_random.bin"
+    p.write_bytes(os.urandom(2048))
+    made["N1"] = p
+
+    # N2 png 文本块是无关内容
+    p = ARTIFACT_ROOT / "N2_decoy.png"
+    make_png(p, "this is just a caption, nothing to see")
+    made["N2"] = p
+    return made
+
+
+# --------------------------------------------------------------------------------------
+# 载荷抽取：从题面里找到附件路径
+# --------------------------------------------------------------------------------------
+
+PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|\.{0,2}[\\/])[^\s\"'，。；]+")
+
+
+def extract_payload(text: str):
+    for match in PATH_RE.finditer(text):
+        raw = match.group(0).strip()
+        if Path(raw).is_file():
+            return FileRef(raw)
+    return None
+
+
+# --------------------------------------------------------------------------------------
+# 规划
+# --------------------------------------------------------------------------------------
+
+MAX_NODES = 600
+
+
+def _heuristic(unit: dict, output, depth: int) -> float:
+    score = 0.0
+    direction = unit.get("direction", "neutral")
+    if direction in {"decode", "solver"}:
+        score += 2.0
+    elif direction == "encode":
+        score -= 5.0
+    if isinstance(output, str):
+        printable = sum(
+            1 for ch in output if 32 <= ord(ch) < 127 or "一" <= ch <= "鿿")
+        score += 3.0 * printable / max(len(output), 1)
+    elif isinstance(output, FileRef):
+        score += 1.0
+    elif isinstance(output, dict):
+        score += 1.5
+    score -= 0.2 * depth
+    return score
+
+
+def plan(initial_text: str, expected: str | None, max_depth: int,
+         beam_k: int, search: str) -> dict:
+    started = time.perf_counter()
+    payload = extract_payload(initial_text)
+    if payload is None:
+        return {"solved": False, "path": [], "expanded": 0, "elapsed_ms": 0.0,
+                "error": "payload_not_found"}
+
+    start_type = detect_type(payload)
+    beam: list[tuple[float, str, object, list[str]]] = [(0.0, start_type, payload, [])]
+    seen: set[tuple[str, str]] = {(start_type, value_key(payload))}
+    expanded = 0
+
+    for depth in range(max_depth):
+        candidates: list[tuple[float, str, object, list[str]]] = []
+        for _score, current_type, current_value, path in beam:
+            for unit in UNITS:
+                if current_type not in unit["accepts"]:
+                    continue
+                if expanded >= MAX_NODES:
+                    break
+                expanded += 1
+                try:
+                    output = unit["fn"](current_value)
+                except (ValueError, OSError, UnicodeDecodeError, binascii.Error,
+                        TypeError, zipfile.BadZipFile, ImportError, struct.error):
+                    continue
+                if isinstance(output, str) and not output.strip():
+                    continue
+                new_path = [*path, unit["id"]]
+                if isinstance(output, str):
+                    found = FLAG_RE.search(output)
+                    if found and (expected is None or found.group(0).lower() == expected.lower()):
+                        return {"solved": True, "path": new_path, "output": found.group(0),
+                                "expanded": expanded, "depth_used": len(new_path),
+                                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+                    if found and expected is not None:
+                        continue
+                new_type = detect_type(output)
+                key = (new_type, value_key(output))
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append((_heuristic(unit, output, depth), new_type, output, new_path))
+        if not candidates:
+            break
+        candidates.sort(key=lambda item: -item[0])
+        beam = candidates[:beam_k] if search == "beam" else candidates
+
+    return {"solved": False, "path": [], "expanded": expanded,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 题目与主流程
+# --------------------------------------------------------------------------------------
+
+def build_tasks(artifacts: dict[str, Path]) -> list[dict]:
+    specs = [
+        ("F1", "flag{file_payload_text}", False,
+         "附件是一个普通文本文件，里面藏着答案。", "看看这个文件。"),
+        ("F2", "flag{file_payload_zip_text}", False,
+         "附件是 zip，解压后读内容。", "这个压缩包里有东西。"),
+        ("F3", "flag{file_payload_png_text}", False,
+         "zip 里是一张 PNG，答案藏在图片的文本块里（还做了一次 Base64）。",
+         "解压后得到一张图片，信息在图片的元数据里。"),
+        ("F4", "flag{file_payload_nested_zip}", False,
+         "附件是 zip 套 zip。", "压缩包里还有压缩包。"),
+        ("F5", "flag{file_payload_pcap}", False,
+         "附件是 pcap 流量包，答案在报文内容里。", "一段网络流量，找找明文。"),
+        ("F6", "flag{file_payload_elf}", False,
+         "附件是一个二进制程序，答案在字符串表里。", "一个可执行文件，找找里面的字符串。"),
+        ("N1", None, True,
+         "附件是一段随机二进制，什么都没有。", "一个不知道是什么的文件。"),
+        ("N2", None, True,
+         "附件是一张 PNG，但文本块里只是说明文字。", "一张图片，元数据里有句话。"),
+    ]
+    tasks: list[dict] = []
+    for tid, flag, negative, specific, abstract in specs:
+        path = artifacts[tid]
+        tasks.append({
+            "id": tid, "expected": flag, "negative": negative, "path": str(path),
+            "text_specific": f"{specific}\n附件路径：{path}",
+            "text_abstract": f"{abstract}\n附件路径：{path}",
+        })
+    return tasks
+
+
+def run(max_depth: int, search: str, beam_k: int) -> dict:
+    artifacts = prepare_artifacts()
+    rows: list[dict] = []
+    for task in build_tasks(artifacts):
+        for flavor in ("specific", "abstract"):
+            text = task[f"text_{flavor}"]
+            outcome = plan(text, task["expected"], max_depth, beam_k, search)
+            row = {"id": task["id"], "flavor": flavor, "negative": task["negative"],
+                   "solved": outcome["solved"], "path": outcome["path"],
+                   "expanded": outcome["expanded"], "elapsed_ms": outcome["elapsed_ms"]}
+            rows.append(row)
+            ok = row["solved"] != row["negative"]
+            log(f"  {row['id']}-{flavor:8} {'→'.join(row['path']) or '(none)':46} "
+                f"expanded={row['expanded']:3d}  {'OK' if ok else 'UNEXPECTED'}")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    return {
+        "summary": {
+            "search": search, "units": len(UNITS),
+            "positive_total": len(positives),
+            "positive_solved": sum(1 for r in positives if r["solved"]),
+            "negative_total": len(negatives),
+            "negative_correctly_failed": sum(1 for r in negatives if not r["solved"]),
+            "mean_expanded": round(sum(r["expanded"] for r in rows) / max(len(rows), 1), 1),
+            "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+        },
+        "rows": rows,
+    }
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="文件型载荷")
+    parser.add_argument("--max-depth", type=int, default=6)
+    parser.add_argument("--search", choices=["bfs", "beam"], default="beam")
+    parser.add_argument("--beam-k", type=int, default=8)
+    args = parser.parse_args()
+
+    result = run(args.max_depth, args.search, args.beam_k)
+    summary = result["summary"]
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    lines = ["# EXP-0009 — 文件型载荷", "",
+             "规划器状态新增 `FileRef`，按魔数识别 zip/png/pcap/elf，再由对应单元处理。",
+             "", "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "",
+             "| 题 | 题面 | 实际路径 | 展开 | 结果 |",
+             "| --- | --- | --- | --- | --- |"]
+    for row in result["rows"]:
+        if row["negative"]:
+            mark = "✓(正确失败)" if not row["solved"] else "✗(不该解出)"
+        else:
+            mark = "✓" if row["solved"] else "✗"
+        lines.append(f"| {row['id']} | {row['flavor']} "
+                     f"| {'→'.join(row['path']) or '—'} | {row['expanded']} | {mark} |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

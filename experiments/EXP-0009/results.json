@@ -1,0 +1,192 @@
+{
+  "summary": {
+    "search": "bfs",
+    "units": 10,
+    "positive_total": 12,
+    "positive_solved": 12,
+    "negative_total": 4,
+    "negative_correctly_failed": 4,
+    "mean_expanded": 2.9,
+    "mean_elapsed_ms": 1.1
+  },
+  "rows": [
+    {
+      "id": "F1",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "read_text"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "F1",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "read_text"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "F2",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "read_text"
+      ],
+      "expanded": 2,
+      "elapsed_ms": 2.9
+    },
+    {
+      "id": "F2",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "read_text"
+      ],
+      "expanded": 2,
+      "elapsed_ms": 1.9
+    },
+    {
+      "id": "F3",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "png_text",
+        "b64_decode"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 2.1
+    },
+    {
+      "id": "F3",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "png_text",
+        "b64_decode"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 1.7
+    },
+    {
+      "id": "F4",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "unzip",
+        "read_text"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 2.6
+    },
+    {
+      "id": "F4",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "unzip",
+        "unzip",
+        "read_text"
+      ],
+      "expanded": 3,
+      "elapsed_ms": 2.6
+    },
+    {
+      "id": "F5",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "pcap_strings"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.5
+    },
+    {
+      "id": "F5",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "pcap_strings"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "F6",
+      "flavor": "specific",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "elf_strings"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "F6",
+      "flavor": "abstract",
+      "negative": false,
+      "solved": true,
+      "path": [
+        "elf_strings"
+      ],
+      "expanded": 1,
+      "elapsed_ms": 0.3
+    },
+    {
+      "id": "N1",
+      "flavor": "specific",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 8,
+      "elapsed_ms": 0.8
+    },
+    {
+      "id": "N1",
+      "flavor": "abstract",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 8,
+      "elapsed_ms": 0.7
+    },
+    {
+      "id": "N2",
+      "flavor": "specific",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 4,
+      "elapsed_ms": 0.4
+    },
+    {
+      "id": "N2",
+      "flavor": "abstract",
+      "negative": true,
+      "solved": false,
+      "path": [],
+      "expanded": 4,
+      "elapsed_ms": 0.3
+    }
+  ]
+}
