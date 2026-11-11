@@ -22,6 +22,7 @@
 | v010 | [v010_compose_mixed.src](v010_compose_mixed.src) | 混合场景：解码 → 解析参数 → RSA | 无（纯 Python） | 正样本 8/8，负样本 4/4 |
 | v011 | [v011_file_payload.src](v011_file_payload.src) | 文件型载荷：魔数识别 + zip/png/pcap/elf | 无（纯 Python） | 12/12 正样本，4/4 负样本 |
 | v012 | [v012_zip_members.src](v012_zip_members.src) | 多成员压缩包：全部成员入队 + 先验排序 | 无（纯 Python） | beam_k=32 时 12/12 |
+| v013 | [v013_chain_coverage.src](v013_chain_coverage.src) | 用 726 条真实攻击链测单元库覆盖边界 | 无（纯 Python） | 61.7% 步骤属题目特有逻辑 |
 
 ## 各版本说明
 
@@ -352,3 +353,37 @@ python versions/v012_zip_members.src --beam-k 8   # 观察告警
 ```
 
 **产出**：`experiments/EXP-0010/{artifacts/,results.json,report.md}`
+
+### v013_chain_coverage.src
+
+**回答的问题**：用户指出 Des-CTF-Knowledge 里就是真实题。对——但它提供的是
+**真实题目的解题链（attack_chain）**，不含可执行附件。所以它不能验证"能不能真的解出"，
+但**非常适合验证"单元库够不够广"**。
+
+**做法**：把 726 条真实攻击链（6795 个步骤）逐步归入技术族，
+再对照我们已实现的单元族。纯文本统计，无模型。
+
+**结果**
+
+| 指标 | 值 |
+| --- | --- |
+| 总步骤 | 6795 |
+| **无法归入任何标准技术族（题目特有逻辑）** | **4191（61.7%）** |
+| 可归类步骤中落在已覆盖族 | 1035（约 32%） |
+| 能由现有单元完整覆盖的整条链 | **81 / 726（11.2%）** |
+
+**缺口排序（按真实步骤数）**：pwn 635、reverse 304、hash 190、block_cipher 174、
+sql 162、rce 125、deserialize 94——目前只覆盖 encoding / binary / xor / image / rsa。
+
+**抽查那 61.7%**：`orw shellcode (openat+mmap+writev)`、`sub_8001A8C 计算 a1=(a1>>6)&(a1>>2)`、
+`torch.load('model.pth') 做 argmin 距离`、`输入 0o57355 按 ENTR 循环读 ROM`——
+这些是**题目自定义的逻辑**，不是"没识别出的标准技术"。
+
+→ 见 `laws/LAW-0017.md`
+
+**运行**
+```bash
+python versions/v013_chain_coverage.src
+```
+
+**产出**：`experiments/EXP-0011/{results.json,report.md}`

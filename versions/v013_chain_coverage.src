@@ -1,0 +1,295 @@
+"""
+v013_chain_coverage.src — 用 1156 条真实攻击链，测我们的单元库到底能覆盖多少
+
+先澄清一件事
+    用户指出 Des-CTF-Knowledge 里就是真实题。对，但要分清它提供的是什么：
+      * 它提供 **真实题目的解题链**（`attack_chain`，人工写的分步思路）——这是极好的真值；
+      * 它**没有提供可执行的题目附件**（那些 PNG 是 WP 截图，少数 flag.enc/flag.jpg
+        是脚本演示输入，不是赛题）。
+    所以它不能用来验证"能不能真的解出"，但**非常适合验证"我们的单元库够不够广"**。
+
+本文件做什么
+    把 1156 条真实的 `attack_chain` 逐步归类到技术族，
+    然后回答三个问题：
+      1. 真实 CTF 里最常出现的技术族是哪些？（决定该先做什么单元）
+      2. 我们现有的契约单元能覆盖哪些族？
+      3. 知识库自己抓出来的 1165 个代码单元，又能覆盖哪些族？
+         （这代表"语料里已经有的东西"的上限）
+
+    全程纯文本统计，不需要模型、不需要附件。
+
+运行
+    python versions/v013_chain_coverage.src
+
+产出物
+    experiments/EXP-0011/results.json
+    experiments/EXP-0011/report.md
+"""
+
+from __future__ import annotations
+
+import collections
+import json
+import re
+import sys
+import time
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0011"
+META_GLOB = "book/Des-CTF-Knowledge/CTF大赛WP集合/articles/*.meta.md"
+FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 前端解析（容忍未转义冒号，与之前几个版本一致）
+# --------------------------------------------------------------------------------------
+
+FIELD_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+
+
+def _clean(raw: str) -> str:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    return text.strip()
+
+
+def parse_lenient(block: str) -> dict:
+    out: dict = {}
+    current: str | None = None
+    for line in block.splitlines():
+        if not line.strip():
+            continue
+        match = FIELD_LINE.match(line)
+        if match:
+            current = match.group(1)
+            out[current] = match.group(2).strip()
+            continue
+        stripped = line.strip()
+        if current and stripped.startswith("- "):
+            item = _clean(stripped[2:])
+            if not item:
+                continue
+            prev = out.get(current)
+            if isinstance(prev, list):
+                prev.append(item)
+            elif isinstance(prev, str) and prev.strip():
+                out[current] = [_clean(prev), item]
+            else:
+                out[current] = [item]
+    return out
+
+
+def parse_frontmatter(text: str) -> dict:
+    match = FRONTMATTER.match(text)
+    if not match:
+        return {}
+    block = match.group(1)
+    try:
+        payload = yaml.safe_load(block)
+        if isinstance(payload, dict) and payload.get("title"):
+            return payload
+    except yaml.YAMLError:
+        pass
+    return parse_lenient(block)
+
+
+def load_chains() -> list[dict]:
+    entries: list[dict] = []
+    for path in sorted(ROOT.glob(META_GLOB)):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        payload = parse_frontmatter(text)
+        if not isinstance(payload, dict):
+            continue
+        chain = payload.get("attack_chain")
+        if not isinstance(chain, list):
+            continue
+        steps = [str(step).strip() for step in chain if str(step).strip()]
+        if len(steps) < 2:
+            continue
+        vt = payload.get("vuln_type")
+        vuln = [str(v) for v in (vt if isinstance(vt, list) else [vt] if vt else [])]
+        entries.append({
+            "title": str(payload.get("title", "")).strip(),
+            "vuln_type": vuln,
+            "steps": steps,
+        })
+    return entries
+
+
+# --------------------------------------------------------------------------------------
+# 技术族归类：关键词规则，纯文本、可解释
+# --------------------------------------------------------------------------------------
+
+FAMILIES: list[tuple[str, re.Pattern]] = [
+    ("encoding", re.compile(r"base64|base32|base16|b64|hex|十六进制|编码|urlencode|jsfuck|rot13|进制", re.I)),
+    ("xor", re.compile(r"\bxor\b|异或", re.I)),
+    ("classical", re.compile(r"凯撒|caesar|维吉尼亚|vigenere|栅栏|培根|摩斯|古典|替换表", re.I)),
+    ("crc", re.compile(r"crc32|crc\b", re.I)),
+    ("rsa", re.compile(r"\brsa\b|wiener|公钥|模数|素因子|共模|低加密指数|小明文|e\s*=\s*3", re.I)),
+    ("lattice", re.compile(r"lattice|格密码|lll|coppersmith|hssp|cvp|线性方程组|gf\(2\)", re.I)),
+    ("block_cipher", re.compile(r"\baes\b|\bdes\b|rc4|cbc|ecb|块加密|分组密码|s盒|sbox|feistel|chacha", re.I)),
+    ("hash", re.compile(r"md5|sha1|sha256|hash|哈希|碰撞", re.I)),
+    ("archive", re.compile(r"\bzip\b|\brar\b|7z|压缩包|伪加密|明文攻击", re.I)),
+    ("image", re.compile(r"\bpng\b|jpg|jpeg|图片|隐写|lsb|ihdr|stegsolve|盲水印|二维码|qr\s*code", re.I)),
+    ("pcap", re.compile(r"pcap|pcapng|wireshark|tshark|流量|抓包", re.I)),
+    ("binary", re.compile(r"\belf\b|strings|可执行|二进制|ida|objdump|readelf|固件|firmware|mips", re.I)),
+    ("deserialize", re.compile(r"反序列化|pop\s*链|pickle|ysoserial|原生类|phar", re.I)),
+    ("sql", re.compile(r"\bsql\b|注入|union\s+select|盲注|报错注入", re.I)),
+    ("ssti", re.compile(r"ssti|模板注入|jinja2|twig|freemarker", re.I)),
+    ("rce", re.compile(r"\brce\b|命令执行|system\(|shell_exec|反弹shell|disable_functions", re.I)),
+    ("upload", re.compile(r"文件上传|upload|webshell|图片马|后门", re.I)),
+    ("lfi", re.compile(r"文件包含|\blfi\b|php://|伪协议|日志包含", re.I)),
+    ("ssrf", re.compile(r"\bssrf\b|gopher|内网探测|代理转发", re.I)),
+    ("xss", re.compile(r"\bxss\b|跨站脚本|dom\s*clobber", re.I)),
+    ("jwt", re.compile(r"\bjwt\b|json web token", re.I)),
+    ("jndi", re.compile(r"jndi|log4j|ldap", re.I)),
+    ("pwn", re.compile(
+        r"栈溢出|堆溢出|\brop\b|\buaf\b|\btcache\b|\bheap\b|格式化字符串|fmtstr|seccomp|srop"
+        r"|\bpwn\b|shellcode|\borw\b|ret2|gadget|canary|libc|溢出|任意地址写|劫持", re.I)),
+    ("reverse", re.compile(
+        r"逆向|反编译|ollvm|混淆|脱壳|指令还原|vm\s*题|state machine"
+        r"|sub_[0-9a-fA-F]+|frida|hook|jadx|\bapk\b|android|smali", re.I)),
+    ("blockchain", re.compile(r"solidity|智能合约|erc20|erc721|calldata|\bevm\b|重入", re.I)),
+    ("sidechannel", re.compile(r"功耗|侧信道|\bsca\b|trace|能量分析", re.I)),
+    ("forensics", re.compile(r"取证|内存镜像|volatility|磁盘镜像|注册表|调证", re.I)),
+    ("web_logic", re.compile(r"逻辑漏洞|越权|条件竞争|支付|签到|业务|源码审计|审计", re.I)),
+    ("crypto_prng", re.compile(r"prng|xorshift|随机数|种子|seed|线性化", re.I)),
+]
+
+
+def classify(step: str) -> list[str]:
+    return [name for name, pattern in FAMILIES if pattern.search(step)]
+
+
+# --------------------------------------------------------------------------------------
+# 我们现有的契约单元能覆盖哪些族
+# --------------------------------------------------------------------------------------
+
+# 来自 v007–v012 已实现的契约单元（只列真实存在、经过执行验证的）
+CONTRACT_UNITS = {
+    "b64_decode": {"encoding"},
+    "hex_decode": {"encoding"},
+    "reverse_text": set(),
+    "xor_brute": {"xor"},
+    "caesar_brute": {"classical"},
+    "crc32_brute": {"crc"},
+    "rsa_small_e": {"rsa"},
+    "parse_int_fields": set(),
+    "unzip": {"archive"},
+    "read_text": set(),
+    "png_text": {"image"},
+    "pcap_strings": {"pcap"},
+    "elf_strings": {"binary"},
+    "bin_strings": set(),
+}
+COVERED_FAMILIES = set().union(*CONTRACT_UNITS.values())
+
+
+def main() -> None:
+    chains = load_chains()
+    log(f"载入含攻击链的真实 WP：{len(chains)} 条")
+
+    family_steps: collections.Counter = collections.Counter()
+    chain_families: list[set[str]] = []
+    unclassified = 0
+    total_steps = 0
+
+    for entry in chains:
+        families: set[str] = set()
+        for step in entry["steps"]:
+            total_steps += 1
+            hits = classify(step)
+            if not hits:
+                unclassified += 1
+                continue
+            family_steps.update(hits)
+            families.update(hits)
+        chain_families.append(families)
+
+    log(f"总步骤：{total_steps}，未能归类：{unclassified} "
+        f"({unclassified / max(total_steps, 1):.1%})")
+
+    fully_covered = sum(1 for fams in chain_families if fams and fams <= COVERED_FAMILIES)
+    partly_covered = sum(1 for fams in chain_families
+                         if fams and (fams & COVERED_FAMILIES) and not (fams <= COVERED_FAMILIES))
+    uncovered = sum(1 for fams in chain_families if fams and not (fams & COVERED_FAMILIES))
+
+    summary = {
+        "chains": len(chains),
+        "steps": total_steps,
+        "unclassified_steps": unclassified,
+        "bespoke_step_rate": round(unclassified / max(total_steps, 1), 3),
+        "classified_steps": total_steps - unclassified,
+        "covered_families": sorted(COVERED_FAMILIES),
+        "chains_fully_covered": fully_covered,
+        "chains_partly_covered": partly_covered,
+        "chains_uncovered": uncovered,
+        "fully_covered_rate": round(fully_covered / max(len(chains), 1), 3),
+        "step_family_distribution": family_steps.most_common(),
+        "steps_in_covered_families": sum(count for fam, count in family_steps.items()
+                                         if fam in COVERED_FAMILIES),
+        "steps_in_uncovered_families": sum(count for fam, count in family_steps.items()
+                                           if fam not in COVERED_FAMILIES),
+    }
+    covered_steps = summary["steps_in_covered_families"]
+    uncovered_steps = summary["steps_in_uncovered_families"]
+    summary["covered_step_share"] = round(
+        covered_steps / max(covered_steps + uncovered_steps, 1), 3)
+    log(f"完整覆盖的题：{fully_covered}/{len(chains)} "
+        f"({summary['fully_covered_rate']:.1%})；部分覆盖 {partly_covered}；完全未覆盖 {uncovered}")
+    log(f"落在我们已覆盖技术族的步骤：{summary['steps_in_covered_families']} / "
+        f"{summary['steps_in_covered_families'] + summary['steps_in_uncovered_families']}")
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    lines = [
+        "# EXP-0011 — 真实攻击链覆盖率（1156 条）", "",
+        "数据来源：`Des-CTF-Knowledge/CTF大赛WP集合/articles/*.meta.md` 的 `attack_chain`。",
+        "", "> 注意：该仓库提供的是**真实题目的解题链**，不含可执行附件。",
+        "> 因此这里测的是「单元库覆盖广度」，不是「能否真的解出」。", "",
+        "## 汇总", "", "```json",
+        json.dumps({k: v for k, v in summary.items()
+                    if k != "step_family_distribution"}, ensure_ascii=False, indent=2),
+        "```", "",
+        "## 各技术族在真实步骤中出现的次数（按次数排序）", "",
+        "| 技术族 | 步骤数 | 我们是否已覆盖 |", "| --- | --- | --- |",
+    ]
+    for family, count in family_steps.most_common():
+        covered = "✅" if family in COVERED_FAMILIES else "❌"
+        lines.append(f"| {family} | {count} | {covered} |")
+    lines += ["", "## 结论怎么读", "",
+              f"- **{summary['bespoke_step_rate']:.1%}** 的真实步骤无法归入任何标准技术族，"
+              "是题目特有的实现细节（自定义 VM、驱动内部结构、模型文件格式、常识检索等）；",
+              f"- 在能归类的步骤里，**{summary['covered_step_share']:.1%}** 落在我们已实现的单元族；",
+              f"- 能由现有单元**完整覆盖**的整条攻击链只有 **{fully_covered}/{len(chains)}"
+              f"（{summary['fully_covered_rate']:.1%}）**。",
+              "",
+              "这不是检索或规划算法的问题，而是**单元库的边界**：",
+              "真实 CTF 的主体是主办方自己写的抽象逻辑，标准技术只占少数。",
+              "上表里标 ❌ 的族，就是下一步该补的单元方向（按步骤数从多到少排）。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

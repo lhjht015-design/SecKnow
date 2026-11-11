@@ -1,0 +1,143 @@
+{
+  "chains": 726,
+  "steps": 6795,
+  "unclassified_steps": 4191,
+  "bespoke_step_rate": 0.617,
+  "classified_steps": 2604,
+  "covered_families": [
+    "archive",
+    "binary",
+    "classical",
+    "crc",
+    "encoding",
+    "image",
+    "pcap",
+    "rsa",
+    "xor"
+  ],
+  "chains_fully_covered": 81,
+  "chains_partly_covered": 337,
+  "chains_uncovered": 231,
+  "fully_covered_rate": 0.112,
+  "step_family_distribution": [
+    [
+      "pwn",
+      635
+    ],
+    [
+      "reverse",
+      304
+    ],
+    [
+      "encoding",
+      287
+    ],
+    [
+      "hash",
+      190
+    ],
+    [
+      "binary",
+      187
+    ],
+    [
+      "block_cipher",
+      174
+    ],
+    [
+      "sql",
+      162
+    ],
+    [
+      "xor",
+      145
+    ],
+    [
+      "image",
+      126
+    ],
+    [
+      "rce",
+      125
+    ],
+    [
+      "rsa",
+      97
+    ],
+    [
+      "deserialize",
+      94
+    ],
+    [
+      "pcap",
+      93
+    ],
+    [
+      "crypto_prng",
+      82
+    ],
+    [
+      "archive",
+      72
+    ],
+    [
+      "lattice",
+      71
+    ],
+    [
+      "upload",
+      70
+    ],
+    [
+      "ssti",
+      38
+    ],
+    [
+      "sidechannel",
+      32
+    ],
+    [
+      "lfi",
+      30
+    ],
+    [
+      "web_logic",
+      27
+    ],
+    [
+      "jwt",
+      26
+    ],
+    [
+      "ssrf",
+      23
+    ],
+    [
+      "xss",
+      22
+    ],
+    [
+      "blockchain",
+      21
+    ],
+    [
+      "forensics",
+      20
+    ],
+    [
+      "crc",
+      17
+    ],
+    [
+      "jndi",
+      15
+    ],
+    [
+      "classical",
+      11
+    ]
+  ],
+  "steps_in_covered_families": 1035,
+  "steps_in_uncovered_families": 2161,
+  "covered_step_share": 0.324
+}
