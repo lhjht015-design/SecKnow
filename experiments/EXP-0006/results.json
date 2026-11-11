@@ -1,0 +1,885 @@
+{
+  "summaries": [
+    {
+      "router": "keyword",
+      "L1": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "L2": {
+        "solved": 1,
+        "total": 5,
+        "rate": 0.2
+      },
+      "L3": {
+        "solved": 0,
+        "total": 5,
+        "rate": 0.0
+      },
+      "overall": {
+        "solved": 6,
+        "total": 15,
+        "rate": 0.4
+      }
+    },
+    {
+      "router": "shape",
+      "L1": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "L2": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "L3": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "overall": {
+        "solved": 15,
+        "total": 15,
+        "rate": 1.0
+      }
+    },
+    {
+      "router": "hybrid",
+      "L1": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "L2": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "L3": {
+        "solved": 5,
+        "total": 5,
+        "rate": 1.0
+      },
+      "overall": {
+        "solved": 15,
+        "total": 15,
+        "rate": 1.0
+      }
+    }
+  ],
+  "runs": [
+    {
+      "router": "keyword",
+      "rows": [
+        {
+          "id": "RSA-L1",
+          "tech": "rsa",
+          "router": "keyword",
+          "recalled": [
+            "rsa_small_e"
+          ],
+          "attempts": [
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L2",
+          "tech": "rsa",
+          "router": "keyword",
+          "recalled": [
+            "rsa_small_e"
+          ],
+          "attempts": [
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L3",
+          "tech": "rsa",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "B64-L1",
+          "tech": "base64",
+          "router": "keyword",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L2",
+          "tech": "base64",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "B64-L3",
+          "tech": "base64",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "XOR-L1",
+          "tech": "xor",
+          "router": "keyword",
+          "recalled": [
+            "xor_single_byte",
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L2",
+          "tech": "xor",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "XOR-L3",
+          "tech": "xor",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "CRC-L1",
+          "tech": "crc32",
+          "router": "keyword",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L2",
+          "tech": "crc32",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "CRC-L3",
+          "tech": "crc32",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "CAE-L1",
+          "tech": "caesar",
+          "router": "keyword",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L2",
+          "tech": "caesar",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        },
+        {
+          "id": "CAE-L3",
+          "tech": "caesar",
+          "router": "keyword",
+          "recalled": [],
+          "attempts": [],
+          "solved": false
+        }
+      ]
+    },
+    {
+      "router": "shape",
+      "rows": [
+        {
+          "id": "RSA-L1",
+          "tech": "rsa",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "rsa_small_e",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "param_extract_failed",
+              "note": "none"
+            },
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L2",
+          "tech": "rsa",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "rsa_small_e"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L3",
+          "tech": "rsa",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "rsa_small_e",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "param_extract_failed",
+              "note": "none"
+            },
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "fallback_two",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L1",
+          "tech": "base64",
+          "router": "shape",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L2",
+          "tech": "base64",
+          "router": "shape",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L3",
+          "tech": "base64",
+          "router": "shape",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L1",
+          "tech": "xor",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L2",
+          "tech": "xor",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L3",
+          "tech": "xor",
+          "router": "shape",
+          "recalled": [
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L1",
+          "tech": "crc32",
+          "router": "shape",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L2",
+          "tech": "crc32",
+          "router": "shape",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L3",
+          "tech": "crc32",
+          "router": "shape",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L1",
+          "tech": "caesar",
+          "router": "shape",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L2",
+          "tech": "caesar",
+          "router": "shape",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L3",
+          "tech": "caesar",
+          "router": "shape",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        }
+      ]
+    },
+    {
+      "router": "hybrid",
+      "rows": [
+        {
+          "id": "RSA-L1",
+          "tech": "rsa",
+          "router": "hybrid",
+          "recalled": [
+            "rsa_small_e",
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L2",
+          "tech": "rsa",
+          "router": "hybrid",
+          "recalled": [
+            "rsa_small_e",
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "labelled",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "RSA-L3",
+          "tech": "rsa",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain",
+            "rsa_small_e",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "param_extract_failed",
+              "note": "none"
+            },
+            {
+              "unit": "rsa_small_e",
+              "status": "solved",
+              "note": "fallback_two",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L1",
+          "tech": "base64",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L2",
+          "tech": "base64",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "B64-L3",
+          "tech": "base64",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "solved",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L1",
+          "tech": "xor",
+          "router": "hybrid",
+          "recalled": [
+            "xor_single_byte",
+            "crc32_brute",
+            "base64_chain"
+          ],
+          "attempts": [
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L2",
+          "tech": "xor",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "XOR-L3",
+          "tech": "xor",
+          "router": "hybrid",
+          "recalled": [
+            "base64_chain",
+            "xor_single_byte"
+          ],
+          "attempts": [
+            {
+              "unit": "base64_chain",
+              "status": "ran_no_match",
+              "note": "b64",
+              "exit": 0,
+              "stderr": ""
+            },
+            {
+              "unit": "xor_single_byte",
+              "status": "solved",
+              "note": "hex",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L1",
+          "tech": "crc32",
+          "router": "hybrid",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L2",
+          "tech": "crc32",
+          "router": "hybrid",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CRC-L3",
+          "tech": "crc32",
+          "router": "hybrid",
+          "recalled": [
+            "crc32_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "crc32_brute",
+              "status": "solved",
+              "note": "crc",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L1",
+          "tech": "caesar",
+          "router": "hybrid",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L2",
+          "tech": "caesar",
+          "router": "hybrid",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        },
+        {
+          "id": "CAE-L3",
+          "tech": "caesar",
+          "router": "hybrid",
+          "recalled": [
+            "caesar_brute"
+          ],
+          "attempts": [
+            {
+              "unit": "caesar_brute",
+              "status": "solved",
+              "note": "flag_like",
+              "exit": 0,
+              "stderr": ""
+            }
+          ],
+          "solved": true
+        }
+      ]
+    }
+  ]
+}

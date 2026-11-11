@@ -1,0 +1,514 @@
+"""
+v008_shift_test.src — 分布漂移测试：当题目"不像我们出的题"时还能不能解
+
+为什么必须做这个实验
+    v007 的 5/5 是自己出题、自己写单元——这恰恰是用户踩过的坑：
+    「在我们题库里表现很好，遇到主办方真正实现的题目就不行，因为变量名会换、
+      函数名会换、实现逻辑很抽象」。
+    所以本文件**故意破坏**三类先验，测通过率的衰减：
+
+        L1  自编题：技术名明确、参数名标准（v007 的基线）
+        L2  改名换格式：技术名仍在，但参数名改成中文/别名，数值改十六进制，
+            数据放进 JSON / 文件引用
+        L3  抽象描述：**完全不提技术名**，只描述行为（"每个字节与同一个常数异或"）
+
+    同时比较两种召回策略：
+        keyword-only  —— 只靠技法关键词
+        keyword+shape —— 关键词 + **数据形态路由**（大整数→RSA、长 hex→编码/XOR、
+                         8 位 CRC32 + 字母→CRC 爆破、flag 样式串→古典密码）
+
+    形态路由是应对 L3 的关键：主办方可以不提技术名，但**数据的形状改不掉**。
+
+运行
+    python versions/v008_shift_test.src
+    python versions/v008_shift_test.src --router shape     # 只用形态路由
+    python versions/v008_shift_test.src --router keyword   # 只用关键词
+
+产出物
+    experiments/EXP-0006/results.json
+"""
+
+from __future__ import annotations
+
+import itertools
+import json
+import re
+import sys
+import time
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0006"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 单元库（与 v007 同一套契约，这里内联以保持单文件可运行）
+# --------------------------------------------------------------------------------------
+
+UNITS: list[dict] = [
+    {
+        "id": "rsa_small_e",
+        "technique": ["rsa", "小公钥", "e=3", "小明文", "开三次方", "iroot", "公钥指数"],
+        "shape": "bigints",
+        "params": ["n", "e", "c"],
+        "code": '''
+import gmpy2
+
+def solve(n, e, c):
+    root, exact = gmpy2.iroot(c, e)
+    if not exact:
+        raise ValueError("c 不是完全 e 次方")
+    return int(root).to_bytes((int(root).bit_length() + 7) // 8, "big").decode("utf-8", "replace")
+''',
+    },
+    {
+        "id": "base64_chain",
+        "technique": ["base64", "b64", "多层", "连续解码", "编码链"],
+        "shape": "base64",
+        "params": ["data"],
+        "code": '''
+import base64, re
+
+def solve(data):
+    text = data.strip()
+    for _ in range(8):
+        if re.search(r"flag\\{", text, re.I):
+            return text
+        try:
+            text = base64.b64decode(text, validate=True).decode("utf-8")
+        except Exception:
+            break
+    return text
+''',
+    },
+    {
+        "id": "xor_single_byte",
+        "technique": ["xor", "异或", "单字节", "单字节密钥", "爆破密钥", "同一个常数"],
+        "shape": "hex",
+        "params": ["data"],
+        "code": '''
+import re
+
+def solve(data):
+    raw = bytes.fromhex(data.strip().replace(" ", ""))
+    for key in range(256):
+        cand = bytes(b ^ key for b in raw)
+        try:
+            text = cand.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if re.search(r"flag\\{", text, re.I):
+            return text
+    raise ValueError("没有命中")
+''',
+    },
+    {
+        "id": "crc32_brute",
+        "technique": ["crc32", "校验值", "明文校验", "爆破", "zip", "文件内容"],
+        "shape": "crc32",
+        "params": ["target_crc", "length", "charset"],
+        "code": '''
+import itertools, zlib
+
+def solve(target_crc, length, charset):
+    target = int(target_crc) & 0xFFFFFFFF
+    for combo in itertools.product(charset, repeat=int(length)):
+        word = "".join(combo)
+        if zlib.crc32(word.encode()) & 0xFFFFFFFF == target:
+            return f"flag{{{word}}}"
+    raise ValueError("范围内没有匹配")
+''',
+    },
+    {
+        "id": "caesar_brute",
+        "technique": ["凯撒", "caesar", "移位", "rot", "古典密码"],
+        "shape": "ciphertext_word",
+        "params": ["data"],
+        "code": '''
+import re
+
+def solve(data):
+    text = data.strip()
+    for shift in range(26):
+        cand = "".join(
+            chr((ord(c) - 97 - shift) % 26 + 97) if c.islower()
+            else chr((ord(c) - 65 - shift) % 26 + 65) if c.isupper()
+            else c
+            for c in text
+        )
+        if re.search(r"flag\\{", cand, re.I):
+            return cand
+    raise ValueError("26 个移位里没有命中")
+''',
+    },
+]
+
+UNIT_INDEX = {unit["id"]: unit for unit in UNITS}
+
+
+# --------------------------------------------------------------------------------------
+# 形态识别：不看技术名，只看数据长什么样
+# --------------------------------------------------------------------------------------
+
+BIG_INT = re.compile(r"\b(?:0x[0-9a-fA-F]{16,}|\d{40,})\b")
+LONG_HEX = re.compile(r"\b[0-9a-fA-F]{24,}\b")
+LONG_B64 = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+CRC_TOKEN = re.compile(r"(?:CRC32|cr[cC]|校验)\D{0,12}0x([0-9A-Fa-f]{8})")
+LETTERS_CN = re.compile(r"(\d+)\s*个\s*(小写|大写)?\s*(?:英文)?字母")
+# 真实赛题常写成「长度 4，全部为小写英文字母」「4 个字节，每个字节都在 a 到 z 之间」
+LENGTH_CN = re.compile(r"(?:长度|共|只有|恰好)\s*(\d+)[^。\n]{0,30}?(小写|大写)?[^。\n]{0,10}?(?:英文)?字母")
+BYTES_RANGE = re.compile(r"(\d+)\s*个\s*字节[^。\n]{0,40}?a\s*到\s*z")
+FLAG_LIKE = re.compile(r"\b[a-z]{4}\{[a-z0-9_]{3,}\}")
+
+
+def detect_crc_params(text: str) -> dict | None:
+    """CRC 参数的统一识别，供形态路由与参数抽取共用，避免两边口径不一致。"""
+    crc = CRC_TOKEN.search(text)
+    if not crc:
+        return None
+    length = LETTERS_CN.search(text) or LENGTH_CN.search(text) or BYTES_RANGE.search(text)
+    if not length:
+        return None
+    case = length.group(2) if length.re.groups >= 2 else None
+    charset = "abcdefghijklmnopqrstuvwxyz" if (case or "小写") == "小写" \
+        else "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return {"target_crc": int(crc.group(1), 16), "length": int(length.group(1)),
+            "charset": charset}
+
+
+def detect_shapes(text: str) -> list[str]:
+    shapes: list[str] = []
+    big = BIG_INT.findall(text)
+    # 真实题面可能只给 n 和 c（e 单独写成很小的数），所以不能要求 3 个大整数。
+    # 判据改为：至少 2 个，且其中一个是「超长整数」。
+    if len(big) >= 2 and max(len(token) for token in big) >= 60:
+        shapes.append("bigints")
+    if LONG_HEX.search(text):
+        shapes.append("hex")
+    if LONG_B64.search(text):
+        shapes.append("base64")
+    if detect_crc_params(text) is not None:
+        shapes.append("crc32")
+    if FLAG_LIKE.search(text):
+        shapes.append("ciphertext_word")
+    return shapes
+
+
+def recall(query: str, router: str = "hybrid", top_k: int = 3) -> list[dict]:
+    text = query.casefold()
+    keyword_scores: dict[str, float] = {}
+    for unit in UNITS:
+        hits = sum(1 for kw in unit["technique"] if kw.casefold() in text)
+        if hits:
+            keyword_scores[unit["id"]] = hits + hits / len(unit["technique"])
+
+    shape_ids = {u["id"] for u in UNITS if u["shape"] in detect_shapes(query)}
+
+    ordered: list[str] = []
+    if router in {"hybrid", "keyword"}:
+        ordered.extend(sorted(keyword_scores, key=lambda k: -keyword_scores[k]))
+    if router in {"hybrid", "shape"}:
+        # 形态命中但关键词没命中的，排在关键词命中之后
+        ordered.extend(sorted(shape_ids - set(ordered)))
+    return [UNIT_INDEX[uid] for uid in ordered[:top_k]]
+
+
+# --------------------------------------------------------------------------------------
+# 参数抽取：L2/L3 下必须容忍改名与换进制
+# --------------------------------------------------------------------------------------
+
+ALIAS_N = re.compile(r"(?:\bn\b|模数|N\s*=|modulus)", re.I)
+ALIAS_E = re.compile(r"(?:\be\b|公钥指数|指数|exponent)", re.I)
+ALIAS_C = re.compile(r"(?:\bc\b|密文|密文值|cipher|ciphertext|\bC\s*=)", re.I)
+
+
+def _to_int(token: str) -> int:
+    token = token.strip()
+    return int(token, 16) if token.lower().startswith("0x") else int(token, 10)
+
+
+LABEL_VALUE = re.compile(
+    r"(?P<label>公钥指数|密文值|模数|指数|密文|exponent|modulus|\b[a-zA-Z]{1,3}\b)"
+    r"\s*[=:：]\s*(?P<value>0x[0-9a-fA-F]+|\d+)"
+)
+
+
+def extract_rsa(text: str) -> tuple[dict | None, str]:
+    """优先按标签取值（支持中英文标签与十六进制）；标签缺失时退回「大整数排序」。"""
+    labelled: dict[str, int] = {}
+    for match in LABEL_VALUE.finditer(text):
+        label = match.group("label").strip().casefold()
+        try:
+            value = _to_int(match.group("value"))
+        except ValueError:
+            continue
+        if label in {"n", "模数", "modulus"}:
+            labelled.setdefault("n", value)
+        elif label in {"e", "指数", "公钥指数", "exponent"}:
+            labelled.setdefault("e", value)
+        elif label in {"c", "密文", "密文值", "cipher", "ciphertext"}:
+            labelled.setdefault("c", value)
+    if {"n", "e", "c"} <= set(labelled):
+        return labelled, "labelled"
+
+    raw = [_to_int(t) for t in BIG_INT.findall(text)]
+    raw = sorted({v for v in raw if v > 1}, reverse=True)
+    if len(raw) >= 3:
+        # e 通常是最小的那个；n 最大；剩下的当 c
+        e = min(raw)
+        rest = [v for v in raw if v != e]
+        return {"n": max(rest), "e": e, "c": min(rest)}, "fallback_three"
+    if len(raw) == 2:
+        # 题面常把 e 单独写成一个很小的数（"另有一个很小的奇数 K = 3"），
+        # 它不满足"大整数"的形态，所以要单独把它捞出来。
+        small = re.search(r"(?:奇数|\bK\b|\be\b|指数)[^0-9\n]{0,12}(\d{1,6})", text)
+        if not small:
+            return None, "none"
+        return {"n": max(raw), "e": int(small.group(1)), "c": min(raw)}, "fallback_two"
+    return None, "none"
+
+
+def extract_params(unit_id: str, text: str) -> tuple[dict | None, str]:
+    if unit_id == "rsa_small_e":
+        return extract_rsa(text)
+
+    if unit_id == "base64_chain":
+        candidates = [t for t in LONG_B64.findall(text) if not re.fullmatch(r"[0-9]+", t)]
+        return ({"data": max(candidates, key=len)}, "b64") if candidates else (None, "none")
+
+    if unit_id == "xor_single_byte":
+        candidates = LONG_HEX.findall(text)
+        return ({"data": max(candidates, key=len)}, "hex") if candidates else (None, "none")
+
+    if unit_id == "crc32_brute":
+        values = detect_crc_params(text)
+        return (values, "crc") if values else (None, "none")
+
+    if unit_id == "caesar_brute":
+        candidates = FLAG_LIKE.findall(text)
+        return ({"data": candidates[0]}, "flag_like") if candidates else (None, "none")
+
+    return None, "none"
+
+
+# --------------------------------------------------------------------------------------
+# 拼装与执行
+# --------------------------------------------------------------------------------------
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def assemble(unit: dict, values: dict) -> str:
+    call = ", ".join(f"{name}={values[name]!r}" for name in unit["params"])
+    return (
+        f"# unit={unit['id']}\n{unit['code'].strip()}\n\n"
+        f"if __name__ == '__main__':\n    print(solve({call}))\n"
+    )
+
+
+def execute(source: str, timeout: int = 40) -> tuple[int, str, str]:
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="secknow-shift-") as workdir:
+        path = Path(workdir) / "solve.py"
+        path.write_text(source, encoding="utf-8")
+        try:
+            done = subprocess.run([sys.executable, str(path)], cwd=workdir,
+                                  capture_output=True, text=True, encoding="utf-8",
+                                  errors="replace", timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return 124, "", f"timeout {timeout}s"
+    return done.returncode, done.stdout, done.stderr
+
+
+# --------------------------------------------------------------------------------------
+# 三档题目：同一批技术，三种"陌生度"
+# --------------------------------------------------------------------------------------
+
+
+def build_tasks() -> list[dict]:
+    import base64
+
+    tasks: list[dict] = []
+
+    # ===== RSA =====
+    flag = "flag{rsa_small_e_no_padding}"
+    m = int.from_bytes(flag.encode(), "big")
+    n = (1 << 2048) - 0xE5B1A7C3D9F102468ACE13579BDF02468 + 1
+    c = pow(m, 3, n)
+    tasks.append({"id": "RSA-L1", "tech": "rsa", "expected": flag,
+                  "text": f"RSA 题：n = {n}\ne = 3\nc = {c}\n明文没有 padding，求 flag。"})
+    tasks.append({"id": "RSA-L2", "tech": "rsa", "expected": flag,
+                  "text": (f"附件里给出三组值：\n模数 = 0x{n:x}\n公钥指数 = 0x3\n"
+                           f"密文值 = 0x{c:x}\n请还原明文。")})
+    tasks.append({"id": "RSA-L3", "tech": "rsa", "expected": flag,
+                  "text": (f"有一个 2048 位的整数 M = {n}，另有一个很小的奇数 K = 3，"
+                           f"以及一个结果 R = {c}。它们满足 R ≡ x^K (mod M)，x 没有做填充。"
+                           "求 x 对应的文本。")})
+
+    # ===== Base64 =====
+    flag2 = "flag{b4se64_ch41n_1s_e4sy}"
+    blob = base64.b64encode(base64.b64encode(base64.b64encode(flag2.encode()).decode().encode()).decode().encode()).decode()
+    tasks.append({"id": "B64-L1", "tech": "base64", "expected": flag2,
+                  "text": f"给了一串经过多层 Base64 编码的字符串，求还原明文：\n{blob}"})
+    tasks.append({"id": "B64-L2", "tech": "base64", "expected": flag2,
+                  "text": f'{{"challenge": "encoding", "payload": "{blob}"}}\n请还原 payload 的原始内容。'})
+    tasks.append({"id": "B64-L3", "tech": "base64", "expected": flag2,
+                  "text": (f"下面这段内容每解开一次都会得到一段仍然可以继续解的新内容，"
+                           f"请一直解到能看懂为止：\n{blob}")})
+
+    # ===== XOR =====
+    flag3 = "flag{x0r_w1th_s1ngle_byte}"
+    xored = bytes(b ^ 0x5A for b in flag3.encode()).hex()
+    tasks.append({"id": "XOR-L1", "tech": "xor", "expected": flag3,
+                  "text": f"下面这段 hex 是单字节 XOR 加密的，请爆破密钥还原明文：\n{xored}"})
+    tasks.append({"id": "XOR-L2", "tech": "xor", "expected": flag3,
+                  "text": f"cipher_hex={xored}\nmode=single-byte\n请输出明文。"})
+    tasks.append({"id": "XOR-L3", "tech": "xor", "expected": flag3,
+                  "text": (f"程序把原文的每个字节都与同一个 0 到 255 之间的整数做了同一种运算，"
+                           f"得到下面的结果（每两个字符表示一个字节）：\n{xored}\n求原文。")})
+
+    # ===== CRC32 =====
+    inner = "ctfz"
+    crc = zlib.crc32(inner.encode()) & 0xFFFFFFFF
+    flag4 = f"flag{{{inner}}}"
+    tasks.append({"id": "CRC-L1", "tech": "crc32", "expected": flag4,
+                  "text": f"ZIP 里文件的 CRC32 = 0x{crc:08X}，内容为 4 个小写字母，求内容。"})
+    tasks.append({"id": "CRC-L2", "tech": "crc32", "expected": flag4,
+                  "text": f"压缩包头部记录：crc = 0x{crc:08X}；解压后内容长度 4，全部为小写英文字母。"})
+    tasks.append({"id": "CRC-L3", "tech": "crc32", "expected": flag4,
+                  "text": (f"有个文件的校验结果是 0x{crc:08X}，但文件本身丢了。"
+                           "已知它只有 4 个字节，且每个字节都在 a 到 z 之间。请把它恢复出来。")})
+
+    # ===== Caesar =====
+    flag5 = "flag{caesar_shifts_by_13}"
+    shifted = "".join(
+        chr((ord(ch) - 97 + 13) % 26 + 97) if ch.islower()
+        else chr((ord(ch) - 65 + 13) % 26 + 65) if ch.isupper() else ch
+        for ch in flag5
+    )
+    tasks.append({"id": "CAE-L1", "tech": "caesar", "expected": flag5,
+                  "text": f"凯撒密码密文：\n{shifted}"})
+    tasks.append({"id": "CAE-L2", "tech": "caesar", "expected": flag5,
+                  "text": f"ciphertext: {shifted}\nhint: 字母表整体平移"})
+    tasks.append({"id": "CAE-L3", "tech": "caesar", "expected": flag5,
+                  "text": (f"下面这串字符里，字母被沿着字母表统一推后了若干位，标点和花括号没动：\n"
+                           f"{shifted}")})
+    return tasks
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+
+def run(router: str) -> dict:
+    tasks = build_tasks()
+    rows: list[dict] = []
+    for task in tasks:
+        candidates = recall(task["text"], router=router)
+        row = {"id": task["id"], "tech": task["tech"], "router": router,
+               "recalled": [u["id"] for u in candidates], "attempts": [], "solved": False}
+        for unit in candidates:
+            values, note = extract_params(unit["id"], task["text"])
+            if values is None:
+                row["attempts"].append({"unit": unit["id"], "status": "param_extract_failed",
+                                        "note": note})
+                continue
+            code, stdout, stderr = execute(assemble(unit, values))
+            found = FLAG_RE.search(stdout)
+            ok = bool(found and found.group(0).lower() == task["expected"].lower())
+            row["attempts"].append({"unit": unit["id"],
+                                    "status": "solved" if ok else "ran_no_match",
+                                    "note": note, "exit": code,
+                                    "stderr": stderr.strip()[-120:]})
+            if ok:
+                row["solved"] = True
+                break
+        rows.append(row)
+    return {"router": router, "rows": rows}
+
+
+def summarize(run_result: dict) -> dict:
+    rows = run_result["rows"]
+    def tier(row): return row["id"].split("-")[-1]
+    out = {"router": run_result["router"]}
+    for level in ("L1", "L2", "L3"):
+        subset = [r for r in rows if tier(r) == level]
+        out[level] = {
+            "solved": sum(1 for r in subset if r["solved"]),
+            "total": len(subset),
+            "rate": round(sum(1 for r in subset if r["solved"]) / max(len(subset), 1), 3),
+        }
+    out["overall"] = {
+        "solved": sum(1 for r in rows if r["solved"]),
+        "total": len(rows),
+        "rate": round(sum(1 for r in rows if r["solved"]) / max(len(rows), 1), 3),
+    }
+    return out
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="分布漂移测试")
+    parser.add_argument("--router", choices=["hybrid", "keyword", "shape"], default="hybrid")
+    args = parser.parse_args()
+
+    routers = ["keyword", "shape", "hybrid"] if args.router == "hybrid" else [args.router]
+    all_results = []
+    summaries = []
+    for router in routers:
+        result = run(router)
+        all_results.append(result)
+        summary = summarize(result)
+        summaries.append(summary)
+        log(f"router={router}: L1 {summary['L1']['solved']}/{summary['L1']['total']}  "
+            f"L2 {summary['L2']['solved']}/{summary['L2']['total']}  "
+            f"L3 {summary['L3']['solved']}/{summary['L3']['total']}  "
+            f"总 {summary['overall']['solved']}/{summary['overall']['total']}")
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summaries": summaries, "runs": all_results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0006 — 分布漂移测试", "",
+             "同一批技术，三档陌生度：L1 自编题 / L2 改名换格式 / L3 只描述行为（不提技术名）。",
+             "", "| 召回策略 | L1 | L2 | L3 | 合计 |", "| --- | --- | --- | --- | --- |"]
+    for s in summaries:
+        lines.append(f"| {s['router']} | {s['L1']['solved']}/{s['L1']['total']} "
+                     f"| {s['L2']['solved']}/{s['L2']['total']} "
+                     f"| {s['L3']['solved']}/{s['L3']['total']} "
+                     f"| {s['overall']['solved']}/{s['overall']['total']} |")
+    lines += ["", "## 逐题明细", ""]
+    for run_ in all_results:
+        lines.append(f"### router={run_['router']}")
+        lines.append("")
+        lines.append("| 题 | 召回 | 结果 | 失败原因 |")
+        lines.append("| --- | --- | --- | --- |")
+        for row in run_["rows"]:
+            reason = "" if row["solved"] else ",".join(
+                f"{a['unit']}:{a['status']}" for a in row["attempts"][:2])
+            lines.append(f"| {row['id']} | {','.join(row['recalled'][:2])} "
+                         f"| {'✓' if row['solved'] else '✗'} | {reason} |")
+        lines.append("")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()
