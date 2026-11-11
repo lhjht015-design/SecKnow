@@ -1,0 +1,10 @@
+"""N1：单向散列。长度都不保持，也不可逆。
+
+期望：求解器识别出 not_length_preserving 并拒绝，而不是硬凑一个"明文"。
+"""
+
+import hashlib
+
+
+def enc(data):
+    return hashlib.sha256(b"exp0017-salt:" + bytes(data)).digest()

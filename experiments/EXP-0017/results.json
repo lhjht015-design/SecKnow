@@ -1,0 +1,273 @@
+{
+  "summary": {
+    "positive_total": 5,
+    "positive_solved": 5,
+    "negative_total": 3,
+    "negative_correctly_refused": 3,
+    "mean_elapsed_ms": 22.9,
+    "total_probes": 7484
+  },
+  "rows": [
+    {
+      "ok": true,
+      "strategy": "bytewise_table",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": true
+        },
+        {
+          "unit": "dependency",
+          "diagonal": true,
+          "permutation": true,
+          "dense": false
+        },
+        {
+          "unit": "byte_affine",
+          "ok": false,
+          "invertible": true
+        },
+        {
+          "unit": "byte_table",
+          "ok": true
+        },
+        {
+          "unit": "verify",
+          "ok": true
+        }
+      ],
+      "elapsed_ms": 40.2,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b73626f785f6275745f62696a6563746976657d",
+      "id": "P1",
+      "note": "逐字节 S 盒",
+      "negative": false,
+      "cipher_hex": "48cbe30eb754c252eacc4e105250da08cc66dd8d2de5d3c4",
+      "probes": 6278
+    },
+    {
+      "ok": true,
+      "strategy": "bytewise_affine",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": true
+        },
+        {
+          "unit": "dependency",
+          "diagonal": true,
+          "permutation": true,
+          "dense": false
+        },
+        {
+          "unit": "byte_affine",
+          "ok": true,
+          "invertible": true
+        },
+        {
+          "unit": "verify",
+          "ok": true
+        }
+      ],
+      "elapsed_ms": 1.6,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b627974655f616666696e655f686572657d",
+      "id": "P2",
+      "note": "逐字节仿射",
+      "negative": false,
+      "cipher_hex": "9576cabb02106e3010056246f9c387e57a328e8ab4cf",
+      "probes": 124
+    },
+    {
+      "ok": true,
+      "strategy": "gf2_linear",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": true
+        },
+        {
+          "unit": "dependency",
+          "diagonal": false,
+          "permutation": false,
+          "dense": true
+        },
+        {
+          "unit": "gf2_linearity",
+          "ok": true
+        },
+        {
+          "unit": "gf2_solve",
+          "ok": true
+        },
+        {
+          "unit": "verify",
+          "ok": true
+        }
+      ],
+      "elapsed_ms": 12.8,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b6766325f6d61747269785f6c6f76657d",
+      "id": "P3",
+      "note": "GF(2) 随机可逆矩阵",
+      "negative": false,
+      "cipher_hex": "8d55963ec2ee9611468506d7a006b9ee17d4a6981c",
+      "probes": 220
+    },
+    {
+      "ok": true,
+      "strategy": "gf2_linear",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": true
+        },
+        {
+          "unit": "dependency",
+          "diagonal": false,
+          "permutation": false,
+          "dense": true
+        },
+        {
+          "unit": "gf2_linearity",
+          "ok": true
+        },
+        {
+          "unit": "gf2_solve",
+          "ok": true
+        },
+        {
+          "unit": "verify",
+          "ok": true
+        }
+      ],
+      "elapsed_ms": 6.4,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b6665697374656c5f69735f6c696e6561727d",
+      "id": "P4",
+      "note": "三轮 Feistel（轮函数线性）",
+      "negative": false,
+      "cipher_hex": "ec84bdc6e32daae560eacc1ce20d5b890efc7343a8f620",
+      "probes": 239
+    },
+    {
+      "ok": true,
+      "strategy": "prefix_oracle",
+      "steps": [
+        {
+          "unit": "climb",
+          "ok": true,
+          "length": 24
+        }
+      ],
+      "elapsed_ms": 120.3,
+      "matches_secret": true,
+      "recovered_hex": "666c61677b7072656669785f6f7261636c655f77696e737d",
+      "id": "P5",
+      "note": "前缀校验器",
+      "negative": false,
+      "cipher_hex": null,
+      "probes": 375
+    },
+    {
+      "ok": false,
+      "reason": "not_length_preserving",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": false,
+          "mismatch": [
+            [
+              1,
+              32
+            ],
+            [
+              2,
+              32
+            ],
+            [
+              3,
+              32
+            ],
+            [
+              4,
+              32
+            ]
+          ]
+        }
+      ],
+      "elapsed_ms": 0.2,
+      "id": "N1",
+      "note": "sha256（长度不保持）",
+      "negative": true,
+      "cipher_hex": "6435530ac60d53882800e146501384529b7affaa1ff254f9def3c0a9523e144a",
+      "probes": 13
+    },
+    {
+      "ok": false,
+      "reason": "structure_unknown",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": true
+        },
+        {
+          "unit": "length_preserving",
+          "ok": true
+        },
+        {
+          "unit": "dependency",
+          "diagonal": false,
+          "permutation": false,
+          "dense": true
+        },
+        {
+          "unit": "gf2_linearity",
+          "ok": false
+        }
+      ],
+      "elapsed_ms": 1.9,
+      "id": "N2",
+      "note": "非线性 32 位混合",
+      "negative": true,
+      "cipher_hex": "b6023d0ca4180b1aaa6c492c0d31cadf352c291745ad8005",
+      "probes": 232
+    },
+    {
+      "ok": false,
+      "reason": "nondeterministic",
+      "steps": [
+        {
+          "unit": "determinism",
+          "ok": false
+        }
+      ],
+      "elapsed_ms": 0.1,
+      "id": "N3",
+      "note": "每次换随机掩码",
+      "negative": true,
+      "cipher_hex": "a81e104bbb6041ccaa170549b26347cca7010545a35158df",
+      "probes": 3
+    }
+  ]
+}

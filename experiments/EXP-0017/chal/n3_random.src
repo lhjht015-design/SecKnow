@@ -1,0 +1,12 @@
+"""N3：每次调用都换随机掩码。
+
+期望：求解器检测到同一输入两次输出不同，返回 nondeterministic 并拒绝。
+真实题里带随机 nonce/IV 的加密也属于这一类——必须把 nonce 一起拿到才能逆。
+"""
+
+import os
+
+
+def enc(data):
+    mask = os.urandom(8)
+    return bytes(b ^ mask[i & 7] for i, b in enumerate(data))

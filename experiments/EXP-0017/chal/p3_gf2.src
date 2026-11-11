@@ -1,0 +1,63 @@
+"""P3：整块 GF(2) 线性变换 out = M·x ⊕ c。
+
+矩阵按输入长度确定性生成，且按 L·U（对角为 1 的上下三角）构造保证可逆。
+单看代码是一堆移位与异或，很难一眼看出"它其实是线性映射"——但黑盒探测
+只需要 8n+1 次就能把整个矩阵测出来，再用 GF(2) 消元反解。
+"""
+
+import hashlib
+import random
+
+_CACHE = {}
+
+
+def _columns(dim):
+    if dim in _CACHE:
+        return _CACHE[dim]
+    seed = int.from_bytes(hashlib.sha256(f"exp0017-gf2:{dim}".encode()).digest(), "big")
+    rng = random.Random(seed)
+
+    upper = []
+    for j in range(dim):
+        v = 1 << j
+        for k in range(j + 1, dim):
+            if rng.getrandbits(1):
+                v |= 1 << k
+        upper.append(v)
+
+    lower = []
+    for j in range(dim):
+        v = 1 << j
+        for k in range(j):
+            if rng.getrandbits(1):
+                v |= 1 << k
+        lower.append(v)
+
+    def apply(columns, value):
+        out = 0
+        index = 0
+        while value:
+            if value & 1:
+                out ^= columns[index]
+            value >>= 1
+            index += 1
+        return out
+
+    columns = [apply(lower, upper[j]) for j in range(dim)]
+    const = rng.getrandbits(dim)
+    _CACHE[dim] = (columns, const)
+    return _CACHE[dim]
+
+
+def enc(data):
+    dim = 8 * len(data)
+    columns, const = _columns(dim)
+    value = int.from_bytes(data, "little")
+    out = const
+    index = 0
+    while value:
+        if value & 1:
+            out ^= columns[index]
+        value >>= 1
+        index += 1
+    return out.to_bytes(len(data), "little")

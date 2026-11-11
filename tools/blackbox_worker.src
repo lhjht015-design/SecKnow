@@ -1,0 +1,59 @@
+"""黑盒 worker：加载题目自带的加密/校验脚本，按行提供探测接口。
+
+用法：
+    python -u tools/blackbox_worker.src <模块路径> <enc|check>
+
+协议（stdin 一行一条，stdout 一行一条）：
+    E <hex>   →  O <hex>   调用模块的 enc(bytes)
+    C <hex>   →  O <int>   调用模块的 check(bytes)
+    出错      →  X <异常信息>
+
+求解器从不读取模块源码，只通过这个进程执行它——这正是"不了解逻辑也能用"的前提。
+真实场景下运行主办方代码应当放进沙箱；这里的模块全部来自本仓库。
+"""
+
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import sys
+import traceback
+
+
+def load_module(path: str):
+    loader = importlib.machinery.SourceFileLoader("challenge", path)
+    spec = importlib.util.spec_from_loader("challenge", loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["challenge"] = module
+    loader.exec_module(module)
+    return module
+
+
+def main() -> None:
+    if len(sys.argv) != 3:
+        print("usage: blackbox_worker.src <module> <enc|check>", file=sys.stderr)
+        raise SystemExit(2)
+    path, mode = sys.argv[1], sys.argv[2]
+    module = load_module(path)
+    function = module.enc if mode == "enc" else module.check
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            op, payload = line.split(" ", 1)
+            data = bytes.fromhex(payload)
+            result = function(data)
+            if isinstance(result, (bytes, bytearray)):
+                sys.stdout.write("O " + bytes(result).hex() + "\n")
+            else:
+                sys.stdout.write("O " + str(int(result)) + "\n")
+        except Exception as exc:  # noqa: BLE001 - 协议层要把异常如实回传
+            sys.stdout.write("X " + repr(exc) + "\n")
+            traceback.print_exc(file=sys.stderr)
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

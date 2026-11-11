@@ -1,0 +1,25 @@
+"""P1：逐字节替换（位置相关 S 盒 + 位置常量），但每个位置都是双射。
+
+主办方的典型写法：四张自定义表、按位置轮换、再异或一个位置常量。
+变量名故意起得没有语义，模拟"自己实现的逻辑"。
+"""
+
+_K = []
+
+
+def _build():
+    for k in range(4):
+        row = bytearray(256)
+        for b in range(256):
+            row[b] = ((b * 181 + 0x3B + k * 97) ^ (k * 0x5D)) & 0xFF
+        _K.append(bytes(row))
+
+
+_build()
+
+
+def enc(data):
+    out = bytearray(len(data))
+    for i in range(len(data)):
+        out[i] = _K[i & 3][data[i]] ^ ((i * 0x5D + 0x11) & 0xFF)
+    return bytes(out)

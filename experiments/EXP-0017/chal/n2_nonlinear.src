@@ -1,0 +1,20 @@
+"""N2：长度保持、确定性的非线性混合（32 位乘法 + 移位异或）。
+
+它既不是逐字节、也不是置换、也不是 GF(2) 仿射。
+期望：求解器返回 structure_unknown 并拒绝。
+"""
+
+_M32 = 0xFFFFFFFF
+
+
+def enc(data):
+    out = bytearray()
+    for offset in range(0, len(data), 4):
+        chunk = bytes(data[offset:offset + 4]).ljust(4, b"\x00")
+        word = int.from_bytes(chunk, "little")
+        word = (word * 0x9E3779B1 + 0x85EBCA6B) & _M32
+        word ^= word >> 13
+        word = (word * 0xC2B2AE35) & _M32
+        word ^= (word << 7) & _M32
+        out += word.to_bytes(4, "little")
+    return bytes(out[:len(data)])

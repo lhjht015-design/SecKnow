@@ -1,0 +1,15 @@
+"""P5：典型逆向校验器——只告诉你"对了多少个前缀字节"。
+
+没有加密脚本可逆推，也没有符号表可看；但黑盒逐字节爬坡就够：
+对每一位枚举可打印字符，前缀长度增加就保留。这是不用 LLM 的经典做法。
+"""
+
+SECRET = b"flag{prefix_oracle_wins}"
+
+
+def check(data):
+    limit = min(len(data), len(SECRET))
+    index = 0
+    while index < limit and data[index] == SECRET[index]:
+        index += 1
+    return index

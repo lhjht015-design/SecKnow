@@ -1,0 +1,31 @@
+"""P4：三轮 Feistel，"轮函数" = 循环左移 + 异或常量。
+
+Feistel 通常是"非线性"的代名词，但只要轮函数是线性的，整个分组变换
+在 GF(2) 上仍然是仿射的。黑盒线性检测会把它和 P3 归为同一类并直接反解——
+这正是"代码看起来复杂，行为结构简单"的例子。
+"""
+
+_ROUNDS = 3
+
+
+def _rotl(value, shift, width):
+    if width <= 0:
+        return value
+    shift %= width
+    if shift == 0:
+        return value
+    mask = (1 << width) - 1
+    return ((value << shift) | (value >> (width - shift))) & mask
+
+
+def enc(data):
+    width = 4 * len(data)          # 每个半块 4n 位，总宽 8n 位
+    mask = (1 << width) - 1
+    value = int.from_bytes(data, "little")
+    left = value >> width
+    right = value & mask
+    for r in range(_ROUNDS):
+        key = (0xA5A5A5A5C3C3C3C3 + r * 0x1234567) & mask
+        f = _rotl(right, 5 + r, width) ^ key
+        left, right = right, left ^ f
+    return ((left << width) | right).to_bytes(len(data), "little")

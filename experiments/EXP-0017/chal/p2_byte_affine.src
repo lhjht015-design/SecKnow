@@ -1,0 +1,15 @@
+"""P2：逐字节仿射变换 out[i] = A*x[i] + B[i] (mod 256)。
+
+A 取奇数保证是双射；B 依赖位置。看起来像"每组数据用不同参数"，实际是
+低复杂度结构，两次探测就能定出 A，一次探测定出 B。
+"""
+
+_A = 0x9D
+
+
+def enc(data):
+    out = bytearray(len(data))
+    for i in range(len(data)):
+        b = ((i * 0x2B + 0x07) ^ (i << 3)) & 0xFF
+        out[i] = (_A * data[i] + b) & 0xFF
+    return bytes(out)

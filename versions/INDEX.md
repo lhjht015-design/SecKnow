@@ -28,6 +28,7 @@
 | v016 | [v016_ret2libc.src](v016_ret2libc.src) | ret2libc：PLT 桩解析 + libc 偏移 + 两阶段泄漏利用 | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 | v017 | [v017_ret2win_retest.src](v017_ret2win_retest.src) | ret2win 复测：stripped / -O2 / 改名后的后门定位 | pyelftools/capstone + WSL | 正样本 4/4，负样本 2/2 |
 | v018 | [v018_three_protections.src](v018_three_protections.src) | 三保护组合：fmt 泄漏 canary+PIE → GOT 泄漏 libc → ROP | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
+| v019 | [v019_blackbox_logic.src](v019_blackbox_logic.src) | 黑盒行为刻画：不读源码反解题目自定义逻辑 | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 
 ## 各版本说明
 
@@ -596,3 +597,49 @@ python versions/v018_three_protections.src --only T1
 ```
 
 **产出**：`experiments/EXP-0016/{lab/,results.json,report.md}`
+
+### v019_blackbox_logic.src
+
+**回答的问题**（用户提出）：LAW-0017 显示六成步骤是题目特有逻辑，题库里没有。
+除了"读懂代码"或"问 LLM"，不用 LLM 还能怎么办？
+
+**思路**：把"理解逻辑"换成"刻画行为"。出题人给的加密脚本/校验器是可执行黑盒，
+只喂输入、看输出，用探测判定结构类别：
+
+| 结构 | 判定方法 | 反解 |
+| --- | --- | --- |
+| 逐字节双射（含位置相关 S 盒） | 依赖矩阵为对角 | 逐位置 256 项建表反查 |
+| 逐字节仿射 `a*x+b` | 2 次探测定 a、1 次定 b | 解析求逆 |
+| 位置置换 + 常量异或 | 依赖矩阵是排列 | 探测定映射后按位反推 |
+| GF(2) 仿射（含线性轮函数 Feistel） | 8n+1 次测列向量 + 线性性抽检 | GF(2) 高斯消元 |
+| 前缀校验器 | 逐字节爬坡 | 枚举可打印字符 |
+
+求解器通过 `tools/blackbox_worker.src` 只执行挑战脚本，**从不读取源码**；
+每个解都要求"重新加密 == 原密文"，判不出结构就拒绝。
+
+**结果（连续 2 次一致）**
+
+| 题 | 结果 | 策略 / 原因 | 探测数 |
+| --- | --- | --- | --- |
+| P1 逐字节 S 盒 | ✓ | `bytewise_table` | 6278 |
+| P2 逐字节仿射 | ✓ | `bytewise_affine` | 124 |
+| P3 GF(2) 随机矩阵 | ✓ | `gf2_linear` | 220 |
+| P4 三轮 Feistel | ✓ | `gf2_linear` | 239 |
+| P5 前缀校验器 | ✓ | `prefix_oracle` | 375 |
+| N1 sha256 | ✓ 拒绝 | `not_length_preserving` | 13 |
+| N2 非线性混合 | ✓ 拒绝 | `structure_unknown` | 232 |
+| N3 随机掩码 | ✓ 拒绝 | `nondeterministic` | 3 |
+
+正样本 5/5，负样本 3/3；总计 7484 次探测、平均 22.9 ms/题。
+
+**适用边界**（见 `laws/LAW-0023.md`）：必须有可执行的 oracle（只给密文不成立）；
+只覆盖确定、长度保持、逐字节双射 / 置换 / GF(2) 仿射；校验器必须泄露进度；
+运行主办方代码应放进沙箱。
+
+**运行**
+```bash
+python versions/v019_blackbox_logic.src
+python versions/v019_blackbox_logic.src --only P3
+```
+
+**产出**：`experiments/EXP-0017/{chal/,results.json,report.md}`

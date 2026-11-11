@@ -1,0 +1,525 @@
+"""
+v019_blackbox_logic.src — 不用 LLM，面对"主办方自己实现逻辑"的题目
+
+问题
+    EXP-0011 统计过：726 条真实攻击链里 61.7% 的步骤是题目特有逻辑，
+    题库里没有对应单元，检索和规划都变不出来（LAW-0017）。
+    那么除了"读懂代码"和"求助 LLM"，还有没有别的路？
+
+思路：把"理解逻辑"换成"刻画行为"
+    出题人给的加密脚本/校验器本身就是一个**可执行的黑盒**。
+    不读源码，只喂输入、看输出，用探测判定它的结构类别：
+        逐字节双射（含位置相关 S-box） → 逐位置建表反查
+        逐字节仿射 a*x+b (mod 256)     → 2 次探测定 a、1 次定 b，解析求逆
+        位置置换 + 常量异或             → 探测定置换，按位反推
+        GF(2) 仿射（含"看起来非线性"的 Feistel） → 8n+1 次探测测出矩阵，消元反解
+        前缀校验器                      → 逐字节爬坡
+    判不出结构就**如实拒绝**，不猜、不编。
+
+为什么这是不用 LLM 的
+    整个判定与反解只用到：差分探测、线性性测试、GF(2) 高斯消元、逐字节枚举。
+    没有任何"生成"环节；每一步都能被重新执行验证。
+
+测什么
+    P1 逐字节 S 盒          → bytewise_table
+    P2 逐字节仿射           → bytewise_affine
+    P3 GF(2) 随机可逆矩阵    → gf2_linear
+    P4 三轮 Feistel（轮函数线性）→ 应被识别为 gf2_linear
+    P5 前缀校验器           → prefix_oracle
+    N1 sha256（长度不保持）  → not_length_preserving
+    N2 非线性 32 位混合      → structure_unknown
+    N3 每次换随机掩码        → nondeterministic
+
+运行
+    python versions/v019_blackbox_logic.src
+    python versions/v019_blackbox_logic.src --only P3
+
+产出物
+    experiments/EXP-0017/{results.json,report.md}
+    experiments/EXP-0017/chal/*.src（题目自带的"实现"）
+    tools/blackbox_worker.src（只执行、不读源码的隔离进程）
+"""
+
+from __future__ import annotations
+
+import json
+import queue
+import random
+import string
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0017"
+CHAL_DIR = OUT_DIR / "chal"
+WORKER = ROOT / "tools" / "blackbox_worker.src"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 黑盒进程
+# --------------------------------------------------------------------------------------
+
+class Oracle:
+    """通过子进程执行题目自带的脚本；求解器从不读取它的源码。"""
+
+    def __init__(self, module: Path, mode: str) -> None:
+        self.mode = mode
+        self.probes = 0
+        self.proc = subprocess.Popen(
+            [sys.executable, "-u", str(WORKER), str(module), mode],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        self.replies: queue.Queue[str | None] = queue.Queue()
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        for line in self.proc.stdout:
+            self.replies.put(line.strip())
+        self.replies.put(None)
+
+    def call_many(self, items: list[bytes]) -> list:
+        op = "E" if self.mode == "enc" else "C"
+        for item in items:
+            self.proc.stdin.write(f"{op} {item.hex()}\n")
+        self.proc.stdin.flush()
+        self.probes += len(items)
+        results = []
+        for _ in items:
+            line = self.replies.get(timeout=120)
+            if line is None:
+                raise RuntimeError("worker 退出")
+            if not line.startswith("O "):
+                raise RuntimeError(f"worker 返回异常：{line}")
+            payload = line[2:]
+            results.append(bytes.fromhex(payload) if self.mode == "enc"
+                           else int(payload))
+        return results
+
+    def call(self, item: bytes):
+        return self.call_many([item])[0]
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+
+
+# --------------------------------------------------------------------------------------
+# GF(2) 线性方程组
+# --------------------------------------------------------------------------------------
+
+def gf2_solve(columns: list[int], target: int, nbits: int) -> int | None:
+    """解 M·x = target。columns[j] 是输入第 j 位的像。
+
+    返回唯一解；矩阵奇异或不相容返回 None。
+    """
+    rows: list[tuple[int, int]] = []
+    for bit in range(nbits):
+        row = 0
+        for j, column in enumerate(columns):
+            if (column >> bit) & 1:
+                row |= 1 << j
+        rows.append((row, (target >> bit) & 1))
+
+    pivot_of: dict[int, int] = {}
+    position = 0
+    for column in range(nbits):
+        pivot = None
+        for candidate in range(position, len(rows)):
+            if (rows[candidate][0] >> column) & 1:
+                pivot = candidate
+                break
+        if pivot is None:
+            continue
+        rows[position], rows[pivot] = rows[pivot], rows[position]
+        for index in range(len(rows)):
+            if index != position and ((rows[index][0] >> column) & 1):
+                rows[index] = (rows[index][0] ^ rows[position][0],
+                               rows[index][1] ^ rows[position][1])
+        pivot_of[column] = position
+        position += 1
+
+    for index in range(position, len(rows)):
+        if rows[index][0] == 0 and rows[index][1] == 1:
+            return None
+    if len(pivot_of) < nbits:
+        return None
+    solution = 0
+    for column, index in pivot_of.items():
+        if rows[index][1]:
+            solution |= 1 << column
+    return solution
+
+
+# --------------------------------------------------------------------------------------
+# 结构刻画与反解
+# --------------------------------------------------------------------------------------
+
+def _refuse(reason: str, **extra) -> dict:
+    return {"ok": False, "reason": reason, **extra}
+
+
+def _verify(oracle: Oracle, plain: bytes, cipher: bytes) -> bool:
+    return oracle.call(plain) == cipher
+
+
+def characterize(oracle: Oracle, cipher: bytes) -> dict:
+    started = time.perf_counter()
+    n = len(cipher)
+    steps: list[dict] = []
+
+    # 1) 确定性
+    zero = bytes(n)
+    first, second = oracle.call_many([zero, zero])
+    if first != second:
+        steps.append({"unit": "determinism", "ok": False})
+        return {**_refuse("nondeterministic"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    steps.append({"unit": "determinism", "ok": True})
+
+    # 2) 长度保持（多长度采样，避免只在 n 上巧合）
+    lengths = sorted({1, 2, 3, 4, 5, 8, 13, 16, 21, n})
+    outputs = oracle.call_many([bytes(length) for length in lengths])
+    bad = [(L, len(o)) for L, o in zip(lengths, outputs) if len(o) != L]
+    if bad:
+        steps.append({"unit": "length_preserving", "ok": False, "mismatch": bad[:4]})
+        return {**_refuse("not_length_preserving"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    steps.append({"unit": "length_preserving", "ok": True})
+
+    base = first
+    # 3) 依赖矩阵：逐位置翻 0xFF，看哪些输出位置变化
+    probes = []
+    for i in range(n):
+        item = bytearray(n)
+        item[i] = 0xFF
+        probes.append(bytes(item))
+    outs = oracle.call_many(probes)
+    changed = [[j for j in range(n) if outs[i][j] != base[j]] for i in range(n)]
+    diagonal = all(changed[i] == [i] for i in range(n))
+    is_perm = (all(len(row) == 1 for row in changed)
+               and len({row[0] for row in changed}) == n)
+    steps.append({"unit": "dependency", "diagonal": diagonal,
+                  "permutation": is_perm,
+                  "dense": not (diagonal or is_perm)})
+
+    # 4a) 逐字节仿射：a*x+b
+    if diagonal:
+        ones, mids, v37, vc4 = [], [], [], []
+        for i in range(n):
+            for store, value in ((ones, 0x01), (mids, 0x9E)):
+                item = bytearray(n)
+                item[i] = value
+                store.append(bytes(item))
+            item = bytearray(n)
+            item[i] = 0x37
+            v37.append(bytes(item))
+            item = bytearray(n)
+            item[i] = 0xC4
+            vc4.append(bytes(item))
+        o1 = oracle.call_many(ones)
+        om = oracle.call_many(mids)
+        o37 = oracle.call_many(v37)
+        oc4 = oracle.call_many(vc4)
+        slopes = [(o1[i][i] - base[i]) & 0xFF for i in range(n)]
+        affine_ok = all(
+            om[i][i] == (slopes[i] * 0x9E + base[i]) & 0xFF
+            and o37[i][i] == (slopes[i] * 0x37 + base[i]) & 0xFF
+            and oc4[i][i] == (slopes[i] * 0xC4 + base[i]) & 0xFF
+            for i in range(n))
+        invertible_a = all(s & 1 for s in slopes)
+        steps.append({"unit": "byte_affine", "ok": affine_ok,
+                      "invertible": invertible_a})
+        if affine_ok and invertible_a:
+            plain = bytearray(n)
+            for i in range(n):
+                inverse = pow(slopes[i], -1, 256)
+                plain[i] = (inverse * ((cipher[i] - base[i]) & 0xFF)) & 0xFF
+            plain = bytes(plain)
+            if _verify(oracle, plain, cipher):
+                steps.append({"unit": "verify", "ok": True})
+                return {"ok": True, "strategy": "bytewise_affine", "plain": plain,
+                        "steps": steps,
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+            return {**_refuse("verify_failed"), "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        # 4b) 逐位置建表（任意逐字节双射）
+        tables = []
+        bijective = True
+        for i in range(n):
+            batch = []
+            for value in range(256):
+                item = bytearray(n)
+                item[i] = value
+                batch.append(bytes(item))
+            results = oracle.call_many(batch)
+            column = bytes(results[value][i] for value in range(256))
+            if len(set(column)) != 256:
+                bijective = False
+                break
+            tables.append(column)
+        steps.append({"unit": "byte_table", "ok": bijective})
+        if not bijective:
+            return {**_refuse("not_bijective"), "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+        plain = bytearray(n)
+        for i in range(n):
+            lookup = bytearray(256)
+            for value in range(256):
+                lookup[tables[i][value]] = value
+            plain[i] = lookup[cipher[i]]
+        plain = bytes(plain)
+        if _verify(oracle, plain, cipher):
+            steps.append({"unit": "verify", "ok": True})
+            return {"ok": True, "strategy": "bytewise_table", "plain": plain,
+                    "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+        return {**_refuse("verify_failed"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 5) 位置置换 + 常量
+    if is_perm:
+        probes = []
+        for i in range(n):
+            item = bytearray(n)
+            item[i] = 0xA5
+            probes.append(bytes(item))
+        outs = oracle.call_many(probes)
+        mapping = [None] * n
+        ok = True
+        for i in range(n):
+            hits = [j for j in range(n) if outs[i][j] != base[j]]
+            if len(hits) != 1 or ((outs[i][hits[0]] ^ base[hits[0]]) != 0xA5):
+                ok = False
+                break
+            mapping[hits[0]] = i        # out[j] = x[mapping[j]] ^ base[j]
+        steps.append({"unit": "permutation", "ok": ok})
+        if ok and all(m is not None for m in mapping):
+            plain = bytearray(n)
+            for j in range(n):
+                plain[mapping[j]] = cipher[j] ^ base[j]
+            plain = bytes(plain)
+            if _verify(oracle, plain, cipher):
+                steps.append({"unit": "verify", "ok": True})
+                return {"ok": True, "strategy": "permutation", "plain": plain,
+                        "steps": steps,
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+        return {**_refuse("structure_unknown"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 6) GF(2) 仿射：测列向量 + 线性性抽检
+    nbits = 8 * n
+    basis = []
+    for bit in range(nbits):
+        item = bytearray(n)
+        item[bit // 8] |= 1 << (bit % 8)
+        basis.append(bytes(item))
+    outs = oracle.call_many(basis)
+    zero_value = int.from_bytes(base, "little")
+    columns = [int.from_bytes(out, "little") ^ zero_value for out in outs]
+
+    rng = random.Random(0x5EC)
+    linear = True
+    for _ in range(6):
+        x1 = bytes(rng.getrandbits(8) for _ in range(n))
+        x2 = bytes(rng.getrandbits(8) for _ in range(n))
+        x12 = bytes(a ^ b for a, b in zip(x1, x2))
+        o1, o2, o12 = oracle.call_many([x1, x2, x12])
+        predicted = (int.from_bytes(o1, "little")
+                     ^ int.from_bytes(o2, "little") ^ zero_value)
+        if predicted != int.from_bytes(o12, "little"):
+            linear = False
+            break
+    steps.append({"unit": "gf2_linearity", "ok": linear})
+    if not linear:
+        return {**_refuse("structure_unknown"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    target = int.from_bytes(cipher, "little") ^ zero_value
+    solution = gf2_solve(columns, target, nbits)
+    steps.append({"unit": "gf2_solve", "ok": solution is not None})
+    if solution is None:
+        return {**_refuse("not_invertible"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    plain = solution.to_bytes(n, "little")
+    if not _verify(oracle, plain, cipher):
+        return {**_refuse("verify_failed"), "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    steps.append({"unit": "verify", "ok": True})
+    return {"ok": True, "strategy": "gf2_linear", "plain": plain, "steps": steps,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 前缀校验器：逐字节爬坡
+# --------------------------------------------------------------------------------------
+
+CHARSET = "".join(dict.fromkeys(
+    string.ascii_lowercase + string.digits + "_{}" +
+    string.ascii_uppercase + "!@#$%^&*()-+=[]:;,.<>?/|~ ")).encode()
+
+
+def solve_checker(oracle: Oracle, max_len: int = 64) -> dict:
+    started = time.perf_counter()
+    current = b""
+    steps: list[dict] = []
+    for _ in range(max_len):
+        found = None
+        for char in CHARSET:
+            probe = current + bytes([char])
+            score = oracle.call(probe)
+            if score > len(current):
+                found = bytes([char])
+                break
+        if found is None:
+            steps.append({"unit": "climb", "ok": False, "prefix": current.hex()})
+            return {**_refuse("checker_stuck"), "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+        current += found
+        # flag 以 '}' 结束是赛制约定；命中后停，并做一次整串复核
+        if current.endswith(b"}") and oracle.call(current) == len(current):
+            steps.append({"unit": "climb", "ok": True, "length": len(current)})
+            return {"ok": True, "strategy": "prefix_oracle", "plain": current,
+                    "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    return {**_refuse("checker_maxlen"), "steps": steps,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+SECRETS = {
+    "P1": b"flag{sbox_but_bijective}",
+    "P2": b"flag{byte_affine_here}",
+    "P3": b"flag{gf2_matrix_love}",
+    "P4": b"flag{feistel_is_linear}",
+    "P5": b"flag{prefix_oracle_wins}",
+    "N1": b"flag{sha256_is_one_way}",
+    "N2": b"flag{nonlinear_mixing_x}",
+    "N3": b"flag{nondeterministic_v}",
+}
+
+CASES = [
+    ("P1", "p1_sbox.src", "enc", False, "逐字节 S 盒"),
+    ("P2", "p2_byte_affine.src", "enc", False, "逐字节仿射"),
+    ("P3", "p3_gf2.src", "enc", False, "GF(2) 随机可逆矩阵"),
+    ("P4", "p4_feistel.src", "enc", False, "三轮 Feistel（轮函数线性）"),
+    ("P5", "p5_checker.src", "check", False, "前缀校验器"),
+    ("N1", "n1_sha.src", "enc", True, "sha256（长度不保持）"),
+    ("N2", "n2_nonlinear.src", "enc", True, "非线性 32 位混合"),
+    ("N3", "n3_random.src", "enc", True, "每次换随机掩码"),
+]
+
+
+def run_case(case: tuple) -> dict:
+    tid, module_name, mode, negative, note = case
+    module = CHAL_DIR / module_name
+    secret = SECRETS[tid]
+    oracle = Oracle(module, mode)
+    try:
+        if mode == "enc":
+            cipher = oracle.call(secret)
+            result = characterize(oracle, cipher)
+        else:
+            cipher = None
+            result = solve_checker(oracle)
+    finally:
+        probes = oracle.probes
+        oracle.close()
+
+    if result["ok"]:
+        result["matches_secret"] = (result["plain"] == secret)
+        result["recovered_hex"] = result["plain"].hex()
+        result.pop("plain", None)
+    result.update({"id": tid, "note": note, "negative": negative,
+                   "cipher_hex": cipher.hex() if cipher else None,
+                   "probes": probes})
+    return result
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="黑盒逻辑刻画与反解")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    rows: list[dict] = []
+    for case in CASES:
+        if args.only and case[0] != args.only:
+            continue
+        log(f"  {case[0]}: {case[4]} ...")
+        row = run_case(case)
+        rows.append(row)
+        if row["negative"]:
+            verdict = "OK(如实拒绝)" if not row["ok"] else "UNEXPECTED"
+            detail = row.get("reason") or row.get("strategy") or ""
+        else:
+            ok = row["ok"] and row.get("matches_secret")
+            verdict = "OK" if ok else "FAILED"
+            detail = row.get("strategy") or row.get("reason") or ""
+        log(f"  {case[0]}: {verdict:12} {detail:20} probes={row['probes']:5} "
+            f"{row['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["ok"] and r.get("matches_secret")),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if not r["ok"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+        "total_probes": sum(r["probes"] for r in rows),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0017 — 黑盒刻画：不读逻辑也能反解", "",
+             "不读源码，只通过执行探测判定结构类别；判不出就如实拒绝。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 策略 / 原因 | 探测数 | 耗时 |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实拒绝" if not row["ok"] else "✗ 不该解出"
+            kind = "负样本"
+        else:
+            ok = row["ok"] and row.get("matches_secret")
+            mark = "✓ 解出" if ok else "✗ 失败"
+            kind = "正样本"
+        detail = row.get("strategy") or row.get("reason") or "—"
+        lines.append(f"| {row['id']} | {kind}（{row['note']}） | {mark} | {detail} "
+                     f"| {row['probes']} | {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()
