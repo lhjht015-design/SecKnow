@@ -14,6 +14,7 @@
 | v002 | [v002_bulk_ingest.src](v002_bulk_ingest.src) | 外部知识库批量导入（修复 O(n²)） | BGE-M3 权重（可选） | 可运行，dry-run 通过 |
 | v003 | [v003_verified_answer.src](v003_verified_answer.src) | 带确定性验证的离线回答（实现 LAW-0001） | Ollama + SecKnow 索引 | 逻辑自测通过，待真实模型评测 |
 | v004 | [v004_retrieval_bench.src](v004_retrieval_bench.src) | 用 meta WP 真值客观评测检索质量 | SecKnow 索引 | 已跑通，120 题数据已出 |
+| v005 | [v005_sag2_multihop.src](v005_sag2_multihop.src) | SAG2 式离线多跳检索（BM25 + 本地判官 + 词扩展） | SecKnow 索引 + reranker | 已实现，待评测 |
 
 ## 各版本说明
 
@@ -97,3 +98,42 @@ Milvus 未运行时，这是本地向量检索的唯一数据来源。
 ```
 
 **产出**：`experiments/EXP-0002/{results.json,report.md}`
+
+### v004_retrieval_bench.src
+
+**回答的问题**：比赛现场不能用 AI，那这个知识库到底找不找得到该看的东西？
+用 1156 篇 meta WP 的 `tags` 当真值，可大规模自动评分。
+
+**查询构造（防泄漏）**：只用 `title + contest + difficulty + vuln_type`，
+**刻意排除** `tags` / `one_liner` / `attack_chain` / `key_payload`——那些就是答案。
+
+**参数**：`--sample N`、`--top-k K`、`--no-dense`（A/B 关掉向量通道）
+
+**产出**：`experiments/EXP-0003/{results.json,report.md}`
+
+### v005_sag2_multihop.src
+
+**回答的问题**：SAG2（arXiv:2610.22588，embedding-free 多跳检索）能不能离线用？
+我们原来"转向量 + 向量重组推理"的路子还有没有戏？
+
+**SAG2 的机制**：BM25(FTS5) 取候选 → JEV 判断哪些段落有用 → 被选中的段落提供新词 →
+下一轮检索，默认 2 轮。建库零模型调用。
+
+**关键判断**：SAG2 的**架构完全可离线**（就是 SQLite FTS5 + BM25），
+但 **JEV 按发表形态是在线 API**（`api.typesafe.ai`，model `jev-latest`）。
+所以本文件给判官做了两档，**都不使用生成式 LLM**：
+
+| `--judge` | 判官 | 是否用神经模型 | 实测 excl_self | 单题耗时 |
+| --- | --- | --- | --- | --- |
+| `reranker`（默认） | `bge-reranker-v2-m3`（cross-encoder，判别式，不生成文本） | 是（非生成式） | 0.175 | 5.5 s |
+| `none` | 无，直接按 BM25 分数排序 | **否，零模型** | 0.109 | **0.69 s** |
+
+**链路**
+```
+BM25(FTS5) 取候选 → 判官（reranker 或 BM25）→ jieba 从选中段落抽新词 → 再检索 → RRF 合并
+```
+
+**参数**：`--rounds N`（0 = 单跳基线）、`--judge reranker|none`、
+`--candidates`、`--judge-keep`、`--expand-n`
+
+**产出**：`experiments/EXP-0004/{results.json,report.md}`

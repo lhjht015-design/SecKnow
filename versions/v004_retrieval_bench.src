@@ -258,10 +258,19 @@ def score_one(entry: dict, hits, tag_index: dict[str, set[str]],
               has_similar_ground_truth: bool) -> dict:
     """tag_index: relative_path -> 该 WP 的 tags 集合，用于判断"命中了哪篇 WP"。"""
     retrieved_text = " ".join(hit.chunk.text for hit in hits).casefold()
+    own_relative = entry["relative_path"]
+    other_text = " ".join(
+        hit.chunk.text for hit in hits
+        if (hit.chunk.citation.relative_path or "").replace("\\", "/") != own_relative
+    ).casefold()
 
     tags = [t for t in entry["tags"] if len(t) >= 2]
     found_tags = [t for t in tags if t.casefold() in retrieved_text]
     tag_recall = len(found_tags) / len(tags) if tags else None
+    # 排除题目自身 meta 文件后的召回。自身文件当然含全部真值标签，
+    # 不排除的话 tag_recall 会被泄漏抬到接近 1.0（见 laws/LAW-0009）。
+    found_other = [t for t in tags if t.casefold() in other_text]
+    tag_recall_excl_self = len(found_other) / len(tags) if tags else None
 
     own_path = entry["relative_path"]
     own_tags = set(t.casefold() for t in entry["tags"])
@@ -305,6 +314,7 @@ def score_one(entry: dict, hits, tag_index: dict[str, set[str]],
         "found_tags": found_tags,
         "missing_tags": [t for t in tags if t not in found_tags],
         "tag_recall": tag_recall,
+        "tag_recall_excl_self": tag_recall_excl_self,
         "self_leak": self_leak,
         "similar_wp": similar,
         "similar_ground_truth_exists": has_similar_ground_truth,
@@ -327,6 +337,8 @@ def main() -> None:
     parser.add_argument("--sample", type=int, default=120, help="抽样题数；0 表示全部")
     parser.add_argument("--top-k", type=int, default=8)
     parser.add_argument("--mode", default=None, help="覆盖运行模式（strict-lexical/competition/enhanced）")
+    parser.add_argument("--no-dense", action="store_true",
+                        help="禁用本地 dense 向量通道。用于 A/B：向量到底有没有用。")
     args = parser.parse_args()
 
     entries = load_meta_wps()
@@ -352,6 +364,18 @@ def main() -> None:
     if args.mode:
         settings = settings.model_copy(update={"mode": args.mode})
     service = RetrievalService(settings)
+    if args.no_dense:
+        class _DisabledDense:
+            """把本地向量通道关掉的替身，用于严格的 A/B 对照。"""
+
+            def healthy(self) -> bool:
+                return False
+
+            def hybrid_search(self, *args, **kwargs):  # noqa: ANN002, ANN003, ARG002
+                return {"hybrid": [], "dense": [], "sparse": []}
+
+        service.dense = _DisabledDense()
+        log("已禁用 dense 向量通道（A/B 对照组）")
     log("检索服务就绪，开始评测…")
 
     rows: list[dict] = []
@@ -382,6 +406,7 @@ def main() -> None:
         "top_k": args.top_k,
         "mode": settings.mode.value,
         "tag_recall_at_k": mean([r["tag_recall"] for r in rows]),
+        "tag_recall_excl_self": mean([r.get("tag_recall_excl_self") for r in rows]),
         "self_leak_rate": mean([1.0 if r["self_leak"] else 0.0 for r in rows]),
         "similar_wp_rate": mean([1.0 if r["similar_wp"] else 0.0 for r in rows]),
         "similar_wp_ground_truth_exists_rate": mean(

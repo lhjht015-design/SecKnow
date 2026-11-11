@@ -1,0 +1,591 @@
+"""
+v005_sag2_multihop.src — SAG2 式「查询时多跳」检索（完全离线）
+
+要回答的问题
+    用户问：SAG2 和 JEV 能不能做离线检索？我们原来"转向量 + 向量重组推理"的路子还有没有戏？
+    本文件用实验回答，而不是用观点回答。
+
+SAG2 是什么（arXiv:2610.22588，2026-10）
+    *Embedding-Free Multi-Hop Retrieval with BM25 and JEV*。
+    它把「语义证据的选择」从建库时挪到查询时：
+        1) BM25（SQLite FTS5）取候选
+        2) JEV 判断哪些段落真的有用
+        3) 被选中的段落提供新词，进行下一轮检索（默认 2 轮扩展）
+    建库零模型调用：11,656 段只要 2.36 秒、25.87 MiB。
+
+JEV 是什么，能不能离线
+    JEV 论文里是 TypeSafe 的**在线判官模型**（api.typesafe.ai，model `jev-latest`），
+    备选是 Liquid AI 的 D1-ultra。也就是说：**SAG2 的架构完全可离线，但 JEV 按发表形态不是离线的**。
+    要把整条链路搬进离线环境，必须给 JEV 找一个本地替身。
+
+本文件的做法：用本地 cross-encoder 当判官
+    平台里已经有 `bge-reranker-v2-m3`——它本质上就是「给 (query, passage) 打分」的判官，
+    跑在本地 GPU 上，不是生成式大模型，符合赛事对 AI 工具的限制。
+    所以：
+        BM25 取候选  →  bge-reranker 当 JEV  →  jieba 抽新词  →  再取一轮
+    全程零联网、零大模型。
+
+为什么这条路比"向量重组"更值得试
+    我们已有的实测（EXP-0003）：把 dense 向量通道开/关做 A/B，差异很小；
+    Top-K 里 83% 的命中来自 meta WP，而 PDF 只占 8.6%。
+    也就是说真正决定成败的是「词法命中的精度 + 多跳补全」，不是向量空间里的重组。
+    SAG2 的结论与此一致，而且它的建库成本比我们现在的 BGE 全量编码低三个数量级。
+
+运行
+    python versions/v005_sag2_multihop.src --sample 120 --rounds 2
+    python versions/v005_sag2_multihop.src --sample 120 --rounds 0   # 退化为单跳基线
+
+产出物
+    experiments/EXP-0004/results.json
+    experiments/EXP-0004/report.md
+
+前置条件
+    SecKnow 索引已构建（FTS5 + reranker 可用）。不需要 dense 向量。
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import re
+import statistics
+import sys
+import time
+from collections import Counter, defaultdict
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0004"
+META_GLOB = "book/Des-CTF-Knowledge/CTF大赛WP集合/articles/*.meta.md"
+FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 真值（与 v004 同一套口径，保持可比）
+# --------------------------------------------------------------------------------------
+
+FIELD_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$")
+
+
+def _clean_scalar(raw: str) -> str:
+    text = raw.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        text = text[1:-1]
+    return text.strip()
+
+
+def _split_inline_list(raw: str) -> list[str] | None:
+    text = raw.strip()
+    if not (text.startswith("[") and text.endswith("]")):
+        return None
+    return [_clean_scalar(i) for i in text[1:-1].split(",") if i.strip()]
+
+
+def parse_frontmatter_lenient(block: str) -> dict:
+    """约 28% 的 meta 文件前言含未转义冒号，严格 YAML 会失败，退回逐行抽取。"""
+    out: dict = {}
+    current: str | None = None
+    for raw_line in block.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+        match = FIELD_LINE.match(line)
+        if match:
+            current = match.group(1)
+            out[current] = match.group(2).strip()
+            continue
+        stripped = line.strip()
+        if current and stripped.startswith("- "):
+            item = _clean_scalar(stripped[2:])
+            if not item:
+                continue
+            previous = out.get(current)
+            if isinstance(previous, list):
+                previous.append(item)
+            elif isinstance(previous, str) and previous.strip():
+                out[current] = [_clean_scalar(previous), item]
+            else:
+                out[current] = [item]
+    for key, value in list(out.items()):
+        if isinstance(value, str):
+            inline = _split_inline_list(value)
+            out[key] = inline if inline is not None else _clean_scalar(value)
+    return out
+
+
+def parse_frontmatter(text: str) -> dict:
+    match = FRONTMATTER.match(text)
+    if not match:
+        return {}
+    block = match.group(1)
+    try:
+        payload = yaml.safe_load(block)
+        if isinstance(payload, dict) and payload.get("title"):
+            return payload
+    except yaml.YAMLError:
+        pass
+    return parse_frontmatter_lenient(block)
+
+
+def as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, (list, tuple)):
+        return [str(i).strip() for i in value if str(i).strip()]
+    return [str(value)]
+
+
+def load_meta_wps() -> list[dict]:
+    entries: list[dict] = []
+    for path in sorted(ROOT.glob(META_GLOB)):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        payload = parse_frontmatter(text)
+        if not isinstance(payload, dict) or not payload.get("title"):
+            continue
+        entries.append({
+            "relative_path": path.relative_to(ROOT / "book").as_posix(),
+            "title": str(payload.get("title", "")).strip(),
+            "contest": str(payload.get("contest", "")).strip(),
+            "difficulty": str(payload.get("difficulty", "")).strip(),
+            "vuln_type": as_list(payload.get("vuln_type")),
+            "tags": as_list(payload.get("tags")),
+        })
+    return entries
+
+
+def bucket_key(entry: dict) -> str:
+    if not entry["vuln_type"]:
+        return "unknown"
+    return entry["vuln_type"][0].split("_")[0].strip().casefold() or "unknown"
+
+
+def stratified_sample(entries: list[dict], size: int, seed: int = 20260921) -> list[dict]:
+    if size <= 0 or size >= len(entries):
+        return entries
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        buckets[bucket_key(entry)].append(entry)
+    rng = random.Random(seed)
+    for bucket in buckets.values():
+        rng.shuffle(bucket)
+    chosen: list[dict] = []
+    keys = sorted(buckets, key=lambda k: -len(buckets[k]))
+    index = 0
+    while len(chosen) < size and any(buckets[k] for k in keys):
+        key = keys[index % len(keys)]
+        if buckets[key]:
+            chosen.append(buckets[key].pop())
+        index += 1
+    return chosen
+
+
+def build_query(entry: dict) -> str:
+    """只用题面信息，刻意排除 tags / one_liner / attack_chain。"""
+    parts = [entry["title"]]
+    if entry["vuln_type"]:
+        parts.append("类型：" + " ".join(entry["vuln_type"]))
+    if entry["difficulty"]:
+        parts.append(f"难度：{entry['difficulty']}")
+    if entry["contest"]:
+        parts.append(f"比赛：{entry['contest']}")
+    return "  ".join(parts)
+
+
+def compute_similar_ground_truth(entries: list[dict]) -> dict[str, bool]:
+    tag_sets = {e["relative_path"]: set(t.casefold() for t in e["tags"]) for e in entries}
+    paths = list(tag_sets)
+    truth: dict[str, bool] = {}
+    for path in paths:
+        own = tag_sets[path]
+        truth[path] = any(
+            len(own & tag_sets[other]) >= 2 for other in paths if other != path
+        )
+    return truth
+
+
+# --------------------------------------------------------------------------------------
+# SAG2 式多跳检索
+# --------------------------------------------------------------------------------------
+
+# 扩展词的停用集合：泛词扩进来只会稀释查询
+EXPANSION_STOP = frozenset({
+    "题目", "分析", "思路", "方法", "利用", "漏洞", "攻击", "获取", "执行", "可以", "需要",
+    "使用", "通过", "进行", "存在", "导致", "出现", "返回", "得到", "结果", "如下", "其中",
+    "代码", "函数", "参数", "数据", "文件", "系统", "服务", "环境", "版本", "问题", "过程",
+})
+
+
+def query_terms(query: str) -> set[str]:
+    import jieba
+
+    return {t.strip().casefold() for t in jieba.cut_for_search(query) if t.strip()}
+
+
+def expand_terms(query: str, passages: list[str], top_n: int) -> list[str]:
+    """从「判官选中」的段落里抽出查询里没有的新词。
+
+    这就是 SAG2 的 term expansion：不做向量、不做生成，纯粹从高相关文本里
+    抠出新的检索词，用来补上多跳中的第二跳。
+    """
+    import jieba.analyse
+
+    existing = query_terms(query)
+    joined = "\n".join(passages)
+    if not joined.strip():
+        return []
+    # jieba 自带一份通用 IDF，足以挑出「有区分度」的词
+    candidates = jieba.analyse.extract_tags(joined, topK=40)
+    picked: list[str] = []
+    for term in candidates:
+        value = term.strip()
+        if len(value) < 2:
+            continue
+        low = value.casefold()
+        if low in EXPANSION_STOP or low in existing:
+            continue
+        # 已经出现在原查询里的子串就不重复加
+        if any(low in e for e in existing):
+            continue
+        picked.append(value)
+        if len(picked) >= top_n:
+            break
+    return picked
+
+
+def rrf(rank_lists: list[list[str]], k: int = 60) -> list[tuple[str, float]]:
+    """Reciprocal Rank Fusion：把多轮检索结果合成一个排序。"""
+    scores: dict[str, float] = {}
+    for ranking in rank_lists:
+        for rank, chunk_id in enumerate(ranking, 1):
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda item: -item[1])
+
+
+class Sag2Retriever:
+    """BM25 → 本地判官 → 词扩展 → 再检索。全程离线。"""
+
+    def __init__(self, store, reranker, *, candidate_k: int, judge_keep: int,
+                 expand_n: int, rounds: int, judge_mode: str = "reranker") -> None:
+        self.store = store
+        self.reranker = reranker
+        self.candidate_k = candidate_k
+        self.judge_keep = judge_keep
+        self.expand_n = expand_n
+        self.rounds = rounds
+        # judge_mode:
+        #   reranker  —— bge-reranker 交叉编码器（判别式，非生成式，不产出任何文本）
+        #   none      —— 完全不用模型：直接用 BM25 分数排序取前 N
+        self.judge_mode = judge_mode
+
+    def _judge(self, query: str, chunk_ids: list[str], chunks: dict,
+               scores: dict[str, float] | None = None) -> list[str]:
+        """选出「判官认为有用」的段落。
+
+        judge_mode=none 时**不加载任何神经网络**，只按 BM25 分值排序——
+        这样整条链路就只剩 SQLite FTS5 + jieba + BM25，零模型依赖，
+        可以满足"连神经模型都不允许"的赛事环境。
+        """
+        if not chunk_ids:
+            return []
+        if self.judge_mode == "none" or self.reranker is None:
+            if scores:
+                ordered = sorted(chunk_ids, key=lambda cid: -scores.get(cid, 0.0))
+                return ordered[: self.judge_keep]
+            return chunk_ids[: self.judge_keep]
+        ids = [cid for cid in chunk_ids if cid in chunks]
+        passages = [chunks[cid].text[:1200] for cid in ids]
+        if not passages:
+            return []
+        try:
+            rerank_scores = self.reranker.rerank(query, passages)
+        except (RuntimeError, OSError, ValueError):
+            return ids[: self.judge_keep]
+        ranked = sorted(zip(ids, rerank_scores, strict=True), key=lambda item: -item[1])
+        return [cid for cid, _ in ranked[: self.judge_keep]]
+
+    def search(self, query: str, final_k: int) -> tuple[list[str], dict]:
+        diagnostics = {"rounds": [], "expanded_terms": [], "judge_mode": self.judge_mode}
+        rankings: list[list[str]] = []
+        current_query = query
+
+        for round_index in range(self.rounds + 1):
+            hits = self.store.search_fts(current_query, self.candidate_k)
+            round_ids = [chunk_id for chunk_id, _ in hits]
+            round_scores = dict(hits)
+            rankings.append(round_ids)
+            chunks = self.store.get_chunks(round_ids)
+            kept = self._judge(query, round_ids, chunks, round_scores)
+            diagnostics["rounds"].append({
+                "round": round_index,
+                "query": current_query,
+                "candidates": len(round_ids),
+                "judged_keep": len(kept),
+            })
+            if round_index >= self.rounds:
+                break
+            passages = [chunks[cid].text for cid in kept if cid in chunks]
+            new_terms = expand_terms(query, passages, self.expand_n)
+            if not new_terms:
+                diagnostics["expanded_terms"].append([])
+                break
+            diagnostics["expanded_terms"].append(new_terms)
+            current_query = query + " " + " ".join(new_terms)
+
+        fused = rrf(rankings)
+        fused_scores = dict(fused)
+        ordered = [chunk_id for chunk_id, _ in fused]
+
+        # 最后对合并结果再做一次精排，保证最终 Top-K 的质量
+        merged_chunks = self.store.get_chunks(ordered[: max(self.candidate_k, final_k * 4)])
+        final_ids = self._judge(query, ordered[: max(self.candidate_k, final_k * 4)],
+                                merged_chunks, fused_scores)
+        if len(final_ids) < final_k:
+            extra = [cid for cid in ordered if cid not in final_ids]
+            final_ids.extend(extra[: final_k - len(final_ids)])
+        return final_ids[:final_k], diagnostics
+
+
+# --------------------------------------------------------------------------------------
+# 评分
+# --------------------------------------------------------------------------------------
+
+
+def score_one(entry: dict, chunk_ids: list[str], chunks: dict,
+              tag_index: dict[str, set[str]], has_truth: bool) -> dict:
+    """打分。
+
+    注意 `tag_recall_excl_self`：题目**自己的** meta 文件里当然包含它全部的真值 tags，
+    一旦检索到它，不排除自身就会让 tag_recall 无条件接近 1.0。
+    实测 SAG2 多跳的 self_leak 达到 1.0，此时原始 tag_recall=0.994 主要是在测泄漏，
+    不是在测检索能力。所以必须同时报告「排除自身文件后」的口径。
+    """
+    tags = [t for t in entry["tags"] if len(t) >= 2]
+    own_path = entry["relative_path"]
+    own_tags = set(t.casefold() for t in entry["tags"])
+    same_vuln = set(t.casefold() for t in entry["vuln_type"])
+
+    all_texts: list[str] = []
+    other_texts: list[str] = []
+    self_leak = similar = vuln_hit = False
+
+    for cid in chunk_ids:
+        chunk = chunks.get(cid)
+        if chunk is None:
+            continue
+        all_texts.append(chunk.text)
+        path = (chunk.citation.relative_path or "").replace("\\", "/")
+        is_own = path == own_path
+        if is_own:
+            self_leak = True
+        else:
+            other_texts.append(chunk.text)
+        if not path.endswith(".meta.md") or is_own:
+            continue
+        other_tags = tag_index.get(path)
+        if other_tags is None:
+            continue
+        if len(own_tags & other_tags) >= 2:
+            similar = True
+        if same_vuln & other_tags:
+            vuln_hit = True
+
+    retrieved_all = " ".join(all_texts).casefold()
+    retrieved_other = " ".join(other_texts).casefold()
+    found_all = [t for t in tags if t.casefold() in retrieved_all]
+    found_other = [t for t in tags if t.casefold() in retrieved_other]
+
+    return {
+        "title": entry["title"],
+        "vuln_type": entry["vuln_type"],
+        "tags_total": len(tags),
+        "tags_found": len(found_all),
+        "tags_found_excl_self": len(found_other),
+        "tag_recall": len(found_all) / len(tags) if tags else None,
+        "tag_recall_excl_self": len(found_other) / len(tags) if tags else None,
+        "missing_tags": [t for t in tags if t not in found_all],
+        "missing_tags_excl_self": [t for t in tags if t not in found_other],
+        "self_leak": self_leak,
+        "similar_wp": similar,
+        "similar_ground_truth_exists": has_truth,
+        "vuln_type_hit": vuln_hit,
+        "top_k_sources": [((chunks[c].citation.relative_path or "") if c in chunks else "")
+                          for c in chunk_ids],
+    }
+
+
+def mean(values) -> float | None:
+    values = [v for v in values if v is not None]
+    return round(statistics.fmean(values), 4) if values else None
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="SAG2 式离线多跳检索评测")
+    parser.add_argument("--sample", type=int, default=120)
+    parser.add_argument("--top-k", type=int, default=8)
+    parser.add_argument("--rounds", type=int, default=2, help="扩展轮数；0 = 单跳基线")
+    parser.add_argument("--candidates", type=int, default=40)
+    parser.add_argument("--judge-keep", type=int, default=6)
+    parser.add_argument("--expand-n", type=int, default=5)
+    parser.add_argument("--judge", choices=["reranker", "none"], default="reranker",
+                        help="reranker=交叉编码器（判别式，非生成式）；"
+                             "none=完全不用任何模型，仅按 BM25 分数排序")
+    args = parser.parse_args()
+
+    entries = load_meta_wps()
+    log(f"载入 meta WP：{len(entries)} 篇")
+    tag_index = {e["relative_path"]: set(t.casefold() for t in e["tags"]) for e in entries}
+    truth = compute_similar_ground_truth(entries)
+    log(f"存在近似题的 WP：{sum(1 for v in truth.values() if v)}/{len(entries)}")
+
+    selected = stratified_sample(entries, args.sample)
+    log(f"抽样 {len(selected)} 篇；轮数={args.rounds} 候选={args.candidates} "
+        f"判官保留={args.judge_keep} 扩展词={args.expand_n}")
+
+    sys.path.insert(0, str(ROOT / "src"))
+    from secknow.config import get_settings
+    from secknow.models.bge import BgeReranker
+    from secknow.stores.metadata import MetadataStore
+
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+
+    judge = None
+    if args.judge == "reranker":
+        judge = BgeReranker(settings.reranker_model_path, settings.device)
+        if not judge.available:
+            log("警告：reranker 不可用，判官退化为「直接取前 N 条」")
+            judge = None
+    else:
+        log("judge=none：整条链路不使用任何模型（SQLite FTS5 + jieba + BM25）")
+
+    retriever = Sag2Retriever(
+        store, judge,
+        candidate_k=args.candidates,
+        judge_keep=args.judge_keep,
+        expand_n=args.expand_n,
+        rounds=args.rounds,
+        judge_mode=args.judge if judge is not None else "none",
+    )
+
+    rows: list[dict] = []
+    started = time.perf_counter()
+    for index, entry in enumerate(selected, 1):
+        query = build_query(entry)
+        try:
+            final_ids, diag = retriever.search(query, args.top_k)
+        except Exception as error:  # noqa: BLE001 - 单题失败不中断评测
+            log(f"  检索失败 {entry['title'][:36]} {type(error).__name__}: {error}")
+            continue
+        needed = list(dict.fromkeys(final_ids))
+        chunks = store.get_chunks(needed)
+        row = score_one(entry, needed, chunks, tag_index,
+                        truth.get(entry["relative_path"], False))
+        row["expanded_terms"] = [t for group in diag["expanded_terms"] for t in group]
+        row["rounds_used"] = len(diag["rounds"])
+        rows.append(row)
+        if index % 20 == 0 or index == len(selected):
+            elapsed = time.perf_counter() - started
+            log(f"  {index}/{len(selected)}  用时 {elapsed:.0f}s ({elapsed/max(index,1):.1f}s/题)")
+
+    if not rows:
+        raise SystemExit("没有结果")
+
+    conditioned = [r for r in rows if r["similar_ground_truth_exists"]]
+    overall = {
+        "queries": len(rows),
+        "top_k": args.top_k,
+        "rounds": args.rounds,
+        "judge": args.judge,
+        "tag_recall_at_k": mean([r["tag_recall"] for r in rows]),
+        "tag_recall_excl_self": mean([r["tag_recall_excl_self"] for r in rows]),
+        "self_leak_rate": mean([1.0 if r["self_leak"] else 0.0 for r in rows]),
+        "similar_wp_rate": mean([1.0 if r["similar_wp"] else 0.0 for r in rows]),
+        "similar_wp_rate_conditional": mean(
+            [1.0 if r["similar_wp"] else 0.0 for r in conditioned]) if conditioned else None,
+        "similar_wp_subset_size": len(conditioned),
+        "vuln_type_hit_rate": mean([1.0 if r["vuln_type_hit"] else 0.0 for r in rows]),
+        "mean_expanded_terms": mean([float(len(r["expanded_terms"])) for r in rows]),
+        "elapsed_s": round(time.perf_counter() - started, 1),
+        "per_query_s": round((time.perf_counter() - started) / max(len(rows), 1), 2),
+    }
+
+    composition: Counter = Counter()
+    for row in rows:
+        for source in row["top_k_sources"]:
+            path = (source or "").replace("\\", "/")
+            composition["meta_WP" if path.endswith(".meta.md")
+                        else "book_PDF" if path.lower().endswith(".pdf") else "other"] += 1
+    total_slots = sum(composition.values()) or 1
+    overall["top_k_composition"] = {k: round(v / total_slots, 3)
+                                    for k, v in composition.most_common()}
+
+    missing: Counter = Counter()
+    for row in rows:
+        missing.update(row["missing_tags"])
+    overall["most_missed_tags"] = missing.most_common(15)
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"overall": overall, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = [
+        "# EXP-0004 — SAG2 式离线多跳检索",
+        "",
+        f"生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"参数：样本 {args.sample}，Top-K {args.top_k}，扩展轮数 {args.rounds}，"
+        f"候选 {args.candidates}，判官保留 {args.judge_keep}，每轮扩展词 {args.expand_n}",
+        "",
+        "## 做法",
+        "",
+        "```",
+        "BM25(FTS5) 取候选  →  bge-reranker 当判官  →  jieba 从选中段落抽新词  →  再检索",
+        "```",
+        "",
+        "JEV 在论文里是在线判官 API；这里用本地 cross-encoder 替换，**全程离线、不调用大模型**。",
+        "",
+        "## 汇总",
+        "",
+        "```json",
+        json.dumps(overall, ensure_ascii=False, indent=2),
+        "```",
+        "",
+        "## 与 v004（单跳 + 向量）对照",
+        "",
+        "| 指标 | v004（单跳） | v005（多跳） |",
+        "| --- | --- | --- |",
+        f"| tag_recall@K | 0.5925 | {overall['tag_recall_at_k']} |",
+        f"| **tag_recall@K（排除自身文件）** | 0.5925* | **{overall['tag_recall_excl_self']}** |",
+        f"| similar_wp_rate_conditional | 0.20 | {overall['similar_wp_rate_conditional']} |",
+        f"| self_leak_rate | 0.825 | {overall['self_leak_rate']} |",
+        "",
+        "> \\* v004 未单独输出排除自身文件的口径，其 0.5925 是含自身文件的原始值。",
+        "> 对比时请以 v005 的 `tag_recall_excl_self` 为准，或对 v004 重跑同一口径。",
+    ]
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+
+    log("汇总：" + json.dumps(overall, ensure_ascii=False))
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

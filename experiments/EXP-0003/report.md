@@ -1,6 +1,6 @@
 # EXP-0003 — 基于 meta WP 真值的检索质量评测
 
-生成时间：2026-09-21 18:37:08
+生成时间：2026-11-11 10:34:19
 样本：120 题  Top-K：8  模式：competition
 
 ## 判据
@@ -23,13 +23,14 @@
   "top_k": 8,
   "mode": "competition",
   "tag_recall_at_k": 0.5925,
+  "tag_recall_excl_self": 0.1602,
   "self_leak_rate": 0.825,
   "similar_wp_rate": 0.0667,
   "similar_wp_ground_truth_exists_rate": 0.3333,
   "similar_wp_rate_conditional": 0.2,
   "similar_wp_subset_size": 40,
   "vuln_type_hit_rate": 0.1333,
-  "elapsed_s": 439.4,
+  "elapsed_s": 422.8,
   "top_k_composition": {
     "meta_WP": 0.83,
     "book_PDF": 0.086,

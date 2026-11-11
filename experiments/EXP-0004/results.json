@@ -1,0 +1,6050 @@
+{
+  "overall": {
+    "queries": 120,
+    "top_k": 8,
+    "rounds": 2,
+    "tag_recall_at_k": 0.994,
+    "tag_recall_excl_self": 0.1751,
+    "self_leak_rate": 1.0,
+    "similar_wp_rate": 0.1,
+    "similar_wp_rate_conditional": 0.3,
+    "similar_wp_subset_size": 40,
+    "vuln_type_hit_rate": 0.1833,
+    "mean_expanded_terms": 10.0,
+    "elapsed_s": 662.3,
+    "per_query_s": 5.52,
+    "top_k_composition": {
+      "meta_WP": 0.96,
+      "book_PDF": 0.027,
+      "other": 0.013
+    },
+    "most_missed_tags": [
+      [
+        "2236416",
+        1
+      ],
+      [
+        "3404319313",
+        1
+      ],
+      [
+        "\"Wanna return?\" A",
+        1
+      ],
+      [
+        "\"once again?\" A*0x100 二次溢出",
+        1
+      ],
+      [
+        "LLL格密码",
+        1
+      ],
+      [
+        "fmtstr泄露canary+elfbase",
+        1
+      ]
+    ]
+  },
+  "rows": [
+    {
+      "title": "【WriteUP·上篇】2024WIDC 世界智能驾驶挑战赛\"天融信杯\"信息安全攻防赛",
+      "vuln_type": [
+        "misc_unknown"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "车联网-ransomware",
+        "Sepolia-Etherscan",
+        "calldata-extract",
+        "XOR-decrypt-3-9",
+        "RSA-public-key-PEM",
+        "encrypted-seed"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·上篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·上篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·上篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023WIDC世界智能驾驶挑战赛_writeup_ChaMd5.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·中篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF_2025下半年赛_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·中篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·上篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md"
+      ],
+      "expanded_terms": [
+        "RSA",
+        "---",
+        "2025",
+        "flag",
+        "DASCTF",
+        "RSA",
+        "---",
+        "2025",
+        "flag",
+        "DASCTF"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "HTB Office实战式打靶过程",
+      "vuln_type": [
+        "web_unknown"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "pentest",
+        "smb",
+        "joomla",
+        "api",
+        "users",
+        "colorama"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB_Office实战式打靶过程.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB_Office实战式打靶过程.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[HTB]_October_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【Hack_The_Box】Sandworm【Writeup】.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB_Office实战式打靶过程.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Hack_The_Box_Sherlocks_の勧め_-_Knock_Knock_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB_Office实战式打靶过程.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB_Office实战式打靶过程.meta.md"
+      ],
+      "expanded_terms": [
+        "php",
+        "---",
+        "users",
+        "payload",
+        "Knock",
+        "php",
+        "---",
+        "users",
+        "payload",
+        "Knock"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Frida Hook Android method（一）",
+      "vuln_type": [
+        "reverse"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 5,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.7142857142857143,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "caesar-cipher",
+        "get_random"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Frida_Hook_Android_method（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Frida_Hook_Android_method（一）.meta.md",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF自毁程序密码：逆向分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ACTF_flutter逆向学习.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Frida_Hook_Android_method（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Frida_Hook_Android_method（一）.meta.md"
+      ],
+      "expanded_terms": [
+        "so",
+        "---",
+        "emulator",
+        "server",
+        "blutter",
+        "server",
+        "Java",
+        "so",
+        "emulator",
+        "com"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 KCTF 大赛 - 第八题《星门》设计思路及解析",
+      "vuln_type": [
+        "pwn_unknown",
+        "shellcode",
+        "syscall"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "seccomp只允许ptrace/read/wait4",
+        "ptrace注入",
+        "shellcode注入1号进程",
+        "PTRACE_POKETEXT",
+        "PTRACE_SETREGS",
+        "PTRACE_DETACH",
+        "PTRACE_KILL sleep",
+        "mmap rwx 0x1000",
+        "libc可执行段"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第八题《星门》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第八题《星门》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_KCTF_-_第八题《暗云涌动》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_秋季赛_-_第八题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第八题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第八题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第八题《星门》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第八题《星门》设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "ptrace",
+        "PTRACE",
+        "指针",
+        "ArmVMP",
+        "指令",
+        "ptrace",
+        "PTRACE",
+        "指针",
+        "ArmVMP",
+        "指令"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "pem 类文件解析及 2022 蓝帽杯 crypto 详解",
+      "vuln_type": [
+        "crypto_rsa"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.375,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "asn1",
+        "der",
+        "public-key",
+        "private-key",
+        "pfx"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/pem类文件解析及2022蓝帽杯crypto详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届全国职工职业技能大赛_省初赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Social_Engineering_To_Solve_A_Crypto_Challenge_–_LakeCTF_2022.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项教师组决赛WP（上）.meta.md",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023工业信息安全技能大赛鹏城锦标赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023工业信息安全技能大赛鹏城锦标赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/全国网络安全行业职业技能大赛-初赛.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "---",
+        "-----",
+        "私钥",
+        "公钥",
+        "-----",
+        "key",
+        "私钥",
+        "base64",
+        "公钥"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "【全国职业技能大赛\"信息安全与评估\"赛项】Linux系统入侵排查与应急响应技术",
+      "vuln_type": [
+        "forensic_disk"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "应急响应",
+        "Linux-IR",
+        "lsof-process",
+        "/etc/passwd",
+        "cron-check",
+        "auth.log",
+        "SSH",
+        "init.d"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023全国网络安全行业职业技能大赛-网络安全管理员-决赛WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023全国网络安全行业职业技能大赛-网络安全管理员-决赛WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【全国职业技能大赛“信息安全与评估”赛项】Linux系统入侵排查与应急响应技术.meta.md"
+      ],
+      "expanded_terms": [
+        "cron",
+        "etc",
+        "var",
+        "lsof",
+        "passwd",
+        "cron",
+        "etc",
+        "var",
+        "lsof",
+        "passwd"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "第二届\"长城杯\"信息安全铁人三项赛(防护赛)总决赛-Pwn方向部分题解",
+      "vuln_type": [
+        "heap_exploit"
+      ],
+      "tags_total": 5,
+      "tags_found": 5,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Pwn-Heap",
+        "libc2.31",
+        "菜单题",
+        "free_hook覆盖"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/F.Z.N_CTF网络安全大赛PWN方向题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”数据安全大赛数据安全积分争夺赛预赛南区-_WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md"
+      ],
+      "expanded_terms": [
+        "add",
+        "free",
+        "hook",
+        "rm",
+        "type",
+        "add",
+        "rm",
+        "free",
+        "p64",
+        "edit"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "RWCTF 5th Shellfind 复现",
+      "vuln_type": [
+        "rop"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 10,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 1.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RWCTF_5th_Shellfind复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RWCTF5TH_shellfind.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RWCTF_5th_ShellFind_Write-up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RealWorld_CTF_5th_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Real_World_CTF_5_–_Teewars.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届_Real_World_CTF_体验赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网拟态防御国际精英挑战赛_–_WIN！致敬mt_复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/阿里云CTF2025复现-风清.meta.md"
+      ],
+      "expanded_terms": [
+        "ipfind",
+        "base64",
+        "UDP",
+        "---",
+        "mips",
+        "ipfind",
+        "base64",
+        "UDP",
+        "---",
+        "mips"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 RCTF WriteUp by Venom",
+      "vuln_type": [
+        "rce",
+        "crypto_oracle"
+      ],
+      "tags_total": 14,
+      "tags_found": 14,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.14285714285714285,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Prettier",
+        "prettierrc.js",
+        "parser",
+        "child_process",
+        "_load",
+        "mainModule",
+        "constructor",
+        "Lua",
+        "XXTEA",
+        "bxor",
+        "srand",
+        "math.random"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022RCTF_WriteUp_by_Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RCTF_2022_WriteUp_By_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/矩阵杯战队攻防对抗赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022第六届强网杯青少赛_Misc&Crypto-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022RCTF_WriteUp_by_Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "---",
+        "__",
+        "type",
+        "attack",
+        "key",
+        "字节",
+        "---",
+        "encrypt",
+        "attack"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "DASCTF 2022 十月赛 Web 部分 Writeup",
+      "vuln_type": [
+        "deserialize"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "pop-chain",
+        "fine-show-sorry",
+        "file-read",
+        "suid-date",
+        "bash-reverse"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF2022_——十月赛_Web_部分Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF_X_GFCTF_2022十月挑战赛_cuteRE_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF_X_GFCTF_2022_｜十月赛官方Write_Up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/官方WP！DASCTF_2024_十月挑战赛～.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/官方WP！DASCTF_2024_十月挑战赛～.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年春秋杯冬季赛部分WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/官方WP！DASCTF_2024_十月挑战赛～.meta.md"
+      ],
+      "expanded_terms": [
+        "WP",
+        "sub",
+        "key",
+        "---",
+        "base64",
+        "key",
+        "php",
+        "sub",
+        "序列化",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 IS 河南工业控制安全部分 Web 题解",
+      "vuln_type": [
+        "sqli"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "SQL注入",
+        "XXE",
+        "JSON弱类型",
+        "array_search",
+        "load_file",
+        "二次注入",
+        "信息泄露"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022IS河南工业控制安全部分web题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022IS河南工业控制安全部分web题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【工控Writeup】2022河南工业互联网安全大赛复赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【工控Writeup】2022河南工业互联网安全大赛复赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023工业信息安全技能大赛鹏城锦标赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022IS河南工业控制安全部分web题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022IS河南工业控制安全部分web题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022IS河南工业控制安全部分web题解.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "modbus",
+        "---",
+        "MMS",
+        "function",
+        "flag",
+        "modbus",
+        "MMS",
+        "function",
+        "code"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 国城杯 writeup by Mini-Venom",
+      "vuln_type": [
+        "stego_image",
+        "stego_traffic",
+        "crypto_unknown",
+        "misc_unknown",
+        "reverse"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        ".264 视频隐写",
+        "np.random seed 爆破",
+        "DataMatrix 二维码",
+        "PGP wordlist 编码",
+        "shiro 反序列化",
+        "AES-ECB",
+        "AES key=oursecret"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DownUnderCTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024DASCTF_暑假挑战赛（第一名）_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/L3HCTF_2024_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "sum",
+        "---",
+        "url",
+        "v1",
+        "key",
+        "sum",
+        "url",
+        "v1",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Race Condition, OAuth without state and redirection into XSS & RCE via HTML2PDF - PhantomFeed HTB University 2023",
+      "vuln_type": [
+        "auth_bypass"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 6,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.5454545454545454,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "csrf",
+        "html2pdf",
+        "puppeteer",
+        "redis-tokens",
+        "type-metaclass"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Race_Condition,_OAuth_without_state_and_redirection_into_XSS_&_RCE_via_HTML2PDF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/XSS,_Race_Condition,_XS-Leaks_and_CSP_&_iframe’s_sandbox_bypass_–_LakeCTF_2023_G.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届_Real_World_CTF_体验赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Nepctf2025_PWN部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ångstromCTF_2023_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Real_World_CTF_2023_–_NonHeavyFTP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_13_CTF_Final_作問記.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HackTheBox_Inject_WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "type",
+        "name",
+        "__",
+        "触发",
+        "flag",
+        "type",
+        "name",
+        "__",
+        "触发"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 N1CTF WriteUp By EDISEC",
+      "vuln_type": [
+        "lfi",
+        "web_unknown",
+        "lattice",
+        "crypto_rsa",
+        "forensic_disk"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "struts2",
+        "WEB-INF",
+        "mtime",
+        "md5",
+        "cmd-trace",
+        "WallPaper",
+        "knapsack-LLL",
+        "discrete_log",
+        "GF(q)",
+        "ECDLP"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022N1CTF-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2022_Crypto_Writeups_By_tl2cents.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_Writeup_by_Never_Stop_Exploiting.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022巅峰极客WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_pwnhub冬季赛_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“祥云杯”CTF初赛WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022N1CTF-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022N1CTF-WriteUp_By_EDISEC.meta.md"
+      ],
+      "expanded_terms": [
+        "pow",
+        "c1",
+        "---",
+        "flag",
+        "c2",
+        "pow",
+        "flag",
+        "c1",
+        "---",
+        "c2"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 网鼎杯 半决赛 & 决赛",
+      "vuln_type": [
+        "lattice",
+        "stream_cipher",
+        "crypto_rsa",
+        "ecdsa",
+        "finite_field"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "已知 p 高位 Coppersmith",
+        "多模数共享素数",
+        "GF(p^n) 有限域同构",
+        "LFSR NFSR NOISE 序列密码",
+        "noekeon 或同等密",
+        "全部爆破 7 比特"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_朱雀&玄武.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_青龙&白虎.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_青龙&白虎.meta.md"
+      ],
+      "expanded_terms": [
+        "Coppersmith",
+        "248",
+        "p1",
+        "attack",
+        "bit",
+        "Coppersmith",
+        "248",
+        "p1",
+        "attack",
+        "bit"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 HITCON WriteUp by Mini-Venom (招新)",
+      "vuln_type": [
+        "ssrf",
+        "rce",
+        "web_unknown",
+        "reverse"
+      ],
+      "tags_total": 11,
+      "tags_found": 10,
+      "tags_found_excl_self": 2,
+      "tag_recall": 0.9090909090909091,
+      "tag_recall_excl_self": 0.18181818181818182,
+      "missing_tags": [
+        "2236416"
+      ],
+      "missing_tags_excl_self": [
+        "字符级爆破",
+        "增量cookie",
+        "NodeJS",
+        "child_process",
+        "require",
+        "Windows-driver",
+        "IOCTL",
+        "IRP",
+        "2236416"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022HITCON_WriteUp_by_Mini-Venom（招新）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯_WriteUp_by_Mini-Venom（招新）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第三届京麒CTF挑战赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HITCON_CTF_2022_web2pdf_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2025_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022HITCON_WriteUp_by_Mini-Venom（招新）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022HITCON_WriteUp_by_Mini-Venom（招新）.meta.md"
+      ],
+      "expanded_terms": [
+        "2025",
+        "---",
+        "flag",
+        "__",
+        "payload",
+        "flag",
+        "2025",
+        "---",
+        "__",
+        "payload"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 强网杯车联网赛道 writeup by Mini-Venom（CPA 侧信道 AES + RC4 变种 + CAN 信号频次）",
+      "vuln_type": [
+        "block_cipher",
+        "side_channel",
+        "web_unknown",
+        "misc_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "强网杯 2025 车联网",
+        "CPA 相关功耗分析 AES-128",
+        "AES128.trs 功耗轨迹",
+        "SubBytes 字节位置枚举 256",
+        "plaintext⊕key S-box 汉明重量",
+        "皮尔逊相关系数",
+        "SCAAES 侧信道",
+        "IMG_256 flag{CCAEEED667CD6C04C7ABCCC26DC793F1}",
+        "RC4 变种 正向+反向 KSA",
+        "S[(S[i]+S[j]+S[t])%256] PRGA",
+        "小程序 chunk_1.appservice 解包",
+        "CAN 信号 sig_20-52 频次统计"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯-车联网赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯-车联网赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网杯行业领域专项车联网赛道(Writeup).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ACTF_2025_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2025_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF_2025下半年赛_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯-车联网赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯-车联网赛道_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "256",
+        "---",
+        "key",
+        "KSA",
+        "..",
+        "256",
+        "---",
+        "key",
+        "KSA",
+        ".."
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "强网拟态防御/zerocalc",
+      "vuln_type": [
+        "ssti",
+        "ssrf",
+        "rce"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "notevil patched eval",
+        "cookieSession key 可控",
+        "cookie pollution",
+        "readFile",
+        "/etc/passwd 泄露",
+        "/flag 随机名"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态防御国际精英挑战赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第六届“强网”拟态防御国际精英挑战赛_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【拟态挑战WP】2021年春秋杯秋季赛mimic-ssrf.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/BYUCTF_2024_Writeups.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届CN-fnst--CTF官方writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态防御国际精英挑战赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态@2025_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "secret",
+        "__",
+        "序列化",
+        "flag",
+        "payload",
+        "secret",
+        "next",
+        "prime",
+        "爆破",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "数据安全大赛 2024 数信杯 东部赛区",
+      "vuln_type": [
+        "fmt_string",
+        "pwn_unknown",
+        "stego_image",
+        "block_cipher",
+        "stream_cipher"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "非栈上格式化字符串",
+        "RBP 多级指针改返回地址",
+        "%hn 写 short",
+        "one_gadget",
+        "base64 循环移位",
+        "RC4 + XOR 双加密",
+        "ftp 流量 STOR 计数",
+        "Arnold 变换",
+        "套娃编码 Base64+Base32+hex"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”东部赛区writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”东部赛区writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024数信杯北部赛区wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”数据安全大赛数据安全积分争夺赛预赛南区-_WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_RCTF_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TamuCTF_2024_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”数据安全大赛数据安全积分争夺赛预赛南区-_WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024数信杯北部赛区wp.meta.md"
+      ],
+      "expanded_terms": [
+        "delta",
+        "key",
+        "base64",
+        "XTEA",
+        "---",
+        "delta",
+        "key",
+        "base64",
+        "XTEA",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "学习DOM破坏(DOM Clobbering)与XSS绕过技巧大全",
+      "vuln_type": [
+        "xss"
+      ],
+      "tags_total": 14,
+      "tags_found": 14,
+      "tags_found_excl_self": 7,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.5,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "DOM_Clobbering",
+        "javascript伪协议",
+        "form_submit",
+        "DOMPurify",
+        "8680439..toString(30)",
+        "Function构造",
+        "XSS_Challenge"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/学习一下dom破坏.meta.md",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Ricerca_Security-_DEF_CON_31_CTF_Finals_参加記.meta.md",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf"
+      ],
+      "expanded_terms": [
+        "alert",
+        "&#",
+        "name",
+        "Auditor",
+        "input",
+        "alert",
+        "name",
+        "过滤",
+        "编码",
+        "标签"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "乌托邦·王的实验室24——拼少少商城 Writeup",
+      "vuln_type": [
+        "logic"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "TOCTOU",
+        "asyncio",
+        "asyncio.open_connection",
+        "asyncio.Event",
+        "并发竞态",
+        "补贴接口",
+        "抢购"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【拟态挑战WP】2021年春秋杯秋季赛mimic-ssrf.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Hack-a-Sat_3_–_2022_Final.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/乌托邦·王的实验室24——拼少少商城_Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "asyncio",
+        "api",
+        "TOCTOU",
+        "Event",
+        "subsidy",
+        "asyncio",
+        "api",
+        "TOCTOU",
+        "Event",
+        "subsidy"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 磐石行动 - 线下 AWD PWN",
+      "vuln_type": [
+        "ret2libc",
+        "heap_exploit",
+        "pwn_unknown"
+      ],
+      "tags_total": 14,
+      "tags_found": 14,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "AWD",
+        "磐石行动",
+        "shellcode",
+        "cat-flag",
+        "Halloween",
+        "candy",
+        "msg",
+        "conn",
+        "addConn-removeConn-editConn-listConn",
+        "ret2csu",
+        "seccomp",
+        "system-then-ORW",
+        "flag-submission-API",
+        "multi-target"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_磐石行动-线下AWD-PWN.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_WIDC_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022巅峰极客WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/津京冀网络攻防大赛线下决赛pwn–全场唯一解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/西湖论剑线下-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题user解析：解密0xfbad1880背后的IO_FILE结构体利用技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_磐石行动-线下AWD-PWN.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_磐石行动-线下AWD-PWN.meta.md"
+      ],
+      "expanded_terms": [
+        "IO",
+        "flag",
+        "php",
+        "---",
+        "system",
+        "php",
+        "flag",
+        "---",
+        "stdout",
+        "IO"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 年第十九届全国大学生信息安全竞赛（CISCN）暨第三届长城杯网数智安全大赛—初赛 WriteUp",
+      "vuln_type": [
+        "ecdsa",
+        "crypto_rsa",
+        "block_cipher",
+        "lattice",
+        "web_unknown",
+        "sqli",
+        "pwn_unknown",
+        "reverse",
+        "ai"
+      ],
+      "tags_total": 16,
+      "tags_found": 16,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0625,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "CISCN 2025 第十九届 长城杯 第三届 网数智",
+        "ECDSA 私钥 sha512 Welcome to this challenge 模 n",
+        "nonce k sha512 bias+i 已知 60 条",
+        "双层 RSA 内外层 smooth_prime",
+        "get_smooth_prime(1024",
+        "max_prime=p1)",
+        "wasm2wat GDSC 版本 0x65",
+        "zstd 解压",
+        "AES-ECB FanBglFanBglOoO! wOW~youAregrEaT!",
+        "ET3RNUMX ET3 GCM AES-128",
+        "scapy rdpcap TCP Raw",
+        "SQL 无列名注入 where_is_my_flagggggg exp(710) error-based",
+        "if((table)>('test')",
+        "exp(710)",
+        "1)"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026年第三届“长城杯”网数智安全大赛Reverse_AK题解（含总决赛全部题目附件）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第十四届全国大学的信息安全竞赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第十七届全国大学生信息安全竞赛创新实践能力赛初赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "bytes",
+        "int",
+        "sha512",
+        "exe",
+        "smooth",
+        "bytes",
+        "int",
+        "sha512",
+        "exe",
+        "smooth"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Crate CTF Writeup",
+      "vuln_type": [
+        "xxe"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.5,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "fetch",
+        "cookie",
+        "简单"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Crate_CTF_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Crate_CTF_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届2022美团CTF-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Hackvent_2024_–_Easy.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Crate_CTF_Writeup.meta.md",
+        "cft竞赛权威指南pwn.pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Crate_CTF_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Crate_CTF_Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "payload",
+        "flask",
+        "os",
+        "p64",
+        "---",
+        "越界",
+        "p64",
+        "---",
+        "payload",
+        "system"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 第四届\"网鼎杯\"玄武组 pwn02 writeup（fork + ret2syscall 栈迁移）",
+      "vuln_type": [
+        "srop",
+        "ret2libc",
+        "rop",
+        "shellcode"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.1111111111111111,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "玄武 pwn02",
+        "x11x11x11... 绕过检测",
+        "fork 后栈溢出",
+        "pwndbg 不能跟 fork",
+        "通用 gadget 链 rax/rdi/rsi/rdx/rbp/leave_ret",
+        "AE64 shellcode 编码",
+        "libc-2.35 SROP 栈迁移",
+        "read 写 bss 0x4C72A0+0x100"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/网鼎杯玄武组——PWN2.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”青龙组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "read",
+        "execve",
+        "rax",
+        "bin",
+        "---",
+        "p64",
+        "read",
+        "rax",
+        "payload",
+        "execve"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "BYUCTF 2024/4 题合集",
+      "vuln_type": [
+        "jwt",
+        "ssrf",
+        "ssti",
+        "deserialize",
+        "rce"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "时间戳 secret 爆破",
+        "/proc/self/environ",
+        "secret cookie bypass",
+        "date 命令注入",
+        "meta refresh SSRF",
+        "XSS requestcatcher",
+        "pickle RCE",
+        "random port 探测"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/BYUCTF_2024_Writeups.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/BYUCTF_2024_Writeups.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【BuildCTF】Web方向AK全解WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/香港網絡攻防精英培訓暨攻防大賽_2025_初賽-決賽WP.meta.md",
+        "Des-CTF-Knowledge/README.md",
+        "Des-CTF-Knowledge/README.md"
+      ],
+      "expanded_terms": [
+        "secret",
+        "pickle",
+        "php",
+        "meta",
+        "refresh",
+        "secret",
+        "php",
+        "爆破",
+        "pickle",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 数字中国积分争夺赛预赛",
+      "vuln_type": [
+        "hash_collision",
+        "lattice",
+        "crypto_rsa"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "SM3 哈希扩展攻击",
+        "64 字节盐分组",
+        "隐变量 RSA",
+        "resultant 多项式 GCD",
+        "sylvester_matrix",
+        "small_roots X=2^72",
+        "mbruteforce"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛预赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛预赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_L3HCTF_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SCTF2024_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛预赛.meta.md"
+      ],
+      "expanded_terms": [
+        "tp",
+        "---",
+        "small",
+        "AES",
+        "CRT",
+        "tp",
+        "---",
+        "AES",
+        "LLL",
+        "small"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 年 ISG 观安杯网络安全比赛部分题解（ezbank + babysec + blindpwn）",
+      "vuln_type": [
+        "race_condition",
+        "rce",
+        "pwn_unknown",
+        "ret2libc"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ISG 2025 观安杯 毕方安全",
+        "ezbank 转账竞争条件爆破",
+        "babysec start.sh 密码下载",
+        "blindpwn 整数溢出 长度-1",
+        "canary 17 字节栈溢出",
+        "write 泄露栈地址",
+        "调试模式二次执行",
+        "libc 2.35 ret2libc",
+        "system binsh"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年能源网络安全大赛团体预赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Nepctf2025_PWN部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年_ISG_观安杯网络安全比赛部分题解.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "key",
+        "name",
+        "canary",
+        "file",
+        "flag",
+        "key",
+        "name",
+        "canary",
+        "file"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 黄鹤杯 PWN Virtual_Vehicle（VM 逆向+VM PWN+seccomp）",
+      "vuln_type": [
+        "vm",
+        "shellcode",
+        "rop",
+        "seccomp"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "黄鹤杯 2025 PWN Virtual_Vehicle",
+        "自定义 VM 逆向+VM PWN",
+        "vtable 8 个函数指针 (push_from_reg/push_from_imm/pop_to_reg/add_reg2_reg3_to_reg1/sub/mul/load/print)",
+        "heap 0x1000 ope 字节码",
+        "hashtable mmap RWX 0x1000",
+        "seccomp-tools 沙箱",
+        "KILL execve",
+        "init_process() 初始化",
+        "main 9 种操作 8 种通过 vtable",
+        "喷 shellcode 到 RWX"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年黄鹤杯_–_PWN_-_Virtual_Vehicle.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(30)——鹏城杯VM.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_强网杯_pwn_adventure.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/XCTF-SUCTF_2025-部分Pwn题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(30)——鹏城杯VM.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年黄鹤杯_–_PWN_-_Virtual_Vehicle.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年黄鹤杯_–_PWN_-_Virtual_Vehicle.meta.md"
+      ],
+      "expanded_terms": [
+        "自定义",
+        "heap",
+        "---",
+        "libc",
+        "指针",
+        "自定义",
+        "heap",
+        "---",
+        "libc",
+        "指针"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "HGAME 2026复现",
+      "vuln_type": [
+        "stack_overflow"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2857142857142857,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "canary-bypass",
+        "shellcode",
+        "short-int",
+        "v3-decrypt",
+        "libc-2.35"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/阿里云CTF2025复现-风清.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题复现：2022-CryptoCTF（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md"
+      ],
+      "expanded_terms": [
+        "vuln",
+        "shellcode",
+        "libc",
+        "绕过",
+        "---",
+        "libc",
+        "---",
+        "vuln",
+        "pwn",
+        "show"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "【相关分享】网鼎杯拟赛 Writeup",
+      "vuln_type": [
+        "upload"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.14285714285714285,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "拟赛",
+        "签到题",
+        "upload.php",
+        "一句话后门",
+        "Burp抓包改后缀",
+        "隼目安全"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md",
+        "Des-CTF-Knowledge/WP汇总/代码审计/README.md",
+        "Des-CTF-Knowledge/CHANGELOG.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】网鼎杯拟赛Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "后缀",
+        "上传",
+        "php",
+        "签到",
+        "Burp",
+        "签到",
+        "上传",
+        "后缀",
+        "php",
+        "Burp"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "漏洞学习之PWN-绿城杯uaf_pwn 分析",
+      "vuln_type": [
+        "uaf"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "unsorted bin leak",
+        "main_arena+88",
+        "fastbin attack",
+        "__malloc_hook"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-绿城杯uaf_pwn_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-绿城杯uaf_pwn_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/绿城杯-WriteUp.meta.md",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-ASIS_CTF_2016_b00ks.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-ASIS_CTF_2016_b00ks.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/绿城杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/绿城杯-WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "malloc",
+        "hook",
+        "libc",
+        "gadget",
+        "CTF",
+        "libc",
+        "malloc",
+        "hook",
+        "gadget",
+        "free"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "看雪2023 KCTF年度赛 | 第9题·突破防线-设计思路及解析",
+      "vuln_type": [
+        "kernel"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Go VM",
+        "vmfs内核驱动",
+        "IOCTL用户态通信",
+        "自定义VM指令",
+        "sha512密码学",
+        "cgo FFI",
+        "http服务+VM执行"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第9题·突破防线-设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第9题·突破防线-设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_秋季赛_-_第九题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第四题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第三题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第四题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2023_KCTF年度赛_-_第五题·争分夺秒-设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "VM",
+        "VMFS",
+        "FILE",
+        "uint64",
+        "IOCTL",
+        "VM",
+        "VMFS",
+        "FILE",
+        "uint64",
+        "IOCTL"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 第一届\"网谷杯\" Writeup（外链 PDF）",
+      "vuln_type": [
+        "misc_unknown"
+      ],
+      "tags_total": 4,
+      "tags_found": 4,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.25,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ChaMd5Venom",
+        "团队战绩",
+        "PDF外链"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第一届“网谷杯”_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第一届“网谷杯”_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025PatriotCTF_Writeup_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第一届2024_VCTF_纳新赛_官方WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024CattheQuest_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025PatriotCTF_Writeup_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第一届“网谷杯”_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第一届“网谷杯”_Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "2024",
+        "Venom",
+        "WP",
+        "招新",
+        "---",
+        "2024",
+        "Venom",
+        "WP",
+        "招新",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "NKCTF 2024 Writeup by Polaris 战队 (ThinkPHP + KodExplorer)",
+      "vuln_type": [
+        "web_unknown"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ThinkPHP 反序列化",
+        "think\\process\\pipes\\Windows",
+        "KodExplorer",
+        "Mcrypt 加密",
+        "RC4 密钥流",
+        "Windows 文件包含"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/NKCTF_2024_Writeup_–Polaris战队.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/NKCTF_2024_Writeup_–Polaris战队.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态_2024_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/京麒CTF_2024_初赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年“羊城杯”粤港澳大湾区网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/D3CTF_2024_Writeup_–Polaris战队.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/NKCTF_2024_Writeup_–Polaris战队.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/NKCTF_2024_Writeup_–Polaris战队.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "Windows",
+        "序列化",
+        "md5",
+        "16",
+        "key",
+        "序列化",
+        "Windows",
+        "md5",
+        "16"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 KCTF 大赛 - 第九题《第一次接触》设计思路及解析",
+      "vuln_type": [
+        "reverse",
+        "misc_math"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "三段序列号",
+        "四皇后问题",
+        "反调试改乘数",
+        "内存布局凑0x39",
+        "md5爆破",
+        "strncmp前8位"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第九题《第一次接触》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第九题《第一次接触》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_KCTF_-_第九题《智斗邪首》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/PROGRESS.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_KCTF_-_第九题《智斗邪首》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_秋季赛_-_第九题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第九题《第一次接触》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第九题《第一次接触》设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "high",
+        "Decimal",
+        "int",
+        "low",
+        "2025",
+        "high",
+        "Decimal",
+        "int",
+        "low",
+        "2025"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "赛题全解|第四届 RWCTF 体验赛 WriteUp",
+      "vuln_type": [
+        "pwn_unknown"
+      ],
+      "tags_total": 13,
+      "tags_found": 13,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Java-Processor",
+        "Annotation-Processing",
+        "SNMP-aarch64",
+        "kernel-UAF",
+        "Docker-escape",
+        "lvm-vm",
+        "CAP_DAC_OVERRIDE",
+        "QEMU-RTOS",
+        "Log4j-JNDI",
+        "Redis-unauth",
+        "H2-Database",
+        "phpMyAdmin",
+        "Pentest-Pivoting"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【Real_World_CTF_6th_Writeup】就是它！RWCTF_2024体验赛官方Writeup奉上！.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届_Real_World_CTF_体验赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题全解-第四届_RWCTF_体验赛_WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "RCE",
+        "Java",
+        "H2",
+        "key",
+        "flag",
+        "RCE",
+        "Java",
+        "H2",
+        "key",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "GDG Algiers CTF两道矩阵题wp",
+      "vuln_type": [
+        "crypto_rsa"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.125,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "matrix",
+        "diagonalization",
+        "sagemath",
+        "discrete-log",
+        "poly",
+        "aes-cbc",
+        "lwe"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/GDG_Algiers_CTF两道矩阵题wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/GDG_Algiers_CTF两道矩阵题wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTFSHOW第三届愚人杯WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTFSHOW第三届愚人杯WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CakeCTF_2023_作問感想.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/GDG_Algiers_CTF两道矩阵题wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/GDG_Algiers_CTF两道矩阵题wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/GDG_Algiers_CTF两道矩阵题wp.meta.md"
+      ],
+      "expanded_terms": [
+        "加密",
+        "PNG",
+        "反推",
+        "异或",
+        "16",
+        "加密",
+        "PNG",
+        "反推",
+        "异或",
+        "16"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 中国工业互联网安全大赛智能家电行业赛道 writeup by Mini-Venom",
+      "vuln_type": [
+        "forensic_memory",
+        "crypto_rsa",
+        "web_unknown",
+        "stego_traffic",
+        "reverse",
+        "web_rce"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 5,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.5,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "BLE 协议 link key",
+        "binwalk",
+        "RSA gcdext 同模攻击",
+        "vigor_router 路由器",
+        "Modbus 拼接图"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道选拔赛决赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年中国工业互联网安全大赛智能家电赛道选拔赛_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年中国工业互联网安全大赛智能家电赛道选拔赛_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "modbus",
+        "---",
+        "gcdext",
+        "shiro",
+        "key",
+        "shiro",
+        "modbus",
+        "---",
+        "gcdext"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2021 西湖论剑 - TinyNote 详细分析",
+      "vuln_type": [
+        "heap_exploit",
+        "pwn_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "libc-2.33",
+        "tcache",
+        "UAF",
+        "PROTECT_PTR",
+        "heap-base-leak",
+        "ORW",
+        "setcontext",
+        "IO_FILE",
+        "exit_hook",
+        "free_hook"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2021西湖论剑-TinyNote详细分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/西湖论剑线下-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2021西湖论剑IOT_RW-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/西湖论剑-信呼oa审计复盘.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2021西湖论剑-TinyNote详细分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022西湖论剑_网络安全大赛_wp_by_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2021西湖论剑-TinyNote详细分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2021西湖论剑-TinyNote详细分析.meta.md"
+      ],
+      "expanded_terms": [
+        "php",
+        "IoT",
+        "---",
+        "IO",
+        "key",
+        "php",
+        "---",
+        "base64",
+        "IO",
+        "OA"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 羊城杯 PWN AK 篇（4 题：pstack / Travel / C++String catch / bigbin HoA2）",
+      "vuln_type": [
+        "rop",
+        "ret2libc",
+        "heap_exploit",
+        "srop"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.25,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "pstack 控制 rbp",
+        "House of Apple 2",
+        "setcontext ORW",
+        "_IO_wfile_jumps",
+        "C++ String catch",
+        "system command"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年羊城杯粤港澳大湾区网络安全大赛WP-PWN_AK篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/羊城杯_·_2024_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[2024长城杯初赛]_Pwn题SomeHash_SomeTime_shutup题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年“羊城杯”粤港澳大湾区网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年羊城杯粤港澳大湾区网络安全大赛WP-AI_AK篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年羊城杯粤港澳大湾区网络安全大赛WP-PWN_AK篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年羊城杯粤港澳大湾区网络安全大赛WP-PWN_AK篇.meta.md"
+      ],
+      "expanded_terms": [
+        "system",
+        "---",
+        "attack",
+        "largebin",
+        "__",
+        "system",
+        "---",
+        "attack",
+        "IO",
+        "largebin"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2023 D^3CTF writeup by 万年三等奖",
+      "vuln_type": [
+        "rce",
+        "sqli",
+        "web_unknown",
+        "reverse",
+        "ssrf"
+      ],
+      "tags_total": 15,
+      "tags_found": 15,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.13333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "阿里",
+        "蚂蚁",
+        "Escape-Plan",
+        "Python-sandbox",
+        "list-dict-substitution",
+        "d3cloud",
+        "d3node",
+        "FilesystemAdapter",
+        "zip-slip",
+        "prepack-npm",
+        "浮点反调试",
+        "除零异常",
+        "XOR-ring"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_D^3CTF_writeup_by_万年三等奖.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/D3CTF_2023_Writeup-_Polaris战队.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023年春秋杯网络安全联赛冬季赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/1337UP_LIVE_CTF_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AntCTF_x_D³CTF_2023_d3op复盘笔记.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HITCON_2023_x_DEVCORE_Wargame-_My_todolist_Write-up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_D^3CTF_writeup_by_万年三等奖.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_D^3CTF_writeup_by_万年三等奖.meta.md"
+      ],
+      "expanded_terms": [
+        "...",
+        "---",
+        "base64",
+        "PHP",
+        "type",
+        "base64",
+        "---",
+        "type",
+        "dict",
+        "zip"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "AliCTF 2026 SU WP - Fileury",
+      "vuln_type": [
+        "deserialize"
+      ],
+      "tags_total": 13,
+      "tags_found": 13,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.23076923076923078,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "DisallowedList黑名单",
+        "SimpleCache$StoreableCachingMap",
+        "LazyMap",
+        "TiedMapEntry",
+        "TransformingComparator",
+        "StringValueTransformer",
+        "writeToPath",
+        "jre/lib/ext",
+        "dnsns.jar",
+        "DNSNameServiceDescriptor"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliCTF_2026_SU_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliCTF_2026_SU_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliyunCTF2025_题解之_Jtools_Fury_反序列化利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/LilacCTF_2026_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliCTF_2026_SU_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023黑盾杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliCTF_2026_SU_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/AliCTF_2026_SU_WP.meta.md"
+      ],
+      "expanded_terms": [
+        "序列化",
+        "Fury",
+        "黑名单",
+        "二次",
+        "---",
+        "序列化",
+        "status",
+        "黑名单",
+        "---",
+        "HTTP"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 未知之境 腾讯网络安全 T-Star 高校挑战赛 WriteUp",
+      "vuln_type": [
+        "sqli",
+        "xxe",
+        "web_unknown",
+        "forensic_disk"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.09090909090909091,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "T-Star",
+        "腾讯",
+        "Flask",
+        "JSON",
+        "id注入",
+        "file:///proc/self/cwd/config.py",
+        "error SYSTEM",
+        "abe.jar",
+        "data.ab",
+        "Android Backup"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_未知之境_腾讯网络安全T-Star高校挑战赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_SWPUCTF_Web_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年首届高校网络安全管理运维赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/高校网络安全管理运维赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯”网络安全挑战赛WriteUp_By_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯”网络安全挑战赛WriteUp_By_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_未知之境_腾讯网络安全T-Star高校挑战赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_未知之境_腾讯网络安全T-Star高校挑战赛_WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "admin",
+        "2e",
+        "p8",
+        "---",
+        "bin",
+        "p8",
+        "admin",
+        "2e",
+        "sub",
+        "指令"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 能源网络安全大赛预赛【金盾检测】",
+      "vuln_type": [
+        "stego_traffic",
+        "crypto_rsa",
+        "reverse",
+        "misc_unknown",
+        "web_unknown",
+        "deserialize"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "GOOSE 协议提取",
+        "item4 < 128 ASCII",
+        "DCS 双网卡 IP",
+        "Modbus 流量",
+        "FINS 协议响应构造",
+        "RSA 小模数",
+        "base64 隐写",
+        "java 反序列化 ysoserial",
+        "图片改高"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_能源网络安全大赛预赛_【金盾检测】.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_能源网络安全大赛预赛_【金盾检测】.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_WIDC_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024中国工业互联网安全大赛智能家电行业赛道选拔赛决赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024国城杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_能源网络安全大赛预赛_【金盾检测】.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_能源网络安全大赛预赛_【金盾检测】.meta.md"
+      ],
+      "expanded_terms": [
+        "FINS",
+        "key",
+        "---",
+        "序列化",
+        "base64",
+        "key",
+        "序列化",
+        "FINS",
+        "---",
+        "AES"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "天穹 - Linux Copy Fail 漏洞 CVE-2026-31431 利用分析",
+      "vuln_type": [
+        "auth_bypass",
+        "pwn_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 4,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Linux-kernel",
+        "setuid",
+        "sploitus",
+        "1day",
+        "su-shellcode",
+        "kernel-exploit",
+        "theori-io",
+        "copy-fail"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md"
+      ],
+      "expanded_terms": [
+        "AF",
+        "ALG",
+        "splice",
+        "缓存",
+        "su",
+        "AF",
+        "ALG",
+        "splice",
+        "缓存",
+        "su"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 年羊城杯网络安全大赛 Writeup",
+      "vuln_type": [
+        "lfi",
+        "rce",
+        "web_unknown"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.18181818181818182,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "hxp-CTF",
+        "includer's-revenge",
+        "iconv-chain",
+        "php-filter",
+        "UTF-8",
+        "UTF-16",
+        "CSISO2022KR",
+        "UCS2",
+        "file-include"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年羊城杯网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022羊城杯竞赛_Web题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年“羊城杯”粤港澳大湾区网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年“羊城杯”粤港澳大湾区网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年羊城杯粤港澳大湾区网络安全大赛WP-AI_AK篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年羊城杯网络安全大赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年羊城杯网络安全大赛Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "__",
+        "php",
+        "---",
+        "iconv",
+        "base64",
+        "__",
+        "php",
+        "---",
+        "iconv",
+        "base64"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "看雪2022 KCTF 春季赛 | 第12题设计思路及解析",
+      "vuln_type": [
+        "lattice"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "自定义MD5",
+        "LWE问题",
+        "MT19937爆破seed",
+        "矩阵乘法mod 127",
+        "增广格构造",
+        "多空间分层"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第12题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第12题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第十题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第12题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第五题设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "127",
+        "64",
+        "MK1",
+        "32",
+        "16",
+        "127",
+        "64",
+        "16",
+        "MK1",
+        "32"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 DSCTF 决赛 WP",
+      "vuln_type": [
+        "ssrf",
+        "rce",
+        "ssti",
+        "xss",
+        "crypto_rsa",
+        "heap_exploit",
+        "pwn_unknown",
+        "web_unknown"
+      ],
+      "tags_total": 17,
+      "tags_found": 17,
+      "tags_found_excl_self": 4,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.23529411764705882,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "SpringBoot",
+        "heapdump",
+        "jodd-http",
+        "SLAVEOF",
+        "module-load",
+        "nghttp",
+        "h2",
+        "__base__-__subclasses__",
+        "qsieve",
+        "GCD",
+        "libc-2.27",
+        "__free_hook",
+        "heap-overflow"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_DSCTF决赛wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/香港網絡攻防精英培訓暨攻防大賽_2025_初賽-決賽WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届CN-fnst--CTF官方writeup.meta.md",
+        "Des-CTF-Knowledge/AI-SEARCH-INDEX.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届_黄河流域网络攻防竞赛决赛WriteUp分享.meta.md",
+        "Des-CTF-Knowledge/AI-SEARCH-INDEX.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_DSCTF决赛wp.meta.md"
+      ],
+      "expanded_terms": [
+        "md",
+        "meta",
+        "articles",
+        "grep",
+        "php",
+        "md",
+        "meta",
+        "articles",
+        "grep",
+        "php"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2026 DesCTF wp（Misc 全 - bkcrack 已知明文攻击 + zigzag 还原 + torch 模型反演 + Modbus + Shamir 秘密分享）",
+      "vuln_type": [
+        "block_cipher",
+        "stego_image",
+        "ai",
+        "pwn_unknown",
+        "crypto_unknown",
+        "forensic_disk"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "DesCTF 2026 Misc",
+        "bkcrack 已知明文攻击 challenge.png 89504E47 IHDR",
+        "7z 头 37 7A BC AF 27 1C",
+        "2D zigzag 还原 PIL",
+        "torch 加载 model.pth 提 eval_cache embedding 反演",
+        "红外遥控器 cmd:00 15=OK/16=U/17=D/18=R/19=L 6x6 网格 ABCDEF/GHIJKL/MNOPQR/STUVWX/YZ1234/567890",
+        "Modbus func_code 8 异常响应",
+        "Shamir 秘密分享 Lagrange 插值还原 P=666c61677b...",
+        "多文件综合取证"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026DesCTF_wp（Misc全）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026DesCTF_wp（Misc全）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/科来杯第十届山东省大学生网络安全技能大赛wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【ICLESCTFWP】ICLESCTF网络安全比赛WP（Misc&Crypto）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/UKY_2025UCSC_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HDCTF_2023_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026DesCTF_wp（Misc全）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026DesCTF_wp（Misc全）.meta.md"
+      ],
+      "expanded_terms": [
+        "png",
+        "flag",
+        "base64",
+        "---",
+        "vocab",
+        "---",
+        "RSA",
+        "base64",
+        "attack",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2026 NCTF Writeup by Mini-Venom（Blind SSTI + 连分数 Wiener 攻击）",
+      "vuln_type": [
+        "ssti",
+        "crypto_rsa",
+        "web_unknown",
+        "jwt"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "NCTF 2026",
+        "BlindSSTIExploit 时延盲注",
+        "cycler.__init__.__globals__.os.popen sleep 5",
+        "字符集 {}_- + ascii + digits",
+        "N-RustPICA SPA js 源码泄露",
+        "/api/admin/templates/review-flow",
+        "anime_admin/purestream 凭据",
+        "连分数 e/N^6 展开 收敛分母 d",
+        "Wiener 攻击 RSA 小 d",
+        "GAME 协议 Magic 0x47414D45"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026NCTF_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026NCTF_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第六届“强网”拟态防御国际精英挑战赛_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026阿里CTF_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯_WriteUp_by_Mini-Venom（招新）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/鹏云杯-第十二届山东省大学生网络安全技能大赛线上选拔赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026NCTF_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026NCTF_Writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "XOR",
+        "key",
+        "---",
+        "字节",
+        "flag",
+        "XOR",
+        ".__",
+        "key",
+        "next"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "DeadSec CTF 2024 writeup by Mini-Venom",
+      "vuln_type": [
+        "fmt_string"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "user-management",
+        "fmt-string",
+        "three-write",
+        "libc-leak",
+        "privilege"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DeadSec_CTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DeadSec_CTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DownUnderCTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024阿里CTF_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_ByteCTF大师赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024阿里CTF_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DeadSec_CTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DeadSec_CTF_2024_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "x00",
+        "hn",
+        "DownUnderCTF",
+        "---",
+        "vuln",
+        "x00",
+        "AI",
+        "---",
+        "p64",
+        "stdout"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "0CTF 2023 筆記 (CSP nonce bypass)",
+      "vuln_type": [
+        "xss",
+        "web_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "CSP-bypass",
+        "nonce",
+        "CSS-injection",
+        "webkit-cross-fade",
+        "DOM-XSS",
+        "hash",
+        "puppeteer",
+        "ngrok",
+        "CSS-exfil",
+        "background-image"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2023_筆記.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/corCTF_2023_&_Sekai_CTF_2023_筆記.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PlaidCTF_2023_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ångstromCTF_2023_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_Writeup-Upsolves.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/XSS,_Race_Condition,_XS-Leaks_and_CSP_&_iframe’s_sandbox_bypass_–_LakeCTF_2023_G.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2023_筆記.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2023_筆記.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "script",
+        "payload",
+        "---",
+        "admin",
+        "flag",
+        "script",
+        "---",
+        "payload",
+        "src"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "PARADIGM CTF 2022/Hint Finance",
+      "vuln_type": [
+        "logic"
+      ],
+      "tags_total": 9,
+      "tags_found": 8,
+      "tags_found_excl_self": 1,
+      "tag_recall": 0.8888888888888888,
+      "tag_recall_excl_self": 0.1111111111111111,
+      "missing_tags": [
+        "3404319313"
+      ],
+      "missing_tags_excl_self": [
+        "以太坊",
+        "ERC777 重入",
+        "ERC1820Registry 钩子",
+        "闪电贷",
+        "函数签名碰撞",
+        "3404319313",
+        "approveAndCall",
+        "嵌套调用"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(6)-_Hint_Finance.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(3)-Lockbox2_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(1)-resuce分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(2)-Source_Code分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/paradigm_2022_ctf_——Rescue.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(5)-_Vanity_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(6)-_Hint_Finance.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(1)-resuce分析.meta.md"
+      ],
+      "expanded_terms": [
+        "字节",
+        "addLiquidity",
+        "WETH",
+        "address",
+        "solve",
+        "字节",
+        "addLiquidity",
+        "WETH",
+        "address",
+        "solve"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "磐石CTF2025 Pwn赛题account详解：32位环境下的数组越界与ROP实战",
+      "vuln_type": [
+        "ret2libc"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2857142857142857,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "32位ROP",
+        "数组越界",
+        "vuln()循环",
+        "v1[v2++]覆盖返回地址",
+        "puts泄漏libc"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题account详解：32位环境下的数组越界与ROP实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题account详解：32位环境下的数组越界与ROP实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/香港網安奪旗賽HKCERT_CTF_2025_資格賽PWN方向Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF比赛PWN题解题思路(一).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Pwn题解析｜L3CTF_2025_heack_&_heack_revenge.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题user解析：解密0xfbad1880背后的IO_FILE结构体利用技术.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题user解析：解密0xfbad1880背后的IO_FILE结构体利用技术.meta.md"
+      ],
+      "expanded_terms": [
+        "v1",
+        "puts",
+        "vuln",
+        "v2",
+        "PIE",
+        "v1",
+        "puts",
+        "p64",
+        "vuln",
+        "v2"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2023 N1CTF",
+      "vuln_type": [
+        "ecdsa"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2222222222222222,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "nonce泄漏",
+        "已知比特",
+        "LLL格",
+        "Coppersmith",
+        "ECPrng",
+        "P*Q*R三素数",
+        "Boneh-Durfee"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_N1CTF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_N1CTF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_Writeup_by_Never_Stop_Exploiting.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DATALOG魔幻之力，N1CTF_2023_guess_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_Writeup_by_Never_Stop_Exploiting.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_pwn1OS_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023_N1CTF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_Writeup_by_Never_Stop_Exploiting.meta.md"
+      ],
+      "expanded_terms": [
+        "128",
+        "symbol",
+        "LLL",
+        "flag",
+        "127",
+        "LLL",
+        "128",
+        "symbol",
+        "bit",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024\"领航杯\"-高职组初赛WP（一）",
+      "vuln_type": [
+        "xxe",
+        "ssrf",
+        "lfi",
+        "web_unknown",
+        "crypto_rsa"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "XXE out-of-band DTD",
+        "Aiohttp CVE-2024-23334 目录穿越",
+        "redis dump.rdb",
+        "PostgreSQL docker 恢复",
+        "rockyou 字典爆破",
+        "RSA AMM 开方",
+        "p = next_prime(iroot(n))"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/香港網絡攻防精英培訓暨攻防大賽_2025_初賽-決賽WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项教师组决赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【相关分享】星芒杯2025_WriteUP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md"
+      ],
+      "expanded_terms": [
+        "..",
+        "Math",
+        "2025",
+        "---",
+        "php",
+        "2025",
+        "flag",
+        "---",
+        "user",
+        "php"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 网鼎杯玄武组 pwn2 题目详解（SROP + read shellcode）",
+      "vuln_type": [
+        "srop",
+        "ret2libc",
+        "shellcode"
+      ],
+      "tags_total": 11,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 0.8181818181818182,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [
+        "\"Wanna return?\" A",
+        "\"once again?\" A*0x100 二次溢出"
+      ],
+      "missing_tags_excl_self": [
+        "玄武 pwn2",
+        "\"leave your name\" A*0x28+p64(1)",
+        "\"Wanna return?\" A",
+        "\"once again?\" A*0x100 二次溢出",
+        "多次 read 触发栈迁移",
+        "rax/rdi/rsi/rdxrbx 通用 gadget",
+        "syscall 0x41ac26",
+        "sh_addr 0x4C5000",
+        "syscall 0x3B execve",
+        "看雪 ID 鬥魚",
+        "CVE-2024-3393 PAN-OS DoS"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/网鼎杯玄武组——PWN2.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/解析2025强网拟态Stack.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024网鼎杯玄武组pwn2题目详解.meta.md"
+      ],
+      "expanded_terms": [
+        "syscall",
+        "p64",
+        "rax",
+        "payload",
+        "execve",
+        "syscall",
+        "p64",
+        "rax",
+        "payload",
+        "execve"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "SECCON CTF 2023 Quals/Upsolves",
+      "vuln_type": [
+        "jwt",
+        "xss",
+        "rce"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.14285714285714285,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "JWT alg 注入",
+        "constructor prototype",
+        "notevil eval",
+        "CSP 绕过",
+        "XSS 拿 cookie",
+        "简单计算器 XSS"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_Writeup-Upsolves.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_Writeup-Upsolves.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_–_Bad-JWT.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_Beginners_CTF_(ctf4b)_作問者writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/corCTF_2023_&_Sekai_CTF_2023_筆記.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Race_Condition,_OAuth_without_state_and_redirection_into_XSS_&_RCE_via_HTML2PDF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2022_Quals_writeup_–_English.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/BYUCTF_2024_Writeups.meta.md"
+      ],
+      "expanded_terms": [
+        "alg",
+        "flag",
+        "__",
+        "payload",
+        "url",
+        "alg",
+        "flag",
+        "__",
+        "payload",
+        "url"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Write Up Reverse Engineering — LINE CTF 2023— Fishing and Jumpit",
+      "vuln_type": [
+        "misc_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "anti_decompiler_ebff",
+        "nop_patch",
+        "thread_modification_debug",
+        "custom_rc4_iv",
+        "frida_hook_brute_force",
+        "unity_il2cpp",
+        "il2cppdumper",
+        "ghidra_python_script",
+        "aes_ecb_score_concat",
+        "anti_debug_int2c"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Write_Up_Reverse_Engingeering_—_LINE_CTF_2023—_Fishing_and_Jumpit.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[CTF]_ECW_CTF_2022_–_Reverse_challenges_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Faraday_CTF_2022_Write-up-_Reverse_Engineering_and_Exploiting_an_IoT_bug.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第一届2024_VCTF_纳新赛_官方WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/REVERSE｜西湖论剑·2022中国杭州网络安全技能大赛初赛官方Write_Up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年第三届电信和互联网行业职业技能竞赛暨第十一届信息通信网络安全管理员职业技能竞赛全国选拔赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Faraday_CTF_2022_Write-up-_Reverse_Engineering_and_Exploiting_an_IoT_bug.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Faraday_CTF_2022_Write-up-_Reverse_Engineering_and_Exploiting_an_IoT_bug.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "p64",
+        "key",
+        "payload",
+        "hook",
+        "key",
+        "hook",
+        "---",
+        "flag",
+        "2022"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "TryHackMe Overpass writeup",
+      "vuln_type": [
+        "web_unknown"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.14285714285714285,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "gobuster",
+        "rsa-ssh-passphrase",
+        "rot47-cipher",
+        "password-manager-overpass",
+        "hosts-file-hijack",
+        "curl-pipe-bash"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TryHackMe_Overpass_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TryHackMe_Overpass_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TryHackMe_Looking_Glass_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/五月公开赛writeup｜web篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HackTheBox_Stocker_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Shakti_CTF_(2024)_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TryHackMe_Overpass_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TryHackMe_Overpass_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "cat",
+        "ssh",
+        "---",
+        "alice",
+        "title",
+        "---",
+        "sudo",
+        "alice",
+        "title",
+        "admin"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "CTF 专辑 – 花指令阅读与分析",
+      "vuln_type": [
+        "reverse"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "JunkCode",
+        "等价替换",
+        "抵消型",
+        "jmp db型",
+        "间接赋值",
+        "IDA LinearSweep",
+        "Recursive Traversal",
+        "算数拆分",
+        "栈平衡",
+        "call+5取eip"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF专辑–花指令阅读与分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF专辑–花指令阅读与分析.meta.md",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "CTF特训营：技术详解、解题方法与竞赛技巧.pdf",
+        "加密与解密 第4版 (段钢) (Z-Library).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024极客少年WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF专辑–花指令阅读与分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF专辑–花指令阅读与分析.meta.md"
+      ],
+      "expanded_terms": [
+        "IDA",
+        "eax",
+        "sbox",
+        "add",
+        "ea",
+        "eax",
+        "add",
+        "IDA",
+        "xor",
+        "sbox"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "绿城杯-WriteUp",
+      "vuln_type": [
+        "pwn_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "off-by-one",
+        "uaf-double-free",
+        "tcache-poisoning",
+        "libc-2.23",
+        "one-gadget",
+        "git-leak",
+        "eval-system",
+        "false-file-read"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/绿城杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/羊城杯_·_2024_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯”网络安全挑战赛WriteUp_By_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/justCTF_2023_Writeup_by_VP-Union.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-绿城杯uaf_pwn_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_ByteCTF大师赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/绿城杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/漏洞学习之PWN-绿城杯uaf_pwn_分析.meta.md"
+      ],
+      "expanded_terms": [
+        "sh",
+        "sendlineafter",
+        "libc",
+        "attack",
+        "---",
+        "sh",
+        "sendlineafter",
+        "libc",
+        "attack",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "HKCERT CTF 2022 Postmortem (I): Easier Crypto Challenges",
+      "vuln_type": [
+        "crypto_rsa"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.25,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "dlp",
+        "cookie-flipping",
+        "cbc",
+        "base64",
+        "negative-e",
+        "mystiz"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2022_Postmortem_(I)-_Easier_Crypto_Challenges.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2022_Postmortem_(I)-_Easier_Crypto_Challenges.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Social_Engineering_To_Solve_A_Crypto_Challenge_–_LakeCTF_2022.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PARADIGM_CTF_2022题目分析(3)-Lockbox2_分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2022_Crypto_Writeups_By_tl2cents.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2022_Postmortem_(I)-_Easier_Crypto_Challenges.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2022_Postmortem_(I)-_Easier_Crypto_Challenges.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HKCERT_CTF_2022_Postmortem_(I)-_Easier_Crypto_Challenges.meta.md"
+      ],
+      "expanded_terms": [
+        "c1",
+        "---",
+        "key",
+        "protonmail",
+        "公钥",
+        "c1",
+        "pow",
+        "key",
+        "公钥",
+        "私钥"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 盘古石晋级赛 IPA 和 APK 部分（iOS + Android 取证）",
+      "vuln_type": [
+        "forensic_disk",
+        "misc_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "iOS IPA 毛雪柳手机取证",
+        "iCost 记账 APP default.realm Realm 数据库",
+        "Mattermost 内部 IM",
+        "base.apk 伏季雅手机",
+        "威尼斯诈骗 APP",
+        "w2a.W2Ah5.jsgjzfx.org.cn 包名",
+        "__W2A__h5.jsgjzfx.org.cn 打包 ID",
+        "io.dcloud.PandoraEntry 启动项",
+        "雷电 APP 智能分析",
+        "app.db Mattermost"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024盘古石晋级赛IPA和apk部分.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024盘古石晋级赛IPA和apk部分.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024FIC第四届全国网络空间取证竞赛线上初赛全解参考wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20240201美亚春苗集训营进阶班考核取证部分参考wp.meta.md",
+        "Des-CTF-Knowledge/PROGRESS.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WriteUP·中篇】2024WIDC世界智能驾驶挑战赛“天融信杯”信息安全攻防赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024盘古石晋级赛IPA和apk部分.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024盘古石晋级赛IPA和apk部分.meta.md"
+      ],
+      "expanded_terms": [
+        "APP",
+        "high",
+        "服务器",
+        "com",
+        "low",
+        "APP",
+        "high",
+        "服务器",
+        "com",
+        "low"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "CCB CISCN 半决赛 AWDP pwn 题解 (2 道)",
+      "vuln_type": [
+        "heap_exploit"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.5,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "libc 2.35",
+        "tcache dup",
+        "stdout leak"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第十七届CISCN总决赛-AWDP-PWN部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/津京冀网络攻防大赛线下决赛pwn–全场唯一解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/F.Z.N_CTF网络安全大赛PWN方向题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB_CISCN_半决赛-AWDP-pwn_题解.meta.md"
+      ],
+      "expanded_terms": [
+        "add",
+        "libc",
+        "pay",
+        "rm",
+        "p64",
+        "add",
+        "libc",
+        "free",
+        "rm",
+        "edit"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 XYCTF writeup by Mini-Venom（菜单 pwn + bss 写 /bin/sh + leave;ret）",
+      "vuln_type": [
+        "rop",
+        "ret2libc",
+        "shellcode"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "XYCTF 菜单 pwn",
+        "1 4 1 选项触发",
+        "栈溢出 0x40 字节",
+        "bss=0x405000+0xa00",
+        "leave_ret=0x40191B",
+        "rdi=0x4018e5",
+        "ret=0x40191C",
+        "/bin/sh 写到 bss 0x405a00",
+        "system plt 调"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025XYCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025XYCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第七届强网拟态_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届御网杯_线上下线pwn_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025鹏城杯_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025XYCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025XYCTF_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "secret",
+        "p64",
+        "---",
+        "rdi",
+        "payload",
+        "secret",
+        "p64",
+        "---",
+        "rdi",
+        "payload"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 春秋杯冬季赛 WriteUp By EDISEC",
+      "vuln_type": [
+        "rce",
+        "web_unknown",
+        "ret2libc",
+        "reverse",
+        "crypto_oracle"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.09090909090909091,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        ".NET",
+        "ComparerData",
+        "ASP.NET-Razor",
+        "File.WriteAllText",
+        "Process.Start",
+        "/proc/self/mem",
+        "DCT",
+        "FCT",
+        "bit-rotate",
+        "Go-reflect"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年春秋杯冬季赛部分WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022巅峰极客WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_ByteCTF_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023年春秋杯网络安全联赛冬季赛Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "---",
+        "NET",
+        "PHP",
+        "php",
+        "flag",
+        "---",
+        "Python",
+        "PHP",
+        "CVE"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "春秋杯 2022/sql_debug",
+      "vuln_type": [
+        "deserialize",
+        "phar",
+        "rce"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Nette",
+        "PDO",
+        "pgsqlCopyFromFile",
+        "dsn_from_uri"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022春秋杯联赛_传说殿堂赛道_sql_debug题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022春秋杯联赛_传说殿堂赛道_sql_debug题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【WP】2022年春秋杯春季赛Web类题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/20222022年春秋杯冬季赛-WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年春秋杯冬季赛部分WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024春秋杯网络安全联赛夏季赛WP(web).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022“第五空间”网络安全大赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-SQL_TEST出题笔记.meta.md"
+      ],
+      "expanded_terms": [
+        "序列化",
+        "PHP",
+        "flag",
+        "PDO",
+        "uri",
+        "序列化",
+        "PHP",
+        "PDO",
+        "key",
+        "触发"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "TQLCTF/SQL_TEST 出题笔记",
+      "vuln_type": [
+        "sqli",
+        "phar",
+        "deserialize",
+        "rce"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "mysqli_options",
+        "MYSQLI_INIT_COMMAND",
+        "time-based blind",
+        "secure_file_priv",
+        "INTO DUMPFILE",
+        "Symfony",
+        "Doctrine",
+        "RedisProxy",
+        "Dumper",
+        "phar 触发链"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-SQL_TEST出题笔记.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-SQL_TEST出题笔记.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024西湖论剑-数据安全-PHPEMS.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022春秋杯联赛_传说殿堂赛道_sql_debug题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022“第五空间”网络安全大赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022春秋杯联赛_传说殿堂赛道_sql_debug题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022“第五空间”网络安全大赛-WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "序列化",
+        "key",
+        "MYSQLI",
+        "file",
+        "触发",
+        "序列化",
+        "file",
+        "key",
+        "MYSQLI",
+        "php"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 年广西网络与信息安全职业技能竞赛 WriteUP",
+      "vuln_type": [
+        "stego_traffic",
+        "reverse",
+        "ret2libc",
+        "rce",
+        "deserialize",
+        "web_unknown"
+      ],
+      "tags_total": 13,
+      "tags_found": 13,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Wireshark",
+        "7-bit-decoder",
+        "SpamMimic",
+        "libc-2.35",
+        "gets",
+        "openat",
+        "PHP-act动态函数",
+        "Spring-aop",
+        "JDK17",
+        "POJONode",
+        "TemplatesImpl",
+        "JDK17反序列化",
+        "跨Module反射"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛WriteUP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛决赛_awd_web部分_赛后WriteUP以及自我检讨.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛WriteUP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023年江苏省信息通信行业网络与信息安全职业技能竞赛决赛–WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/铸网-2025”山东省工业互联网网络安全职业技能竞赛WriteUp（职工组）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛决赛_awd_web部分_赛后WriteUP以及自我检讨.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛决赛_awd_web部分_赛后WriteUP以及自我检讨.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年广西网络与信息安全职业技能竞赛决赛_awd_web部分_赛后WriteUP以及自我检讨.meta.md"
+      ],
+      "expanded_terms": [
+        "密码",
+        "AWD",
+        "---",
+        "key",
+        "断网",
+        "密码",
+        "AWD",
+        "---",
+        "key",
+        "断网"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "SUCTF 2026 Ez_Router",
+      "vuln_type": [
+        "auth_bypass",
+        "pwn_unknown",
+        "web_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "IoT",
+        "HTTP-CGI",
+        "login-bypass",
+        "JSON-XSS",
+        "base64-decode",
+        "RWX-heap",
+        "UAF",
+        "function-pointer",
+        "VPN-config",
+        "apply-callback"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUCTF2026_Ez_Router.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUCTF_2025_writeup_by_Min-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/XCTF-SUCTF_2025-部分Pwn题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025鹏城杯_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/阿里云CTF_2024_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025蓝桥杯网络安全赛道全国总决赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUCTF2026_Ez_Router.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUCTF2026_Ez_Router.meta.md"
+      ],
+      "expanded_terms": [
+        "secret",
+        "flag",
+        "write",
+        "---",
+        "heap",
+        "secret",
+        "flag",
+        "2025",
+        "write",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "ASEAN Cyber Shield (ACS) CTF 2023 [WEB]",
+      "vuln_type": [
+        "lfi"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.1,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "is_numeric绕",
+        "preg_match %091",
+        "/^[0-9+-\\/*e ]/i",
+        "PHP_SESSION_UPLOAD_PROGRESS",
+        "session_upload_progress_enabled",
+        "include_once",
+        "1MB padding race",
+        "/tmp/sess_XXXXX",
+        "shell.php写"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ASEAN_Cyber_Shield_(ACS)_CTF_2023_[WEB].meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ASEAN_Cyber_Shield_(ACS)_CTF_2023_[WEB].meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/1337UP_LIVE_CTF_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Cyber_Apocalypse_2023_硬件_CTF_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HackPack_CTF_2023_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Demo_App_–_THCon23_CTF_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ASEAN_Cyber_Shield_(ACS)_CTF_2023_[WEB].meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ASEAN_Cyber_Shield_(ACS)_CTF_2023_[WEB].meta.md"
+      ],
+      "expanded_terms": [
+        "php",
+        "PHP",
+        "SESSION",
+        "UPLOAD",
+        "PROGRESS",
+        "---",
+        "PHP",
+        "session",
+        "php",
+        "SESSION"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 数字中国积分争夺赛 - 线下",
+      "vuln_type": [
+        "lattice",
+        "ecdsa",
+        "crypto_rsa",
+        "block_cipher",
+        "aes"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.14285714285714285,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "DSA LCG PRNG LLL",
+        "small_prime_comb p+(p+d)/2*3",
+        "next_prime low_bits 360",
+        "Wiener attack small d",
+        "AES-128-ECB md5(sk)",
+        "continued_fraction 收敛子"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛预赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_L3HCTF_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_RCTF_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_2023_Writeup_by_Never_Stop_Exploiting.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_数字中国积分争夺赛_线下.meta.md"
+      ],
+      "expanded_terms": [
+        "128",
+        "LLL",
+        "127",
+        "---",
+        "small",
+        "128",
+        "LLL",
+        "127",
+        "---",
+        "small"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "SECCON CTF 2022 Quals writeup - English",
+      "vuln_type": [
+        "ssrf"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2727272727272727,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "qs-parameter-limit",
+        "http-param-pollution",
+        "flask-template",
+        "smuggled-cookie",
+        "dompurify-trusted-types",
+        "regexp-rightContext",
+        "deno-prototype-pollution",
+        "prototype-proxy"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2022_Quals_writeup_–_English.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_2022_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/seccon_2022_quals_–_pwn_simplemod_by_gallileo.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_Beginners_CTF_(ctf4b)_作問者writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ByteCTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_–_Bad-JWT.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SECCON_CTF_2023_Quals_Writeup-Upsolves.meta.md"
+      ],
+      "expanded_terms": [
+        "IO",
+        "flag",
+        "触发",
+        "nginx",
+        "host",
+        "flag",
+        "IO",
+        "__",
+        "触发",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 第三届熵密杯（SM2+SM4+SM3 EnvelopedData PKCS7 国密）",
+      "vuln_type": [
+        "block_cipher",
+        "crypto_rsa",
+        "ssti",
+        "web_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "熵密杯 2025",
+        "SM2+SM4+SM3 国密",
+        "EnvelopedData PKCS7 封装",
+        "SM2Cipher (x",
+        "hash",
+        "cipherText)",
+        "SM4-CBC OID 1.2.156.10197.1.104.2",
+        "SM3 OID 1.2.156.10197.1.401.1",
+        "gmssl 库",
+        "pyasn1 univ.Sequence",
+        "nopadding SM4-CBC",
+        "key.txt 固定密钥"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_第三届熵密杯.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_第三届熵密杯.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_江苏省密码行业职业技能竞赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/WMCTF2025_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025湾区杯网络安全竞赛WriteUP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛初赛-夺旗闯关赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_第三届熵密杯.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_第三届熵密杯.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "32",
+        "---",
+        "flag",
+        "__",
+        "key",
+        "32",
+        "---",
+        "flag",
+        "__"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 西湖论剑·网络安全大赛 WP（Rank-l SSTI + sqli or not）",
+      "vuln_type": [
+        "ssti",
+        "sqli",
+        "web_unknown",
+        "auth_bypass"
+      ],
+      "tags_total": 20,
+      "tags_found": 20,
+      "tags_found_excl_self": 11,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.55,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "西湖论剑 2025",
+        "Rank-l Flask render_template_string",
+        "is_safe_input 黑名单",
+        "cycler.next.__globals__.__builtins__.__import__('os').popen",
+        "lower() 绕关键字大写",
+        "FLAGF149 rot13?",
+        "sqli or not express req.query.info",
+        "sqlmap tamper space2comment",
+        "Phone_number 黑名单 flag"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025西湖论剑·网络安全大赛WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/赛题记录_-_2025西湖论剑两道WEB的一些思考.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025西湖论剑·网络安全大赛WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届西湖论剑·中国杭州网络安全技能大赛网络攻防实战赛-初赛_WriteUp_by_金石滩小鲨鱼.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/WEB｜西湖论剑·2022中国杭州网络安全技能大赛初赛官方Write_Up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022西湖论剑_网络安全大赛_wp_by_F61d.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025西湖论剑·网络安全大赛WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025西湖论剑·网络安全大赛WP.meta.md"
+      ],
+      "expanded_terms": [
+        "__",
+        "---",
+        "__.__",
+        "Node",
+        "php",
+        "__",
+        "---",
+        "__.__",
+        "Node",
+        "php"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "[2024 长城杯初赛] Pwn 题 SomeHash SomeTime shutup 题解",
+      "vuln_type": [
+        "fmt_string"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "fmt_string_pwn",
+        "stack_leak_libc",
+        "hn_arb_write",
+        "rop_pop_rdi_binsh_system",
+        "house_of_minho",
+        "fake_io_list_all_wfile_jumps",
+        "custom_shellcode_rop",
+        "open_read_write_flag",
+        "double_arb_write_loop"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[2024长城杯初赛]_Pwn题SomeHash_SomeTime_shutup题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网杯S8初赛_PWN_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第十七届CISCN总决赛-AWDP-PWN部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网杯_2024_初赛_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "libc",
+        "free",
+        "add",
+        "system",
+        "---",
+        "libc",
+        "free",
+        "stack",
+        "add",
+        "payload"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 第四届\"网鼎杯\"青龙组 writeup",
+      "vuln_type": [
+        "xss",
+        "ret2libc",
+        "reverse",
+        "block_cipher",
+        "web_unknown",
+        "pwn_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.25,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "青龙组",
+        "存储型XSS",
+        "admin-bot",
+        "fetch-exfil",
+        "i386",
+        "SM4-国密",
+        "Android-NDK",
+        "native-check",
+        "fenjing"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”青龙组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”玄武组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_青龙&白虎.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”白虎组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”青龙组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”青龙组_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "key",
+        "admin",
+        "fork",
+        "flag",
+        "---",
+        "key",
+        "attack",
+        "flag",
+        "fork"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "0CTF/TCTF 2022 NFT Market (Solidity 0.8.15 calldata bug)",
+      "vuln_type": [
+        "logic",
+        "web_unknown"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "0.8.15",
+        "calldata-tuple-head-overflow",
+        "reentrancy",
+        "view-function",
+        "ABI-reencoding",
+        "Foundry"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2022_TCTF_NFT_Market.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2022_官方密码的简易wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态区块链题Revenge_NTF_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TCTF-0CTF_2022-Polaris_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2022_官方密码的简易wp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从TCTF的3rm1学习java动态代理.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2022_TCTF_NFT_Market.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/0CTF_2022_TCTF_NFT_Market.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "attack",
+        "orderId",
+        "head",
+        "overflow",
+        "---",
+        "attack",
+        "purchaseTest",
+        "key",
+        "CouponVerifierBeta"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "从零开始学 PWN 01 - 缘起（栈对齐）",
+      "vuln_type": [
+        "ret2libc",
+        "pwn_unknown"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "x86_64",
+        "stack-alignment",
+        "movaps",
+        "gets",
+        "BUUOJ",
+        "cyclic",
+        "pwntools",
+        "prologue",
+        "ret-sled"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始学PWN学01-_缘起.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN入门——大闹ASLR.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN入门-制服_dl_resolve_runtime.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始学PWN学01-_缘起.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SHCTF-2024-Week2_官方WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SHCTF-2024-Week1_官方WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始学PWN学01-_缘起.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始学PWN学01-_缘起.meta.md"
+      ],
+      "expanded_terms": [
+        "dl",
+        "shellcode",
+        "---",
+        "mmap",
+        "stack",
+        "dl",
+        "stack",
+        "pop",
+        "shellcode",
+        "push"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "掌控安全CTF挑战赛 Writeup by Mini-Venom (ChaMd5)",
+      "vuln_type": [
+        "misc_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.25,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "zkaq",
+        "Nuclei模板",
+        "自定义YAML",
+        "模板注入",
+        "GuzzleHttp\\Cookie\\FileCookieJar",
+        "Phar反序列化",
+        "掌控安全",
+        "p^3",
+        "RSA多素数"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/掌控安全CTF挑战赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第三届京麒CTF挑战赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DownUnderCTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023NCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025PatriotCTF_Writeup_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第一届OpenHarmony_CTF专题赛_Writeup_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024DASCTF_暑假挑战赛（第一名）_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DASCTF_2025下半年赛_Writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "2025",
+        "PDF",
+        "---",
+        "招新",
+        "2024",
+        "2025",
+        "PDF",
+        "---",
+        "招新",
+        "2024"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 强网杯 write up By Ginkgo",
+      "vuln_type": [
+        "web_unknown"
+      ],
+      "tags_total": 15,
+      "tags_found": 15,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.13333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Connection注入",
+        "X-User",
+        "The_Interrogation_Room",
+        "PoW暴力",
+        "汉明码d=5",
+        "校验矩阵P",
+        "GCD攻击",
+        "AES-CBC",
+        "MT19937-LLL",
+        "printf格式化",
+        "ptrace-VM调试器",
+        "XXTEA",
+        "MMX编码"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯_write_up_By_Ginkgo.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯_write_up_By_Ginkgo.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态_2024_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯-车联网赛道_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯_write_up_By_Ginkgo.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025强网杯_write_up_By_Ginkgo.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "VM",
+        "flag",
+        "序列化",
+        "---",
+        "序列化",
+        "key",
+        "libc",
+        "flag",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 第四届\"网鼎杯\"朱雀组 writeup（SMC XOR 0x42 + base24 + VMP 壳）",
+      "vuln_type": [
+        "reverse",
+        "misc_unknown",
+        "crypto_unknown"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Re1 SMC XOR 0x42",
+        "idapython PatchByte",
+        "base24 自定义码表 24 字符",
+        "decode_base24 libnum.n2s",
+        "Re2 VMP 壳",
+        "svchost.exe 字符串大法",
+        "异或解密 + 注入 svchost",
+        "断点 check 先运行再瞬间断点绕过"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”青龙组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”白虎组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”朱雀组_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "TEID",
+        "解密",
+        "---",
+        "flag",
+        "key",
+        "TEID",
+        "解密",
+        "---",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "idek 2022: Pwn && Reverse Writeup by r3kapig",
+      "vuln_type": [
+        "pwn_unknown"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "canary-leak",
+        "stack-leak",
+        "ret2dlresolve",
+        "fmt-arg-overlap",
+        "glibc-2.31"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/bi0sCTF2022_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/idek_2022-_Pwn_&&_Reverse_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/idek_2022-_Web_&&_Crypto_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/idek_2022-_Forensics_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/RealWorld_CTF_5th_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022巅峰极客WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/idek_2022-_Pwn_&&_Reverse_Writeup_by_r3kapig.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DiceCTF_2023_Writeup_by_r3kapig.meta.md"
+      ],
+      "expanded_terms": [
+        "payload",
+        "x00",
+        "p64",
+        "key",
+        "---",
+        "p64",
+        "payload",
+        "x00",
+        "key",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "第三届\"陇剑杯\"网络安全大赛初赛-夺旗闯关赛WriteUp",
+      "vuln_type": [
+        "crypto_rsa"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.125,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Weil配对vs Tate",
+        "F_{p^2}扩域",
+        "j=0椭圆曲线y^2=x^3+1",
+        "r-子群基",
+        "离散对数映射表",
+        "Miller loop",
+        "国产密码学"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛初赛-夺旗闯关赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛初赛-夺旗闯关赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛预选赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛预选赛_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛预选赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛预选赛_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“陇剑杯”网络安全大赛初赛-夺旗闯关赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“香山杯“网络安全大赛初赛Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "RC5",
+        "flag",
+        "32",
+        "Z3",
+        "配对",
+        "RC5",
+        "flag",
+        "32",
+        "Z3",
+        "配对"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "龙信杯 2024/电子数据取证（计算机）",
+      "vuln_type": [
+        "forensic_disk"
+      ],
+      "tags_total": 4,
+      "tags_found": 4,
+      "tags_found_excl_self": 4,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 1.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024龙信杯电子数据取证竞赛-计算机取证题目Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第二届“龙信杯”电子数据取证竞赛部分wp[手机、服务器全解].meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024龙信杯电子数据取证竞赛-计算机取证题目Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025第二届“平航杯”电子数据取证竞赛-计算机部分WriteUp.meta.md",
+        "加密与解密 第4版 (段钢) (Z-Library).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第四届“长安杯”电子数据取证竞赛_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第二届“龙信杯”电子数据取证竞赛部分wp[手机、服务器全解].meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第二届“龙信杯”电子数据取证竞赛部分wp[手机、服务器全解].meta.md"
+      ],
+      "expanded_terms": [
+        "wnry",
+        "MD5",
+        "---",
+        "dll",
+        "neo4j",
+        "wnry",
+        "MD5",
+        "---",
+        "dll",
+        "neo4j"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "web选手入门pwn(31.5) 强网杯bph stack-leak 变种",
+      "vuln_type": [
+        "heap_exploit"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3333333333333333,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "_IO_write_base-leak",
+        "environ",
+        "stack-read",
+        "House-of-Apple"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(31.5)——强网杯bph.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(31.5)——强网杯bph.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(31)——强网杯bph.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_强网杯_pwn_adventure.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(29)——鹏城杯.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/关于40小时做出prpr而强网杯32小时这件事.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(31.5)——强网杯bph.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(31.5)——强网杯bph.meta.md"
+      ],
+      "expanded_terms": [
+        "IO",
+        "ROP",
+        "write",
+        "触发",
+        "---",
+        "IO",
+        "write",
+        "base",
+        "---",
+        "libc"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "[pwnable.kr] bof 题解",
+      "vuln_type": [
+        "rop"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "pwnable_kr",
+        "bof_buffer_overflow",
+        "canary_disabled",
+        "ssh_pwntools",
+        "simple_stack_smash",
+        "p32_key_overwrite",
+        "aslr_disabled_pwnable",
+        "classic_pwn_lesson",
+        "13x4_52_byte_padding"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[pwnable.kr]_bof_题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/磐石CTF2025_Pwn赛题account详解：32位环境下的数组越界与ROP实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF比赛PWN题解题思路(一).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/N1CTF_Junior_2026_1-2_pwn.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/web选手入门pwn(17)_——2024年春秋杯夏季赛pwn.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TetCTF_2023-_Mailservice.meta.md",
+        "月刊第六期—Linux pwn零基础入门.pdf",
+        "月刊第六期—Linux pwn零基础入门.pdf"
+      ],
+      "expanded_terms": [
+        "payload",
+        "溢出",
+        "key",
+        "bin",
+        "sh",
+        "payload",
+        "ret",
+        "---",
+        "溢出",
+        "key"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "春秋云境仿真场景WP：Initial",
+      "vuln_type": [
+        "rce"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 6,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 1.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春秋云境仿真场景WP：Initial.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春秋云境仿真场景WP：Initial.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春秋云境Initial通关.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春秋云境Initial通关.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【云境】-ThermalPower.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【云境】-ThermalPower.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【春秋云境.com】首届仿真场景交流会，解锁挑战新思路.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春秋云镜-Initial-WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "010",
+        "172.22",
+        "DCSync",
+        "MS17",
+        "flag",
+        "010",
+        "172.22",
+        "DCSync",
+        "MS17",
+        "ThinkPHP"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2023 安洵杯 WriteUp By Mini-Venom",
+      "vuln_type": [
+        "deserialize"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "CommonsBeanutils",
+        "PropertyUtilsBean反射",
+        "BeanComparator",
+        "TiedMapEntry",
+        "BadAttributeValueExpException",
+        "黑名单绕过",
+        "Spring FreeMarker",
+        "AES_padding_oracle",
+        "go位置映射",
+        "RSA_CRT"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/安洵杯2023-WP_–Polaris.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/安洵杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第五届安洵杯_WriteUp_by_Mini-Venom（招新）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "序列化",
+        "字节",
+        "---",
+        "base64",
+        "SROP",
+        "---",
+        "序列化",
+        "libc",
+        "attack"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 强国杯东部初赛 CTF WriteUp",
+      "vuln_type": [
+        "sqli",
+        "lfi",
+        "rce",
+        "deserialize",
+        "web_unknown",
+        "misc_unknown",
+        "reverse"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2727272727272727,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "强国杯",
+        "md5-0e",
+        "反序列化逃逸",
+        "session-upload-progress",
+        "LFI-to-RCE",
+        "pyinstxtractor",
+        "字节取反",
+        "hiencode"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年强网杯青少年专项赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/1337UP_LIVE_CTF_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年第三届电信和互联网行业职业技能竞赛暨第十一届信息通信网络安全管理员职业技能竞赛全国选拔赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_美团MTCTF初赛_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "php",
+        "__",
+        "---",
+        "flag",
+        "序列化",
+        "序列化",
+        "---",
+        "flag",
+        "key",
+        "data"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "祥云杯 2022/Misc super_electric",
+      "vuln_type": [
+        "stego_traffic",
+        "reverse",
+        "block_cipher"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "MMS 协议",
+        "工控流量分析",
+        "tshark 提取",
+        "MZ 头识别",
+        "反调试",
+        "自解压壳",
+        "AES/CBC/PKCS7",
+        "IV 还原"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_祥云杯_Misc_super_electric_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_祥云杯_Misc_super_electric_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_pwnhub冬季赛_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/祥云杯2022-leak_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[CTF]_ECW_CTF_2022_–_Reverse_challenges_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届“祥云杯”CTF初赛WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Hackvent_2022_–_Hard.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年春秋杯冬季赛部分WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "data",
+        "flag",
+        "key",
+        "---",
+        "exe",
+        "data",
+        "flag",
+        "key",
+        "---",
+        "exe"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025\"领航杯\"网安赛项学生组初赛 WP（上）（gin 整数溢出买 flag + math/rand 种子 1 + sudo CVE-2025-32463）",
+      "vuln_type": [
+        "auth_bypass",
+        "integer_overflow",
+        "rce",
+        "pwn_unknown"
+      ],
+      "tags_total": 13,
+      "tags_found": 13,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "领航杯 学生组初赛",
+        "gin.SetMode Release",
+        "cookie.NewStore randomChar(16)",
+        "sessions.Sessions",
+        "adminRequired loginRequired",
+        "uint32 整数溢出买 flag",
+        "pow(2",
+        "32)-200000 算 addprice",
+        "math/rand 种子 1 默认",
+        "CVE-2025-32463 sudo EoP chwoot",
+        "/woot1337 libnss_",
+        "nsswitch.conf passwd /woot1337",
+        "volatility filescan"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（中）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024年第四届“长城杯”网络安全大赛_暨京津冀网络安全技能竞赛（初赛）Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md"
+      ],
+      "expanded_terms": [
+        "..",
+        "---",
+        "admin",
+        "constructor",
+        "2024",
+        "..",
+        "---",
+        "admin",
+        "constructor",
+        "2024"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 年强网杯青少年专项赛 writeup",
+      "vuln_type": [
+        "lfi",
+        "deserialize",
+        "crypto_oracle",
+        "stego_image"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 4,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.4,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "data://",
+        "Sliver-Range-Water-Circle",
+        "Python-pickle",
+        "LSB-stego",
+        "pyzbar",
+        "permutations"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年强网杯青少年专项赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022第六届强网杯青少赛_Misc&Crypto-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网杯青少年专项赛(线上赛)WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022羊城杯竞赛_Web题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_SWPUCTF_Web_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年强网杯青少年专项赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年强网杯青少年专项赛writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "php",
+        "__",
+        "序列化",
+        "---",
+        "flag",
+        "php",
+        "__",
+        "序列化",
+        "flag",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024\"领航杯\"-初赛WP（二）",
+      "vuln_type": [
+        "lattice",
+        "crypto_rsa",
+        "web_unknown",
+        "auth_bypass",
+        "misc_unknown"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "RSA p^4+tp",
+        "Amm开方",
+        "身份证号校验和",
+        "web sum字符密码",
+        "ACXI 注册绕过",
+        "AES加密"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项教师组决赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项教师组决赛WP（中）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-初赛WP（二）.meta.md"
+      ],
+      "expanded_terms": [
+        "2025",
+        "---",
+        "flag",
+        "32",
+        "tp",
+        "2025",
+        "---",
+        "AES",
+        "32",
+        "flag"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "SANS Offensive CTF - Taskist 01-04",
+      "vuln_type": [
+        "ssrf"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.1111111111111111,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "idor",
+        "privilege-escalation",
+        "lfi",
+        "file-read",
+        "proc-self-environ",
+        "burp-intruder",
+        "file-protocol",
+        "jwt"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SANS_Offensive_CTF_–_Taskist--_01–04.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届数据安全大赛暨首届“数信杯”数据安全大赛数据安全积分争夺赛预赛南区-_WriteUp_By_EDISEC.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CrewCTF_2023_Writeups.meta.md",
+        "cft竞赛权威指南pwn.pdf",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/THJCC_CTF_2026（部分）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/ByteCTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/SSRF漏洞.md"
+      ],
+      "expanded_terms": [
+        "flag",
+        "---",
+        "file",
+        "Web",
+        "key",
+        "flag",
+        "file",
+        "key",
+        "---",
+        "txt"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 强网拟态 CFB_chall",
+      "vuln_type": [
+        "block_cipher",
+        "web_unknown",
+        "crypto_unknown"
+      ],
+      "tags_total": 4,
+      "tags_found": 4,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "AES-CFB 8-bit",
+        "篡改 token",
+        "单字节爆破",
+        "error 区分爆破"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_强网拟态_CFB_chall.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_强网拟态_CFB_chall.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态_2024_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_强网拟态_Nepnep_WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/解析2025强网拟态决赛WeakJump.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第六届“强网”拟态防御国际精英挑战赛_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_强网拟态_CFB_chall.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_强网拟态_CFB_chall.meta.md"
+      ],
+      "expanded_terms": [
+        "__",
+        "字节",
+        "key",
+        "next",
+        "prime",
+        "__",
+        "字节",
+        "key",
+        "next",
+        "prime"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "WMCTF 2023 writeup by Mini-Venom",
+      "vuln_type": [
+        "ssti"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ssti_file_route",
+        "path_traversal",
+        "mysql_union_select",
+        "load_file",
+        "mysql_general_log_inject",
+        "nodejs",
+        "email_whitelist",
+        "pm2_log_leak",
+        "ctf_framework_ezblog"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/WMCTF_2023_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第六届“强网”拟态防御国际精英挑战赛_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023阿里云CTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023NCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023NCTF_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023安洵杯_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DownUnderCTF_2024_writeup_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "next",
+        "prime",
+        "---",
+        "file",
+        "log",
+        "next",
+        "prime",
+        "file",
+        "log",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "HGAME2025杭州电子科技大学网络攻防大赛 PWN writeup",
+      "vuln_type": [
+        "fmt_string"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2857142857142857,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "format-string",
+        "vuln-negative-bypass",
+        "libc-leak",
+        "ae64",
+        "glibc-all-in-one"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届西湖论剑·中国杭州网络安全技能大赛网络攻防实战赛-初赛_WriteUp_by_金石滩小鲨鱼.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN｜西湖论剑·2022中国杭州网络安全技能大赛初赛官方Write_Up.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME_2026复现.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HGAME2025杭州电子科技大学网络攻防大赛_PWN_writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "32",
+        "__",
+        "libc",
+        "---",
+        "vuln",
+        "32",
+        "__",
+        "libc",
+        "---",
+        "vuln"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Realworld CTF 2023 The_cult_of_8_bit 详解",
+      "vuln_type": [
+        "xss"
+      ],
+      "tags_total": 7,
+      "tags_found": 7,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2857142857142857,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "same-origin-method-execution",
+        "iframe-focus",
+        "post-id-leak",
+        "char-by-char-extract",
+        "opensearch-opener"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": true,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Realworld_CTF_2023_The_cult_of_8_bit详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[原创]Realworld_CTF_2023_The_cult_of_8_bit详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[Real_World_CTF_2023]_The_cult_of_8_bit.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Realworld_CTF_2023_ChatUWU_详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[原创]Realworld_CTF_2023_ChatUWU_详解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Realworld_CTF_2023_Ferris_proxy.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/The_Art_of_PHP_–_My_CTF_Journey_and_Untold_Stories!.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Realworld_CTF_之_hso-groupie_Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "opener",
+        "key",
+        "post",
+        "socket",
+        "id",
+        "opener",
+        "key",
+        "post",
+        "socket",
+        "id"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 MOVEment Aptos writeup by ChaMd5",
+      "vuln_type": [
+        "logic",
+        "web_unknown"
+      ],
+      "tags_total": 12,
+      "tags_found": 12,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Move",
+        "Aptos",
+        "blockchain",
+        "Web3",
+        "signer",
+        "event",
+        "account",
+        "init_challenge",
+        "discrete_log",
+        "hash"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022MOVEment_Aptos_writeup_by_ChaMd5.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/TQLCTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUSTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/五月公开赛writeup｜web篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/强网拟态_WriteUp_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022MOVEment_Aptos_writeup_by_ChaMd5.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022MOVEment_Aptos_writeup_by_ChaMd5.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "Venom",
+        "php",
+        "attack",
+        "LFI",
+        "Venom",
+        "---",
+        "__",
+        "php",
+        "序列化"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 CattheQuest writeup by Mini-Venom（招新文）",
+      "vuln_type": [
+        "misc_unknown"
+      ],
+      "tags_total": 3,
+      "tags_found": 3,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 1.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/L3HCTF_2024_WriteUp_By_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024CattheQuest_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/DownUnderCTF_2024_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024CattheQuest_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第七届强网拟态_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024DASCTF_暑假挑战赛（第一名）_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Intigriti_CTF_2024_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "sum",
+        "key",
+        "url",
+        "v1",
+        "---",
+        "key",
+        "sum",
+        "url",
+        "v1",
+        "---"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Copy Fail 深度研究：Linux 页缓存漏洞的根因、利用与检测",
+      "vuln_type": [
+        "web_unknown"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 7,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.875,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "container-escape"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【天穹】内核暗渡：Linux_Copy_Fail_漏洞_CVE-2026-31431_利用分析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Copy_Fail_深度研究：Linux_页缓存漏洞的根因、利用与检测.meta.md"
+      ],
+      "expanded_terms": [
+        "CTF",
+        "AF",
+        "ALG",
+        "splice",
+        "渗透",
+        "CTF",
+        "AF",
+        "ALG",
+        "splice",
+        "渗透"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 KCTF 大赛 - 第十题《试探》设计思路及解析",
+      "vuln_type": [
+        "reverse",
+        "misc_math"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "拼图游戏",
+        "0元素移动轨迹注册码",
+        "shellcode花指令",
+        "NtAddBootEntry",
+        "TpAllocWait",
+        "TpSetWait",
+        "字符串加密隐藏",
+        "0x2A替换",
+        "FD/FF/FE EB无效指令去混淆"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第十题《试探》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第十题《试探》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_秋季赛_-_第十一题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025_KCTF_-_第十题《涅磐，亦是新生》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第九题《第一次接触》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_秋季赛_-_第十一题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第十题《试探》设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_KCTF_大赛_-_第十题《试探》设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "EB",
+        "serial",
+        "迭代",
+        "---",
+        "断点",
+        "EB",
+        "serial",
+        "迭代",
+        "---",
+        "断点"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "红帽杯 – WriteUp",
+      "vuln_type": [
+        "pwn_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ChaMd5-Venom",
+        "PHP-write-getshell",
+        "Yii2-RCE2",
+        "phpggc",
+        "sqli-blind",
+        "HEC-jacobian",
+        "XTEA-XOR",
+        "fmt-write",
+        "format-string-overwrite",
+        "libc-leak"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/红帽杯_–_WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_RCTF_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/justCTF_2023_Writeup_by_VP-Union.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/L3HCTF_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_ByteCTF大师赛_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023黑盾杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026年天府杯pwn的0解题目WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026年天府杯pwn的0解题目WP.meta.md"
+      ],
+      "expanded_terms": [
+        "sh",
+        "sendlineafter",
+        "house",
+        "---",
+        "2023",
+        "sh",
+        "sendlineafter",
+        "libc",
+        "stdout",
+        "house"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025 春节 解题领红包所有题 writeup",
+      "vuln_type": [
+        "crypto_unknown"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "XXTEA",
+        "SPN",
+        "AES-OFB",
+        "custom-VM",
+        "phoenixAES",
+        "XTEA",
+        "TEA",
+        "md5-bruteforce"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2025春节】解题领红包所有题writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2025春节】解题领红包所有题writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/春节解题领红包之九_{Web_中级题}_题解_–_wasm逆向.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2026春节解题红包】WriteUP(2、3、4、5、6、7、9）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2024春节】解题领红包之web题writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2026春节领红包】解题过程，纯手工分析（第八题、第十题未解出.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2025春节】解题领红包所有题writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2025春节】解题领红包所有题writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "字节",
+        "---",
+        "chain",
+        "key",
+        "wasm",
+        "字节",
+        "---",
+        "chain",
+        "key",
+        "wasm"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Linux 新版内核下内存取证分析附 CTF 题",
+      "vuln_type": [
+        "forensic_memory"
+      ],
+      "tags_total": 5,
+      "tags_found": 5,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "dwarf2json",
+        "Ubuntu 22.04",
+        "Linux 5.15",
+        "bip39 mnemonic"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Linux新版内核下内存取证分析附CTF题.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Linux新版内核下内存取证分析附CTF题.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTFのフォレンジックにおけるメモリフォレンジックまとめ_[Volatility_3,_Volatility_2].meta.md",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/如何基于volatility2构建“新”版本内核的profile.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Disgruntled_CTF.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Linux新版内核下内存取证分析附CTF题.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Linux新版内核下内存取证分析附CTF题.meta.md"
+      ],
+      "expanded_terms": [
+        "5.15",
+        "generic",
+        "profile",
+        "bash",
+        "dwarf2json",
+        "5.15",
+        "generic",
+        "profile",
+        "bash",
+        "dwarf2json"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "津京冀网络攻防大赛线下决赛pwn–全场唯一解",
+      "vuln_type": [
+        "heap_exploit"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "堆溢出",
+        "有符号比较绕过",
+        "fopen NULL",
+        "fastbin attack",
+        "libc2.23"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/津京冀网络攻防大赛线下决赛pwn–全场唯一解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/津京冀网络攻防大赛线下决赛pwn–全场唯一解.meta.md",
+        "cft竞赛权威指南pwn.pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/F.Z.N_CTF网络安全大赛PWN方向题解.meta.md",
+        "cft竞赛权威指南pwn.pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第二届“长城杯”信息安全铁人三项赛（防护赛）总决赛-Pwn方向部分题解.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026年天府杯pwn的0解题目WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2023西湖论剑线下决赛的一些小总结.meta.md"
+      ],
+      "expanded_terms": [
+        "io",
+        "libc",
+        "chunk",
+        "sendlineafter",
+        "vtable",
+        "io",
+        "libc",
+        "p64",
+        "sendlineafter",
+        "payload"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "PWN 赛题解析",
+      "vuln_type": [
+        "rop"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.375,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "shellcode",
+        "seccomp",
+        "sandbox-bypass",
+        "fmt-string",
+        "栈迁移"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Pwn-oneday题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CTF比赛PWN题解题思路(一).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022浙江省赛_PWN题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/PWN入门——大闹ASLR.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第六题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/国赛babytree_赛题解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【卫星安全系列五】attitude_赛题复现.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "dl",
+        "vuln",
+        "House",
+        "attack",
+        "---",
+        "attack",
+        "House",
+        "read",
+        "libc"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "从JustCTF 2023中学到的sqlite3代码执行方法",
+      "vuln_type": [
+        "rce"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 1,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.1111111111111111,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "sqlite3",
+        "load_extension",
+        "writefile",
+        "沙箱逃逸",
+        "ROP",
+        "libc.so.6",
+        ".open :memory:",
+        "edit函数"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从JustCTF_2023_中学到的一点关于_sqlite3_代码执行的方法.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从JustCTF_2023_中学到的一点关于_sqlite3_代码执行的方法.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Midnight_Sun_CTF_2023_Writeup_by_VP-Union.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/justCTF_2023_Writeup_by_VP-Union.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从JustCTF_2023_中学到的一点关于_sqlite3_代码执行的方法.meta.md",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从JustCTF_2023_中学到的一点关于_sqlite3_代码执行的方法.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从JustCTF_2023_中学到的一点关于_sqlite3_代码执行的方法.meta.md"
+      ],
+      "expanded_terms": [
+        "sh",
+        "sendlineafter",
+        "extension",
+        "load",
+        "libc",
+        "sh",
+        "sendlineafter",
+        "x8b",
+        "bss",
+        "extension"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "深育杯-WriteUp",
+      "vuln_type": [
+        "deserialize"
+      ],
+      "tags_total": 6,
+      "tags_found": 4,
+      "tags_found_excl_self": 1,
+      "tag_recall": 0.6666666666666666,
+      "tag_recall_excl_self": 0.16666666666666666,
+      "missing_tags": [
+        "LLL格密码",
+        "fmtstr泄露canary+elfbase"
+      ],
+      "missing_tags_excl_self": [
+        "Commons Beanutils",
+        "TemplatesImpl",
+        "LLL格密码",
+        "fmtstr泄露canary+elfbase",
+        "House of Botcake"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第八届强网杯_writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/深育杯-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_第五空间网络安全初赛_writeup_by_Arr3stY0u.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022年强网杯青少年专项赛writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022强国杯东部_初赛CTF-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022_SWPUCTF_Web_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022“第五空间”网络安全大赛-WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/第三届祥云杯-WriteUp_by_Mini-Venom.meta.md"
+      ],
+      "expanded_terms": [
+        "2022",
+        "序列化",
+        "---",
+        "LFI",
+        "php",
+        "序列化",
+        "2022",
+        "---",
+        "system",
+        "base64"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2026 丹麦国情局 FE – 恶猿行动 Writeup（OPERATION BAD PRIMATE 渗透）",
+      "vuln_type": [
+        "sqli",
+        "lfi",
+        "pwn_unknown",
+        "ssh",
+        "web_unknown"
+      ],
+      "tags_total": 13,
+      "tags_found": 13,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "丹麦国情局 FE 恶猿行动 2026",
+        "MonkEZ/EDO 公司服务器",
+        "OPERATION BAD PRIMATE",
+        "vmdk 虚拟机",
+        "仅主机模式",
+        "nmap 三个 ssh + 一个 http",
+        "sqlite 登录 SQLMap",
+        "robots.txt 目录扫描",
+        "路径穿越 + AES 加密 SSH 私钥",
+        "docker 逃逸 bash_history",
+        "TLS 客户端证书密钥被删",
+        "root@printserver",
+        "root access"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026丹麦国情局FE_–_恶猿行动_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026丹麦国情局FE_–_恶猿行动_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/SUCTF2026_Ez_Router.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/EHAX_CTF_2026_Writeup_by_Mini-Venom.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026解题领红包基本完成(少MCP和Win高级,_但很有梗).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/THJCC_CTF_2026（部分）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026丹麦国情局FE_–_恶猿行动_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2026丹麦国情局FE_–_恶猿行动_Writeup.meta.md"
+      ],
+      "expanded_terms": [
+        "---",
+        "key",
+        "ptr",
+        "AES",
+        "docker",
+        "AES",
+        "key",
+        "---",
+        "ptr",
+        "VPN"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "关于音频隐写的一些总结",
+      "vuln_type": [
+        "stego_audio"
+      ],
+      "tags_total": 9,
+      "tags_found": 9,
+      "tags_found_excl_self": 2,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.2222222222222222,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "Audacity频谱图",
+        "SSTV",
+        "DeepSound",
+        "DTMF拨号",
+        "MIDI通道",
+        "HackRF原始数据",
+        "摩尔斯"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/关于音频隐写的一些总结.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/关于音频隐写的一些总结.meta.md",
+        "Des-CTF-Knowledge/音频隐写.md",
+        "Des-CTF-Knowledge/音频隐写.md",
+        "从0到1：CTFer成长之路 (Nu1L战队 编著).pdf",
+        "Des-CTF-Knowledge/AI-SEARCH-INDEX.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/关于音频隐写的一些总结.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/关于音频隐写的一些总结.meta.md"
+      ],
+      "expanded_terms": [
+        "md",
+        "CTF",
+        "wav",
+        "压缩包",
+        "频谱",
+        "图片",
+        "水印",
+        "md",
+        "CTF",
+        "频谱"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2022 蓝帽杯 SUID 提权 总结篇",
+      "vuln_type": [
+        "auth_bypass",
+        "misc_unknown"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.3,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "nmap",
+        "nse",
+        "lua",
+        "ftp",
+        "find-exec",
+        "env-var",
+        "SHELL-override"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022蓝帽杯遇见的_SUID_提权_总结篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB决赛有感(附RE-AI题目附件).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022蓝帽杯遇见的_SUID_提权_总结篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022蓝帽杯遇见的_SUID_提权_总结篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022羊城杯竞赛_Web题目解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CCB决赛有感(附RE-AI题目附件).meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022蓝帽杯遇见的_SUID_提权_总结篇.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2022蓝帽杯遇见的_SUID_提权_总结篇.meta.md"
+      ],
+      "expanded_terms": [
+        "find",
+        "__",
+        "php",
+        "nmap",
+        "date",
+        "find",
+        "__",
+        "php",
+        "nmap",
+        "date"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2025\"领航杯\"网安赛项学生组初赛 WP（中）- fffbi + 反垃圾",
+      "vuln_type": [
+        "lfi",
+        "rce",
+        "ssrf",
+        "web_unknown",
+        "crypto_unknown"
+      ],
+      "tags_total": 11,
+      "tags_found": 11,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "领航杯 2025 学生组 fffbi",
+        "vite /@fs/app/vite/#/../../../../../../../../etc/passwd 目录穿越",
+        "nginx /etc/nginx/http.d/default.conf 代理转发",
+        "secretserver/ 内网应用 1337",
+        "cookieSession keys 数组",
+        "Object.freeze Object/Math",
+        "saferEval 沙箱逃逸",
+        "Math.constructor=Function",
+        "global.process.mainModule.constructor._load child_process execSync ls /",
+        "admin=1 改 PHPSESSION",
+        "反垃圾"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（中）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（上）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（中）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/香港網絡攻防精英培訓暨攻防大賽_2025_初賽-決賽WP.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024“领航杯”-高职组初赛WP（一）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025年第十九届全国大学生信息安全竞赛（ciscn）暨第三届长城杯网数智安全大赛—初赛WriteUp.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（中）.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2025“领航杯”网安赛项学生组初赛WP（中）.meta.md"
+      ],
+      "expanded_terms": [
+        "..",
+        "Math",
+        "flag",
+        "---",
+        "prime",
+        "..",
+        "Math",
+        "flag",
+        "---",
+        "prime"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "2024 网鼎杯 朱雀 & 玄武",
+      "vuln_type": [
+        "lattice",
+        "crypto_rsa",
+        "secret_sharing"
+      ],
+      "tags_total": 5,
+      "tags_found": 5,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "已知 p 高位 256/512 Coppersmith",
+        "多层 RSA 套娃",
+        "p1q1=2024*p1",
+        "n22=p^2+q^2 解方程",
+        "Shamir 秘密共享 kernel 攻击"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_朱雀&玄武.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_朱雀&玄武.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/网鼎杯玄武组——PWN2.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_青龙&白虎.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_半决赛&决赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024第四届“网鼎杯”白虎组_writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_朱雀&玄武.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/2024_网鼎杯_朱雀&玄武.meta.md"
+      ],
+      "expanded_terms": [
+        "key",
+        "---",
+        "Coppersmith",
+        "248",
+        "还原",
+        "key",
+        "---",
+        "Coppersmith",
+        "248",
+        "还原"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "看雪2022 KCTF 春季赛 | 第四题设计思路及解析",
+      "vuln_type": [
+        "ssrf"
+      ],
+      "tags_total": 6,
+      "tags_found": 6,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "PHP SSRF",
+        "parse_url与curl差异",
+        "file://协议读源码",
+        "跨目录flag.php",
+        "IP白名单绕",
+        "砍传奇回忆杀"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第四题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第四题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第五题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第11题设计思路及解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/看雪2022_KCTF_春季赛_-_第十题设计思路及解析.meta.md"
+      ],
+      "expanded_terms": [
+        "url",
+        "php",
+        "host",
+        "127.0",
+        "0.1",
+        "url",
+        "php",
+        "host",
+        "127.0",
+        "0.1"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "Wbaes：一次白盒密码逆向的实战之旅 (WHCTF 2017)",
+      "vuln_type": [
+        "block_cipher"
+      ],
+      "tags_total": 10,
+      "tags_found": 10,
+      "tags_found_excl_self": 0,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.0,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "white_box_aes",
+        "movfuscation",
+        "dfa_differential_fault_analysis",
+        "deadpool",
+        "phoenixaes",
+        "look_up_table",
+        "sigaction_anti_debug",
+        "t_box_aes",
+        "sigaction_stripped_elf",
+        "hxp_dfa"
+      ],
+      "self_leak": true,
+      "similar_wp": false,
+      "similar_ground_truth_exists": false,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/Wbaes：一次白盒密码逆向的实战之旅.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【2026春节】初十Windows高级题目WriteUp&提示词分享.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/记一次用_AI_打比赛.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始的工控固件逆向之旅_–_VxWorks密码哈希破解实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始的工控固件逆向之旅_–_VxWorks密码哈希破解实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/CrackMe3_逆向分析实战_–_PowerPC架构双重加密挑战完全解析.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始的工控固件逆向之旅_–_VxWorks密码哈希破解实战.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/从零开始的工控固件逆向之旅_–_VxWorks密码哈希破解实战.meta.md"
+      ],
+      "expanded_terms": [
+        "VxWorks",
+        "字节",
+        "掩码",
+        "32",
+        "key",
+        "字节",
+        "key",
+        "VxWorks",
+        "掩码",
+        "32"
+      ],
+      "rounds_used": 3
+    },
+    {
+      "title": "HTB-Sandworm",
+      "vuln_type": [
+        "ssti"
+      ],
+      "tags_total": 8,
+      "tags_found": 8,
+      "tags_found_excl_self": 3,
+      "tag_recall": 1.0,
+      "tag_recall_excl_self": 0.375,
+      "missing_tags": [],
+      "missing_tags_excl_self": [
+        "ssti",
+        "jinja2",
+        "suid",
+        "privesc",
+        "base64"
+      ],
+      "self_leak": true,
+      "similar_wp": true,
+      "similar_ground_truth_exists": true,
+      "vuln_type_hit": false,
+      "top_k_sources": [
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB-Sandworm.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB-Sandworm.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB-Sandworm.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/【Hack_The_Box】Sandworm【Writeup】.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[HTB]_October_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/[HTB]_Jarvis_Writeup.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HTB-Sandworm.meta.md",
+        "Des-CTF-Knowledge/CTF大赛WP集合/articles/HackTheBox_Stocker_WriteUp.meta.md"
+      ],
+      "expanded_terms": [
+        "..",
+        "php",
+        "---",
+        "payload",
+        "mysql",
+        "..",
+        "php",
+        "---",
+        "payload",
+        "mysql"
+      ],
+      "rounds_used": 3
+    }
+  ]
+}

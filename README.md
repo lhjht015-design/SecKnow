@@ -2,7 +2,38 @@
 
 SecKnow 是一个离线优先的安全知识检索与确定性图推理 Web 平台。它不是“只做检索”的原型：默认不调用生成式大模型，也能通过实体、关键词、章节、代码符号、语义相似边做邻居扩展和受限路径推理；可选的本地 LLM 只负责在证据之后生成带引用的答案。
 
-当前工作区已经包含可运行后端、React 前端、9 本 `book/` 资料的索引、固定版本的 BGE-M3 与 bge-reranker 权重。运行时不会联网下载模型，也没有云端回退。
+当前工作区已经包含可运行后端、React 前端、9 本 `book/` 资料 + 1350 篇 CTF 文档的索引、
+固定版本的 BGE-M3 与 bge-reranker 权重。运行时不会联网下载模型，也没有云端回退。
+
+## 仓库结构
+
+```text
+SecKnow/
+├── src/secknow/          # 平台本体：检索、图推理、OCR、存储、API
+├── versions/             # 主体实验/工具版本，每个都是一个可独立运行的单文件
+├── laws/                 # 自己实验总结出的规律（含失败规律）
+├── inspirations/         # 从顶刊顶会借鉴并迁移的思路
+├── experiments/          # 实验配置、结果与报告
+├── paper_assets/         # 论文素材（含原始设计文档抽取文本）
+├── PROJECT_LOG.md        # 总日志：当前状态、关键结论、更新记录
+└── book/ reference/      # 语料与文献（体积大/含版权，.gitignore 排除）
+```
+
+> **主体版本用 `.src` 后缀**，运行方式 `python versions/vNNN_xxx.src`。
+> 这不是笔误：本机安全软件会异步删除特定 `.py` 文件，详见 `laws/LAW-0003.md`。
+
+## 已经验证过的事（含反例）
+
+- **本地 8B 模型不能可靠地自动解题**：9 道自带 flag 的可执行题只解出 1 道，
+  且 67% 的情况给出**错误但看起来像答案**的 flag。换更大模型不解决——
+  这是架构问题（缺执行反馈闭环），不是容量问题。见 `laws/LAW-0001/0002`、`experiments/EXP-0001`。
+- **必须有一道确定性验证闸门**：回答里的每条命令/payload 都要能在它自己引用的证据里找到，
+  找不到就拒绝输出方案。见 `versions/v003_verified_answer.src`。
+- **向量通道在本语料上没有增量贡献**（A/B 实测），见 `laws/LAW-0008.md`。
+- **SAG2 式词法多跳是有效方向**：`similar_wp` +50%、`vuln_type_hit` +37%；
+  判官用 cross-encoder（判别式、不生成文本），并另有一档**完全不用任何模型**的版本
+  （0.69 秒/题）。见 `versions/v005_sag2_multihop.src`、`inspirations/INS-0001-sag2.md`。
+- **全部方案都不使用生成式 LLM**：有些比赛不支持，这也是本项目的核心约束。
 
 ## 12 层实现
 
@@ -83,17 +114,43 @@ $env:HF_HUB_DISABLE_XET = "1"
 .\.venv\Scripts\python.exe -m secknow.cli search "ROP 链如何构造" --mode competition
 ```
 
-## OCR 与当前 `book/` 状态
+## OCR 与扫描件
 
-9 本 PDF 已进入文档审计；其中 5 本已有活动块，4 本因扫描页或字体映射损坏需要中文 Tesseract OCR。平台会隔离坏文本，绝不会把乱码静默写入索引。把可信的 Tesseract 运行时放到 `runtime/tesseract/`，并在 `.env` 中配置：
+9 本 PDF 已全部入库。其中 4 本是纯扫描件（《加密与解密 第4版》《IDA Pro 权威指南》
+《汇编语言 第4版》《程序员的自我修养》），现已通过 **RapidOCR（ONNXRuntime）** 完成中文识别。
+
+默认 OCR 后端是 `rapidocr`：纯 pip 安装、权重随包分发、完全离线，**不需要任何外部可执行文件**。
+Tesseract 仍作为可选后备存在，但不是必需的。
 
 ```dotenv
-SECKNOW_TESSERACT_EXECUTABLE=D:/SecKnow/runtime/tesseract/tesseract.exe
-SECKNOW_TESSERACT_TESSDATA_DIR=D:/SecKnow/runtime/tesseract/tessdata
+# auto = 优先 RapidOCR，退回 Tesseract；也可显式写 rapidocr / tesseract / none
+SECKNOW_OCR_BACKEND=auto
 SECKNOW_OCR_LANGUAGES=chi_sim+eng
 ```
 
-随后在 Web 点击“开始增量索引”。`scripts/prepare-offline.ps1` 会要求 Tesseract 版本和完整 SHA-256 清单，避免无校验地打包第三方可执行文件。
+实测：约 3.2 秒/页，平均置信度 0.99，能正确提取中文正文与汇编助记符
+（仅有少量字形噪声，如 `MOV`→`MOU`，不影响检索）。
+
+## 检索质量的实测数据
+
+用 1156 篇 meta WP 的 `tags` 作真值、查询只用题面信息（不含答案字段）做自动评分：
+
+| 指标 | 值 |
+| --- | --- |
+| `tag_recall@8` | 0.59（含题目自身文件） |
+| Top-K 命中位中 meta WP 占比 | 83% |
+| 平均每题命中相关 WP 数 | 5.0 / 8，无一题为 0 |
+| 单次检索耗时 | 约 3.8 秒（GPU） |
+
+评测脚本见 `versions/v004_retrieval_bench.src`，结果见 `experiments/EXP-0003/`。
+**注意**：必须区分「含自身文件」与「排除自身文件」两个口径，否则指标会被自我泄漏抬高
+（见 `laws/LAW-0009.md`）。
+
+## 向量检索是可选的
+
+`dense` 向量通道在本项目的语料上经 A/B 验证**没有增量贡献**（`laws/LAW-0008.md`）。
+Milvus 不可用时，平台会退到本机 `data/dense/<version>.npz` 的精确余弦检索；
+即使完全没有向量，FTS5（jieba 中文分词）+ TF-IDF + 图扩展 + cross-encoder 重排仍然可用。
 
 ## 评测与质量检查
 
