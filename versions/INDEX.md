@@ -26,6 +26,7 @@
 | v014 | [v014_pwn_units.src](v014_pwn_units.src) | pwn 单元：ELF 分析 + gadget + 偏移探测 + 真实 exploit | pyelftools/capstone + WSL | 正样本 2/2，负样本 2/2 |
 | v015 | [v015_leak_bypass.src](v015_leak_bypass.src) | canary / PIE 绕过：格式化字符串泄漏 + 同进程利用 | pyelftools/capstone + WSL | 3/3 绕过，负样本如实失败 |
 | v016 | [v016_ret2libc.src](v016_ret2libc.src) | ret2libc：PLT 桩解析 + libc 偏移 + 两阶段泄漏利用 | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
+| v017 | [v017_ret2win_retest.src](v017_ret2win_retest.src) | ret2win 复测：stripped / -O2 / 改名后的后门定位 | pyelftools/capstone + WSL | 正样本 4/4，负样本 2/2 |
 
 ## 各版本说明
 
@@ -513,3 +514,40 @@ python versions/v016_ret2libc.src --only L1
 ```
 
 **产出**：`experiments/EXP-0014/{pwn/,results.json,report.md}`
+
+### v017_ret2win_retest.src
+
+**回答的问题**（用户明确要求）：真实题里 ret2win 少但分值高。v014 只验证过
+自编译、带符号的 O0 二进制；如果题目 `-O2`、`-s` 或给后门改名，还能不能打？
+
+**做法**：同一份靶场编五个变体，新增 `find_win_candidates`：
+
+1. **符号启发式**：名字含 win / backdoor / getshell / flag；
+2. **字符串引用**：找到 `lea reg, [rip+X]` 指向 "/tmp/flag.txt"、"flag{" 等字符串，
+   把该指令所在的函数入口当作候选；
+3. 每个候选 × {加对齐 ret, 不加} 都**真实执行**，只有输出等于期望 flag 才算成功。
+
+**结果（连续 3 次稳定）**
+
+| 题 | 靶场 | 结果 | 找到方式 |
+| --- | --- | --- | --- |
+| R0 | O0 带符号 | ✓ | `symbol:win` |
+| R1 | O2 带符号 | ✓ | `symbol:win` |
+| R2 | O2 stripped | ✓ | `string_ref:/tmp/flag.txt` |
+| R3 | O2 后门改名 helper_a3f9 | ✓ | `string_ref:/tmp/flag.txt` |
+| N1 | 无后门 | ✓ 如实拒绝 | `win_not_found` |
+| N2 | 有假后门（输出错 flag） | ✓ 如实拒绝 | `execute_failed` |
+
+**三个关键点**（见 `laws/LAW-0021.md`）：
+1. 符号剥离与改名是同一类问题，字符串引用改不掉；
+2. `-O2` 的函数 `endbr64; push r12; push rbp` 会让"遇到 push rbp 就停"的入口检测
+   报错位置——必须先在整段里找对齐的 endbr64；
+3. 候选必须执行验证：N2 真打印了 `flag{decoy_not_the_answer}`，只看正则就会误判成功。
+
+**运行**
+```bash
+python versions/v017_ret2win_retest.src
+python versions/v017_ret2win_retest.src --only R2
+```
+
+**产出**：`experiments/EXP-0015/{ret2win/,results.json,report.md}`

@@ -504,6 +504,39 @@ pwn 验证真的控制了 RIP 并拿到 flag。
 **下一步（用户明确要求，勿忘）**：回来复测 ret2win——真实题里这类题少但分值高，
 且常见 stripped / `-O2` 二进制，符号表被去掉后不能只靠 `symbols["win"]` 找后门。
 
+### 结论 20：ret2win 去掉符号也能打，靠的是后门的行为痕迹
+
+按要求回来复测 ret2win。同一份靶场编五个变体，新增 `find_win_candidates`：
+符号启发式（名字含 win/backdoor/flag）+ **字符串引用**
+（`lea reg, [rip+X]` 指向 "/tmp/flag.txt"、"flag{" → 该函数入口）。
+每个候选 × 两种栈对齐都真实执行，输出必须等于期望 flag。
+
+| 题 | 靶场 | 结果 | 找到方式 |
+| --- | --- | --- | --- |
+| R0 | O0 带符号 | ✓ | `symbol:win` |
+| R1 | O2 带符号 | ✓ | `symbol:win` |
+| R2 | O2 stripped | ✓ | `string_ref:/tmp/flag.txt` |
+| R3 | O2 后门改名 `helper_a3f9` | ✓ | `string_ref:/tmp/flag.txt` |
+| N1 | 无后门 | ✓ 如实拒绝 | `win_not_found`（3 ms） |
+| N2 | 假后门（输出错 flag） | ✓ 如实拒绝 | `execute_failed` |
+
+连续 3 次稳定，平均约 635 ms/题。
+
+**三个关键点**
+
+1. **符号剥离和改名是同一类问题**，都会让"按名字找函数"失效；但后门总要
+   引用 flag 文件或 flag 字样，这个行为痕迹改不掉。R2/R3 都只能走这条路。
+2. **`-O2` 的函数入口检测有陷阱。** 函数常常是
+   `endbr64; push r12; push rbp; ...`；若"往回扫，遇到 push rbp 就停"，
+   会把入口报成函数中间。必须**先在整段里找 16 字节对齐的 endbr64**。
+   首轮 R1 就暴露了这个 bug：符号路径能解，字符串路径打不中。
+3. **候选必须执行验证。** N2 的 decoy 真的打印了
+   `flag{decoy_not_the_answer}`——只看正则会把假答案当成功。
+   判据必须是"等于期望 flag"，否则试下一个候选，全失败则 `execute_failed`。
+
+→ 见 `laws/LAW-0021.md`。至此 pwn 的三条主路径（ret2win / canary-PIE 绕过 /
+ret2libc）都已在真实进程上验证。下一个自然缺口是三者组合以及堆利用。
+
 
 ## 4. 更新日志（追加式）
 
@@ -628,4 +661,16 @@ pwn 验证真的控制了 RIP 并拿到 flag。
   N2 无 PLT → `plt_stub_missing`；连续 3 次稳定，平均约 407 ms。
 - 记录 `laws/LAW-0020.md`：PLT 两种形态、capstone 渲染细节、页对齐校验的局限。
 - 待办：回来复测 ret2win（stripped / `-O2` 真实二进制）。
+
+### 2026-11-11 — ret2win 复测（v017 / EXP-0015）
+
+- 新增 `versions/v017_ret2win_retest.src` 与 `experiments/EXP-0015/ret2win/`：
+  同一份源码编 O0 / O2 / O2-stripped / 改名 / 无后门 / 假后门 六个变体。
+- 新增 `find_win_candidates`：符号启发式 + 字符串引用（`lea [rip+X]` 指向
+  `/tmp/flag.txt`、`flag{`），每个候选 × 两种栈对齐都真实执行。
+- 结果：R0–R3 全部解出（R2/R3 只能靠字符串引用）；N1 `win_not_found`；
+  N1/N2 均如实拒绝；连续 3 次稳定，平均约 635 ms/题。
+- 记录 `laws/LAW-0021.md`：符号剥离/改名可被行为痕迹绕过；
+  `-O2` 的 `endbr64; push r12; push rbp` 会骗过入口检测；候选必须执行验证。
+
 

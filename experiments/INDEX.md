@@ -19,6 +19,46 @@
 | EXP-0012 | 2026-11-11 | pwn 单元（真实 ELF + 真实执行） | ret2win 2/2 解出；canary/PIE 2/2 正确拒绝；平均 475 ms | `EXP-0012/report.md` |
 | EXP-0013 | 2026-11-11 | canary / PIE 绕过（格式化字符串泄漏） | 3/3 绕过成功；无泄漏原语时如实失败；连续 3 次稳定 | `EXP-0013/report.md` |
 | EXP-0014 | 2026-11-11 | ret2libc（PLT 解析 + libc 偏移 + 两阶段泄漏） | 正样本 1/1 解出；错版本 / 无 PLT 两个负样本如实拒绝；连续 3 次稳定 | `EXP-0014/report.md` |
+| EXP-0015 | 2026-11-11 | ret2win 复测（stripped / -O2 / 改名） | 4/4 解出（2 例只能靠字符串引用）；无后门 / 假后门 2/2 如实拒绝；连续 3 次稳定 | `EXP-0015/report.md` |
+
+---
+
+## EXP-0015 — ret2win 复测
+
+**背景**（用户明确要求）：ret2win 题少但分值高。v014 只在带符号的 O0 二进制上
+验证过；真实题常见 `-O2`、`-s`、后门改名。
+
+**靶场**（`experiments/EXP-0015/ret2win/`，同一份源码编五个变体）：
+
+| 二进制 | 编译 | 用途 |
+| --- | --- | --- |
+| `vuln_o0` | `-O0` | 回归 v014 |
+| `vuln_o2` | `-O2` | 优化后栈帧变化 |
+| `vuln_o2s` | `-O2 -s` | 符号剥离 |
+| `vuln_renamed_o2` | `-O2`，后门改名 `helper_a3f9` | 改名 |
+| `vuln_nowin_o2s` | `-O2 -s`，无后门 | 负样本 |
+| `vuln_decoy_o2s` | `-O2 -s`，假后门 | 负样本 |
+
+**新增单元**：`find_win_candidates` —— 符号启发式 + **字符串引用**
+（`lea reg, [rip+X]` 指向 `/tmp/flag.txt` / `flag{` → 该函数入口）。
+每个候选 × 两种对齐都真实执行，输出必须等于期望 flag。
+
+| 题 | 结果 | 找到方式 |
+| --- | --- | --- |
+| R0 O0 带符号 | ✓ | `symbol:win` |
+| R1 O2 带符号 | ✓ | `symbol:win` |
+| R2 O2 stripped | ✓ | `string_ref:/tmp/flag.txt` |
+| R3 O2 改名 | ✓ | `string_ref:/tmp/flag.txt` |
+| N1 无后门 | ✓ 如实拒绝 | `win_not_found` |
+| N2 假后门 | ✓ 如实拒绝 | `execute_failed` |
+
+连续 3 次稳定，平均约 635 ms/题。
+
+**三个关键点**（`laws/LAW-0021.md`）：
+1. 符号剥离与改名是同一类问题；后门引用 flag 文件/字样的行为痕迹改不掉；
+2. `-O2` 的 `endbr64; push r12; push rbp` 会让"遇到 push rbp 就停"的入口检测
+   报成函数中间——必须先在整段里找 16 字节对齐的 endbr64；
+3. N2 真的打印了 `flag{decoy_not_the_answer}`，只看正则会把假答案当成功。
 
 ---
 

