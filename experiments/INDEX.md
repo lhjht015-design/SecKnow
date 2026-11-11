@@ -18,6 +18,40 @@
 | EXP-0011 | 2026-11-11 | 真实攻击链覆盖率（726 条 / 6795 步） | 61.7% 步骤属题目特有逻辑；现有单元完整覆盖 11.2% 的链 | `EXP-0011/report.md` |
 | EXP-0012 | 2026-11-11 | pwn 单元（真实 ELF + 真实执行） | ret2win 2/2 解出；canary/PIE 2/2 正确拒绝；平均 475 ms | `EXP-0012/report.md` |
 | EXP-0013 | 2026-11-11 | canary / PIE 绕过（格式化字符串泄漏） | 3/3 绕过成功；无泄漏原语时如实失败；连续 3 次稳定 | `EXP-0013/report.md` |
+| EXP-0014 | 2026-11-11 | ret2libc（PLT 解析 + libc 偏移 + 两阶段泄漏） | 正样本 1/1 解出；错版本 / 无 PLT 两个负样本如实拒绝；连续 3 次稳定 | `EXP-0014/report.md` |
+
+---
+
+## EXP-0014 — ret2libc
+
+**背景**：真实 pwn 里后门函数（win）很少见，主力打法是泄漏 libc 地址 → 算基址 →
+`system("/bin/sh")`。这个流程能否单元化、能否真的打通？
+
+**靶场**（`experiments/EXP-0014/pwn/`）：
+
+| 文件 | 说明 |
+| --- | --- |
+| `vuln3` | `read()` 溢出，无 canary / 无 PIE，隔离 libc 这一个变量 |
+| `vuln3_noplt` | `-fno-plt` 编译，无 `.plt` / `.rela.plt`，负样本 |
+| `libc.so.6` | 题目附带 libc（必须用它算偏移） |
+
+**三个单元**：`plt_stub` / `libc_offsets` / `leak_libc`。
+
+**两阶段**：`puts(puts@got)` 泄漏并回到 `main` → 算基址 → `system("/bin/sh")`。
+
+| 题 | 类型 | 结果 | 原因 |
+| --- | --- | --- | --- |
+| L1 | 正常 ret2libc | ✓ 解出 | — |
+| N1 | 故意用错 puts 偏移 | ✓ 如实拒绝 | `libc_mismatch` |
+| N2 | `-fno-plt` | ✓ 如实拒绝 | `plt_stub_missing` |
+
+平均约 407 ms/题，连续 3 次稳定。
+
+**四个关键点**（`laws/LAW-0020.md`）：
+1. 现代 Ubuntu 的可调用桩在 `.plt.sec`；只解析 `.plt` 会让 call 目标匹配全部失配；
+2. capstone 的 `bnd jmp` mnemonic 带空格、`push 0` 的 op_str 是 `"0"`；
+3. 页对齐是便宜的版本校验，但不能证明 libc 匹配（4 KB 整数倍偏差会漏过）；
+4. `/bin/sh` 必须经 PT_LOAD 换算成虚拟地址。
 
 ---
 

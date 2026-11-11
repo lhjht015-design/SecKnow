@@ -1,0 +1,122 @@
+{
+  "summary": {
+    "positive_total": 1,
+    "positive_solved": 1,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "mean_elapsed_ms": 410.3
+  },
+  "rows": [
+    {
+      "id": "L1",
+      "negative": false,
+      "solved": true,
+      "reason": null,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false
+        },
+        {
+          "unit": "plt_stub",
+          "ok": true,
+          "plt": "0x401060",
+          "plt_legacy": "0x401030",
+          "plt_sec": "0x401060",
+          "got": "0x404018",
+          "index": "0x0"
+        },
+        {
+          "unit": "libc_offsets",
+          "ok": true,
+          "puts": "0x80e50",
+          "system": "0x50d70",
+          "binsh": "0x1d8678"
+        },
+        {
+          "unit": "ret_offset",
+          "ok": true,
+          "ret_offset": 72
+        },
+        {
+          "unit": "leak_libc",
+          "leaked": "0x7ff89d300e50"
+        },
+        {
+          "unit": "solve_base",
+          "base": "0x7ff89d280000",
+          "page_aligned": true
+        },
+        {
+          "unit": "execute",
+          "result": "solved"
+        }
+      ],
+      "elapsed_ms": 1040.8
+    },
+    {
+      "id": "N1",
+      "negative": true,
+      "solved": false,
+      "reason": "libc_mismatch",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false
+        },
+        {
+          "unit": "plt_stub",
+          "ok": true,
+          "plt": "0x401060",
+          "plt_legacy": "0x401030",
+          "plt_sec": "0x401060",
+          "got": "0x404018",
+          "index": "0x0"
+        },
+        {
+          "unit": "libc_offsets",
+          "ok": true,
+          "puts": "0x80e50",
+          "system": "0x50d70",
+          "binsh": "0x1d8678"
+        },
+        {
+          "unit": "ret_offset",
+          "ok": true,
+          "ret_offset": 72
+        },
+        {
+          "unit": "leak_libc",
+          "leaked": "0x7f3353e14e50"
+        },
+        {
+          "unit": "solve_base",
+          "base": "0x7f3353e02b0b",
+          "page_aligned": false
+        }
+      ],
+      "elapsed_ms": 187.3
+    },
+    {
+      "id": "N2",
+      "negative": true,
+      "solved": false,
+      "reason": "plt_stub_missing",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false
+        },
+        {
+          "unit": "plt_stub",
+          "ok": false,
+          "reason": "plt_or_rela_missing"
+        }
+      ],
+      "elapsed_ms": 2.8
+    }
+  ]
+}

@@ -25,6 +25,7 @@
 | v013 | [v013_chain_coverage.src](v013_chain_coverage.src) | 用 726 条真实攻击链测单元库覆盖边界 | 无（纯 Python） | 61.7% 步骤属题目特有逻辑 |
 | v014 | [v014_pwn_units.src](v014_pwn_units.src) | pwn 单元：ELF 分析 + gadget + 偏移探测 + 真实 exploit | pyelftools/capstone + WSL | 正样本 2/2，负样本 2/2 |
 | v015 | [v015_leak_bypass.src](v015_leak_bypass.src) | canary / PIE 绕过：格式化字符串泄漏 + 同进程利用 | pyelftools/capstone + WSL | 3/3 绕过，负样本如实失败 |
+| v016 | [v016_ret2libc.src](v016_ret2libc.src) | ret2libc：PLT 桩解析 + libc 偏移 + 两阶段泄漏利用 | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 
 ## 各版本说明
 
@@ -465,3 +466,50 @@ python versions/v015_leak_bypass.src --only B1
 ```
 
 **产出**：`experiments/EXP-0013/{pwn/,results.json,report.md}`
+
+### v016_ret2libc.src
+
+**回答的问题**：真实 pwn 里后门函数很少见，标准打法是"泄漏 libc 地址 → 算基址 →
+`system("/bin/sh")`"。这套流程能不能单元化，并且真的打通？
+
+**核心约束**：偏移必须来自**题目给的那份 libc**。用错版本算出的基址一定错。
+本版本用「基址是否页对齐」做便宜的版本校验，并把它的局限写进契约。
+
+**新增三个单元**
+
+| 单元 | 作用 |
+| --- | --- |
+| `plt_stub` | 从 `.rela.plt` 与 `.plt` / `.plt.sec` 解析导入函数的可调用地址 |
+| `libc_offsets` | 从给定 libc 取 puts / system 符号偏移与 "/bin/sh" 虚拟地址 |
+| `leak_libc` | 发 stage1、解析 6 字节泄漏、算基址并校验页对齐 |
+
+**两阶段 payload**
+
+```
+stage1: padding + pop_rdi + puts@got + puts@plt + main      # 泄漏后回到 main
+stage2: padding + ret(对齐) + pop_rdi + base+binsh + base+system
+```
+
+**结果（连续 3 次稳定）**
+
+| 题 | 类型 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| L1 | 正常 ret2libc | ✓ | 真实执行拿到 `flag{ret2libc_real}` |
+| N1 | libc 版本不匹配 | ✓ 如实拒绝 | `libc_mismatch`（基址不页对齐） |
+| N2 | `-fno-plt` 编译 | ✓ 如实拒绝 | `plt_stub_missing` |
+
+**五个关键点**（见 `laws/LAW-0020.md`）：
+1. 现代 Ubuntu 的可调用桩在 `.plt.sec`，`.plt` 只是 resolver 入口——
+   用 `.plt` 地址去匹配代码里的 call 目标会全部失配；
+2. capstone 把 `bnd jmp` 渲染成 mnemonic=`"bnd jmp"`、把 `push 0` 的 op_str 渲染成 `"0"`；
+3. 页对齐只能证伪大部分错误 libc，不能证明匹配（偏差恰为 4 KB 整数倍时会漏过）；
+4. `/bin/sh` 要从文件偏移换算成虚拟地址（经 PT_LOAD）；
+5. 没有 PLT 时返回 `plt_stub_missing`，不能硬猜。
+
+**运行**
+```bash
+python versions/v016_ret2libc.src
+python versions/v016_ret2libc.src --only L1
+```
+
+**产出**：`experiments/EXP-0014/{pwn/,results.json,report.md}`

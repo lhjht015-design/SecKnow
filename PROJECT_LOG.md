@@ -470,6 +470,41 @@ pwn 验证真的控制了 RIP 并拿到 flag。
 `leak_stage_not_found`，不能硬猜。
 → 见 `laws/LAW-0019.md`。
 
+### 结论 19：ret2libc 可单元化，真正的风险在 libc 版本而不在 ROP
+
+在 `vuln3`（read 溢出、无 canary/PIE）上把标准两阶段流程单元化：
+`puts(puts@got)` 泄漏 → 基址 → `system("/bin/sh")`。
+
+| 题 | 类型 | 结果 | 原因 |
+| --- | --- | --- | --- |
+| L1 | 正常 ret2libc | ✓ 约 1.0 s | 真实执行拿到 `flag{ret2libc_real}` |
+| N1 | 故意用错 puts 偏移 | ✓ 如实拒绝 | `libc_mismatch`（基址不页对齐） |
+| N2 | `-fno-plt` | ✓ 如实拒绝 | `plt_stub_missing` |
+
+连续 3 次稳定，平均约 407 ms。
+
+**三个必须踩过才知道的坑**
+
+1. **可调用桩在 `.plt.sec`，不在 `.plt`。** 现代 Ubuntu 默认 `-z ibtplt`，
+   `.plt` 只剩 `push <index>; jmp plt0` 的 resolver 入口，真正被 call 的是
+   `.plt.sec` 里的 `endbr64; bnd jmp [rip+X]`。只解析 `.plt` 会让"哪个函数调了 read"
+   的匹配全部失配，偏移推导随之失败。
+2. **capstone 的渲染不直观。** `bnd jmp` 的 mnemonic 是 `"bnd jmp"`（带空格），
+   `push 0` 的 op_str 是 `"0"` 而不是 `"0x0"`。按 `"0x"` 前缀判断会一个桩都解析不到，
+   报错却是 `symbol_not_in_plt`——看起来像符号不存在，实际是解析器写错。
+3. **页对齐只是"便宜的怀疑"。** 正确 libc 的偏移必然让基址落在页边界，错版本大概率不齐，
+   所以它能几乎零成本拦住大部分错误；但如果两版 puts 偏移之差恰是 4 KB 整数倍，
+   校验会通过而利用会崩。**不能把"算出了基址"当成"版本对了"**，真实场景必须以
+   题目附带的 libc 为准，并用执行结果反证。
+
+另外 `/bin/sh` 的文件偏移必须经 PT_LOAD 换算成虚拟地址；`-fno-plt` 的二进制
+没有 PLT 时要返回 `plt_stub_missing`，不能硬猜。
+→ 见 `laws/LAW-0020.md`。
+
+**下一步（用户明确要求，勿忘）**：回来复测 ret2win——真实题里这类题少但分值高，
+且常见 stripped / `-O2` 二进制，符号表被去掉后不能只靠 `symbols["win"]` 找后门。
+
+
 ## 4. 更新日志（追加式）
 
 ### 2026-09-21 — 接管、基线与流程骨架
@@ -582,3 +617,15 @@ pwn 验证真的控制了 RIP 并拿到 flag。
   「权重就位 ≠ 后端可用 ≠ 加速器在用」，三者必须分别上报（LAW-0004 的直接产物）。
 - CLI 的 stdout 改为 UTF-8 + 可替换：检索结果里的 ✓/μ 等字符此前会
   在 GBK 控制台上抛 `UnicodeEncodeError` 打断命令（本项目自己踩过同一个坑）。
+
+### 2026-11-11 — ret2libc（v016 / EXP-0014）
+
+- 新增 `versions/v016_ret2libc.src`：`plt_stub`（`.rela.plt` ↔ `.plt`/`.plt.sec`）、
+  `libc_offsets`（符号偏移 + "/bin/sh" 虚拟地址）、`leak_libc`（6 字节泄漏 + 页对齐校验）。
+- 靶场 `experiments/EXP-0014/pwn/vuln3.c` 及 `vuln3`、`vuln3_noplt`（`-fno-plt` 负样本）、
+  随实验保存的 `libc.so.6`。
+- 结果：L1 解出（约 1.0 s）；N1 错偏移 → `libc_mismatch`；
+  N2 无 PLT → `plt_stub_missing`；连续 3 次稳定，平均约 407 ms。
+- 记录 `laws/LAW-0020.md`：PLT 两种形态、capstone 渲染细节、页对齐校验的局限。
+- 待办：回来复测 ret2win（stripped / `-O2` 真实二进制）。
+
