@@ -35,6 +35,7 @@
 | v023 | [v023_elf_prefix.src](v023_elf_prefix.src) | ELF 校验器前缀接口：enc/check_num/check_exit 检测与归一 | Python + WSL | 正样本 4/4，负样本 2/2 |
 | v024 | [v024_timing_channel.src](v024_timing_channel.src) | 时序侧信道前缀爬坡：基线 + 频率序早停 + 结束验证 | Python + WSL | 正样本 3/3，负样本 2/2 |
 | v025 | [v025_parallel_oracle.src](v025_parallel_oracle.src) | 并行探测优化：Q/Y 批量协议 + 时序/结果分流 | Python + WSL | 正样本 4/4，负样本 2/2 |
+| v026 | [v026_batch_transform.src](v026_batch_transform.src) | 变换单元全走批量 Y + 建表复用优化 | Python + WSL | 正样本 4/4 |
 
 ## 各版本说明
 
@@ -935,3 +936,45 @@ python versions/v025_parallel_oracle.src --only E4
 ```
 
 **产出**：`experiments/EXP-0023/{results.json,report.md}`（靶场复用 EXP-0022）
+
+### v026_batch_transform.src
+
+**回答的问题**：v025 只把批量 Y 接进部分路径；变换单元的探测仍逐个走 E/R。
+对 ELF 来说每次探测都是一个进程，256n 的建表非常慢。
+
+**改动**
+
+1. `AutoOracle` / `ElfOracle` 的 `call_many` 全部走 Y 批量（8 路并发、保序）；
+   `call()` 走单元素批量；`verify_plain` 的复核也在同一路径。
+2. 建表单元增加"表复用 + 常量差分"：每个位置先用 5 个值与已有表比对，
+   若"输出 = 表[v] ^ 常量"成立就复用，否则才建 256 项全表。
+3. 新增三个编译版 ELF 变换（S 盒 / 置换 / GF(2)），加上已有的仿射程序，
+   四条反解路径各有载体。
+
+**结果（连续 3 次一致）**
+
+| 题 | 路径 | 探测数 | 耗时 |
+| --- | --- | --- | --- |
+| V1 逐字节 S 盒 | `invert_bytewise_table` | 1465（优化前 5331） | 约 11 s（优化前 39 s） |
+| V2 逐字节仿射 | `invert_bytewise_affine` | 206 | 约 1 s |
+| V3 位置置换 | `invert_permutation` | 145 | 约 1 s |
+| V4 GF(2) 线性 | `invert_gf2` | 272 | 约 2 s |
+
+正样本 4/4，平均约 3.7 s/题。
+
+**四个关键点**（见 `laws/LAW-0030.md`）：
+1. 批量 Y 对结果型探测安全，变换单元一行不改就获得批量。
+2. 256n 不是必须的：5 点差分把建表降到约 n×5 + 4×256。
+3. 复用可证伪：5 点只是候选，最终由 `verify_plain` 兜底。
+4. 四条反解路径由依赖矩阵各自选中，没有互相抢路径。
+
+**边界**：表复用只覆盖"位置表 = 已有表 ^ 常量"的轮换；真正每位置不同的表
+仍需 256n；ELF 建表即使批量也约 10 s。
+
+**运行**
+```bash
+python versions/v026_batch_transform.src
+python versions/v026_batch_transform.src --only V1
+```
+
+**产出**：`experiments/EXP-0024/{lab/,results.json,report.md}`

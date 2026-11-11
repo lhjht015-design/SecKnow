@@ -1,0 +1,97 @@
+{
+  "summary": {
+    "positive_total": 4,
+    "positive_solved": 4,
+    "negative_total": 0,
+    "negative_correctly_refused": 0,
+    "total_probes": 2088,
+    "mean_elapsed_ms": 3666.9
+  },
+  "rows": [
+    {
+      "id": "V1",
+      "note": "ELF 逐字节 S 盒（建表路径）",
+      "negative": false,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_table",
+        "verify_plain"
+      ],
+      "refusals": [
+        {
+          "unit": "invert_bytewise_affine",
+          "reason": "affine_not_applicable"
+        }
+      ],
+      "probes": 1465,
+      "mode": "enc",
+      "detect_ms": 555.9,
+      "reason": null,
+      "recovered": "flag{elf_sbox_table}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 10535.7
+    },
+    {
+      "id": "V2",
+      "note": "ELF 逐字节仿射（仿射路径）",
+      "negative": false,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 206,
+      "mode": "enc",
+      "detect_ms": 536.2,
+      "reason": null,
+      "recovered": "flag{elf_affine_ok}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 1341.4
+    },
+    {
+      "id": "V3",
+      "note": "ELF 位置置换 + 常量（置换路径）",
+      "negative": false,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_permutation",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 145,
+      "mode": "enc",
+      "detect_ms": 558.2,
+      "reason": null,
+      "recovered": "flag{elf_perm_ok}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 928.5
+    },
+    {
+      "id": "V4",
+      "note": "ELF GF(2) 循环线性（稠密路径）",
+      "negative": false,
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_gf2",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 272,
+      "mode": "enc",
+      "detect_ms": 566.7,
+      "reason": null,
+      "recovered": "flag{elf_gf2_ok}",
+      "delay_ms": null,
+      "solved": true,
+      "elapsed_ms": 1862.1
+    }
+  ]
+}
