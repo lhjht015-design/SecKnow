@@ -42,7 +42,8 @@ def main() -> None:
         if not line:
             continue
         try:
-            op, payload = line.split(" ", 1)
+            parts = line.split(" ", 1)
+            payload = parts[1] if len(parts) > 1 else ""
             data = bytes.fromhex(payload)
             result = function(data)
             if isinstance(result, (bytes, bytearray)):

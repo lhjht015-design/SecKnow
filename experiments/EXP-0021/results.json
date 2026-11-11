@@ -1,0 +1,105 @@
+{
+  "summary": {
+    "positive_total": 4,
+    "positive_solved": 4,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "total_probes": 1100,
+    "mean_elapsed_ms": 2339.3
+  },
+  "rows": [
+    {
+      "id": "E1",
+      "note": "stdout 输出前缀长度整数",
+      "negative": false,
+      "binary": "chal_check_int",
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 322,
+      "mode": "check_num",
+      "reason": null,
+      "recovered": "flag{elf_prefix_int}",
+      "solved": true,
+      "elapsed_ms": 3351.7
+    },
+    {
+      "id": "E2",
+      "note": "输出 prefix=N",
+      "negative": false,
+      "binary": "chal_check_fmt",
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 318,
+      "mode": "check_num",
+      "reason": null,
+      "recovered": "flag{elf_prefix_fmt}",
+      "solved": true,
+      "elapsed_ms": 3357.3
+    },
+    {
+      "id": "E3",
+      "note": "前缀长度编码在退出码",
+      "negative": false,
+      "binary": "chal_check_exit",
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 337,
+      "mode": "check_exit",
+      "reason": null,
+      "recovered": "flag{elf_prefix_exit}",
+      "solved": true,
+      "elapsed_ms": 3495.6
+    },
+    {
+      "id": "E4",
+      "note": "ELF 变换程序（回归）",
+      "negative": false,
+      "binary": "chal_transform",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 123,
+      "mode": "enc",
+      "reason": null,
+      "recovered": "flag{elf_transform_ok}",
+      "solved": true,
+      "elapsed_ms": 2143.5
+    },
+    {
+      "id": "N5",
+      "note": "只回 wrong 的校验器",
+      "negative": true,
+      "binary": "chal_check_nosignal",
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "mode": "none",
+      "reason": "no_prefix_signal",
+      "refused": true,
+      "elapsed_ms": 891.8
+    },
+    {
+      "id": "N6",
+      "note": "输出恒为 0（不随输入变化）",
+      "negative": true,
+      "binary": "chal_check_constant",
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "mode": "none",
+      "reason": "no_prefix_signal",
+      "refused": true,
+      "elapsed_ms": 796.0
+    }
+  ]
+}

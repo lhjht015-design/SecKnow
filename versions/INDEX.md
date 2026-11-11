@@ -32,6 +32,7 @@
 | v020 | [v020_contract_units.src](v020_contract_units.src) | 把黑盒反解策略接入契约单元库（类型化规划 + guard + 验证） | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 | v021 | [v021_text_recall_kit.src](v021_text_recall_kit.src) | 文本召回库 + 黑盒单元统一：一个库、两套输入、同一规划器 | 纯 Python（子进程 oracle） | 正样本 11/11，负样本 4/4 |
 | v022 | [v022_attachment_entry.src](v022_attachment_entry.src) | 按附件后缀/魔数自动建立 oracle 入口（脚本/zip/ELF/文本） | Python + WSL | 正样本 6/6，负样本 4/4 |
+| v023 | [v023_elf_prefix.src](v023_elf_prefix.src) | ELF 校验器前缀接口：enc/check_num/check_exit 检测与归一 | Python + WSL | 正样本 4/4，负样本 2/2 |
 
 ## 各版本说明
 
@@ -795,3 +796,52 @@ python versions/v022_attachment_entry.src --only A4
 ```
 
 **产出**：`experiments/EXP-0020/{attachments/,lab/,results.json,report.md}`
+
+### v023_elf_prefix.src
+
+**回答的问题**：v022 只能把 ELF 校验器当"非变换"拒绝。真实逆向题里校验器
+往往泄露"正确前缀长度"——能不能把它做成真正的前缀接口，复用逐字节爬坡？
+
+**接口检测**（对 ELF 做一组探测：空串 + 95 个可打印单字符 + 长度 1–4 的串 +
+重复项）：
+
+| 判据 | 接口 |
+| --- | --- |
+| 输出长度 == 输入长度 | `enc` |
+| stdout 归一成 0..len 且随输入变化 | `check_num` |
+| 退出码在 0..len 且随输入变化 | `check_exit` |
+| 其它 | `none` → `no_prefix_signal` |
+
+`parse_prefix_number` 支持纯数字、`prefix=N`、`correct=N` 等格式；
+`check_exit` 直接用退出码。三种信道统一成 `oracle.call(x) -> int`，
+交给已有的 `solve_prefix_checker`。
+
+**结果（连续 3 次一致）**
+
+| 题 | 接口 | 结果 | 探测数 |
+| --- | --- | --- | --- |
+| E1 stdout 纯数字 | `check_num` | ✓ | 322 |
+| E2 `prefix=N` | `check_num` | ✓ | 318 |
+| E3 前缀长度在退出码 | `check_exit` | ✓ | 337 |
+| E4 ELF 变换程序（回归） | `enc` | ✓ | 123 |
+| N5 只回 wrong | `none` | ✓ 拒绝 | 0 |
+| N6 恒输出 0 | `none` | ✓ 拒绝 | 0 |
+
+正样本 4/4，负样本 2/2，平均约 2.3 s/题。
+
+**四个关键点**（见 `laws/LAW-0027.md`）：
+1. 接口的本质是"有序信号"，不是输出格式；三种格式归一后爬坡单元一行不改。
+2. 检测必须要求分数随输入变化，否则 N6 的恒定数字会被误判成前缀接口。
+3. 退出码是真实的第二信道（E3），上限 0..255。
+4. 探测集要遍历可打印首字符，否则看不到 score 分岔。
+
+**边界**：只支持泄露前缀长度的校验器；退出码 8 位；检测是启发式的；
+ELF 每题约 300 次进程启动（约 4 s）。
+
+**运行**
+```bash
+python versions/v023_elf_prefix.src
+python versions/v023_elf_prefix.src --only E3
+```
+
+**产出**：`experiments/EXP-0021/{lab/,results.json,report.md}`
