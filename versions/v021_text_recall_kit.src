@@ -1,0 +1,811 @@
+"""
+v021_text_recall_kit.src — 把 8 个黑盒单元并入文本召回库
+
+目标
+    v007 的单元库靠"技法关键词"从题面文本召回，v020 的 8 个黑盒单元靠"状态类型"
+    规划。本版本把两者放进**同一个 UNITS 列表、同一个 recall()、同一个规划器**：
+        - 数据单元：accepts={"text"}，从题面抽参数，产出 flag；
+        - 黑盒单元：accepts={"oracle"}，通过子进程执行题目脚本，产出 plain；
+        - 组合单元：bytes_to_text 把 verified 明文转成 text，
+          再交给 base64 单元，实现"黑盒反解 → 文本处理"的跨家族拼接。
+
+关键设计
+    1. **召回只负责"候选"，契约负责"能不能用"。** recall() 按技法词打分；
+       规划器随后按 accepts / produces / guard 过滤。文本里提到 RSA 不会让
+       oracle 单元被选中，反过来也一样。
+    2. **基础设施单元常驻。** probe_facts / classify_structure / verify_plain /
+       bytes_to_text 不依赖题目文本，永远可用；策略单元才需要被召回。
+    3. **两种成功出口。** 数据单元直接产出 kind=flag；
+       oracle 路径必须过 verify_plain（重新加密 == 原密文），
+       明文本身含 flag 时直接成为 flag，否则转 text 继续交给数据单元。
+
+测什么
+    T1–T5  v007 的 5 道文本题（RSA / Base64 / XOR / CRC32 / 凯撒）→ 5/5
+    P1–P5  EXP-0017 的 5 道黑盒题（S盒 / 仿射 / GF2 / Feistel / 校验器）→ 5/5
+    P6     黑盒 S 盒 + Base64 组合（跨家族）→ 1/1
+    N1–N3  哈希 / 非线性 / 随机掩码 → 拒绝
+    N4     RSA e=65537（文本题负样本）→ 拒绝
+
+运行
+    python versions/v021_text_recall_kit.src
+    python versions/v021_text_recall_kit.src --list
+    python versions/v021_text_recall_kit.src --only P6
+
+产出物
+    experiments/EXP-0019/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import base64
+import itertools
+import json
+import queue
+import random
+import re
+import string
+import subprocess
+import sys
+import threading
+import time
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0019"
+CHAL_DIR_17 = ROOT / "experiments" / "EXP-0017" / "chal"
+CHAL_DIR_19 = OUT_DIR / "chal"
+WORKER = ROOT / "tools" / "blackbox_worker.src"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+class Refuse(Exception):
+    """单元明确表示不适用/无法完成。"""
+
+
+# --------------------------------------------------------------------------------------
+# oracle（与 v020 相同）
+# --------------------------------------------------------------------------------------
+
+class Oracle:
+    def __init__(self, module: Path, mode: str) -> None:
+        self.mode = mode
+        self.probes = 0
+        self.proc = subprocess.Popen(
+            [sys.executable, "-u", str(WORKER), str(module), mode],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        self.replies: queue.Queue[str | None] = queue.Queue()
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        for line in self.proc.stdout:
+            self.replies.put(line.strip())
+        self.replies.put(None)
+
+    def call_many(self, items: list[bytes]) -> list:
+        op = "E" if self.mode == "enc" else "C"
+        for item in items:
+            self.proc.stdin.write(f"{op} {item.hex()}\n")
+        self.proc.stdin.flush()
+        self.probes += len(items)
+        results = []
+        for _ in items:
+            line = self.replies.get(timeout=120)
+            if line is None:
+                raise RuntimeError("worker 退出")
+            if not line.startswith("O "):
+                raise RuntimeError(f"worker 返回异常：{line}")
+            payload = line[2:]
+            results.append(bytes.fromhex(payload) if self.mode == "enc"
+                           else int(payload))
+        return results
+
+    def call(self, item: bytes):
+        return self.call_many([item])[0]
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+
+
+# --------------------------------------------------------------------------------------
+# 黑盒单元实现（与 v020 相同）
+# --------------------------------------------------------------------------------------
+
+def gf2_solve(columns: list[int], target: int, nbits: int) -> int | None:
+    rows: list[tuple[int, int]] = []
+    for bit in range(nbits):
+        row = 0
+        for j, column in enumerate(columns):
+            if (column >> bit) & 1:
+                row |= 1 << j
+        rows.append((row, (target >> bit) & 1))
+    pivot_of: dict[int, int] = {}
+    position = 0
+    for column in range(nbits):
+        pivot = None
+        for candidate in range(position, len(rows)):
+            if (rows[candidate][0] >> column) & 1:
+                pivot = candidate
+                break
+        if pivot is None:
+            continue
+        rows[position], rows[pivot] = rows[pivot], rows[position]
+        for index in range(len(rows)):
+            if index != position and ((rows[index][0] >> column) & 1):
+                rows[index] = (rows[index][0] ^ rows[position][0],
+                               rows[index][1] ^ rows[position][1])
+        pivot_of[column] = position
+        position += 1
+    for index in range(position, len(rows)):
+        if rows[index][0] == 0 and rows[index][1] == 1:
+            return None
+    if len(pivot_of) < nbits:
+        return None
+    solution = 0
+    for column, index in pivot_of.items():
+        if rows[index][1]:
+            solution |= 1 << column
+    return solution
+
+
+def probe_facts(state: dict) -> dict:
+    oracle, cipher = state["oracle"], state["cipher"]
+    n = len(cipher)
+    zero = bytes(n)
+    first, second = oracle.call_many([zero, zero])
+    if first != second:
+        raise Refuse("nondeterministic")
+    lengths = sorted({1, 2, 3, 4, 5, 8, 13, 16, 21, n})
+    outputs = oracle.call_many([bytes(length) for length in lengths])
+    if any(len(o) != L for L, o in zip(lengths, outputs)):
+        raise Refuse("not_length_preserving")
+    probes = []
+    for i in range(n):
+        item = bytearray(n)
+        item[i] = 0xFF
+        probes.append(bytes(item))
+    outs = oracle.call_many(probes)
+    changed = [[j for j in range(n) if outs[i][j] != first[j]] for i in range(n)]
+    return {"kind": "facts", "oracle": oracle, "cipher": cipher, "n": n,
+            "base": first, "changed": changed,
+            "diagonal": all(changed[i] == [i] for i in range(n)),
+            "permutation": (all(len(row) == 1 for row in changed)
+                            and len({row[0] for row in changed}) == n)}
+
+
+def classify_structure(state: dict) -> dict:
+    if state["diagonal"]:
+        label = "bytewise"
+    elif state["permutation"]:
+        label = "permutation"
+    else:
+        label = "dense"
+    return {**state, "kind": "structure", "label": label}
+
+
+def invert_bytewise_affine(state: dict) -> dict:
+    oracle, n, base = state["oracle"], state["n"], state["base"]
+    ones, mids, v37, vc4 = [], [], [], []
+    for i in range(n):
+        for store, value in ((ones, 0x01), (mids, 0x9E)):
+            item = bytearray(n)
+            item[i] = value
+            store.append(bytes(item))
+        item = bytearray(n)
+        item[i] = 0x37
+        v37.append(bytes(item))
+        item = bytearray(n)
+        item[i] = 0xC4
+        vc4.append(bytes(item))
+    o1 = oracle.call_many(ones)
+    om = oracle.call_many(mids)
+    o37 = oracle.call_many(v37)
+    oc4 = oracle.call_many(vc4)
+    slopes = [(o1[i][i] - base[i]) & 0xFF for i in range(n)]
+    if not all(om[i][i] == (slopes[i] * 0x9E + base[i]) & 0xFF
+               and o37[i][i] == (slopes[i] * 0x37 + base[i]) & 0xFF
+               and oc4[i][i] == (slopes[i] * 0xC4 + base[i]) & 0xFF
+               for i in range(n)):
+        raise Refuse("affine_not_applicable")
+    if not all(slope & 1 for slope in slopes):
+        raise Refuse("affine_slope_not_invertible")
+    plain = bytearray(n)
+    for i in range(n):
+        inverse = pow(slopes[i], -1, 256)
+        plain[i] = (inverse * ((state["cipher"][i] - base[i]) & 0xFF)) & 0xFF
+    return {**state, "kind": "plain", "plain": bytes(plain)}
+
+
+def invert_bytewise_table(state: dict) -> dict:
+    oracle, n = state["oracle"], state["n"]
+    tables = []
+    for i in range(n):
+        batch = []
+        for value in range(256):
+            item = bytearray(n)
+            item[i] = value
+            batch.append(bytes(item))
+        results = oracle.call_many(batch)
+        column = bytes(results[value][i] for value in range(256))
+        if len(set(column)) != 256:
+            raise Refuse("not_bijective")
+        tables.append(column)
+    plain = bytearray(n)
+    for i in range(n):
+        lookup = bytearray(256)
+        for value in range(256):
+            lookup[tables[i][value]] = value
+        plain[i] = lookup[state["cipher"][i]]
+    return {**state, "kind": "plain", "plain": bytes(plain)}
+
+
+def invert_permutation(state: dict) -> dict:
+    oracle, n, base = state["oracle"], state["n"], state["base"]
+    probes = []
+    for i in range(n):
+        item = bytearray(n)
+        item[i] = 0xA5
+        probes.append(bytes(item))
+    outs = oracle.call_many(probes)
+    mapping = [None] * n
+    for i in range(n):
+        hits = [j for j in range(n) if outs[i][j] != base[j]]
+        if len(hits) != 1 or ((outs[i][hits[0]] ^ base[hits[0]]) != 0xA5):
+            raise Refuse("permutation_not_found")
+        mapping[hits[0]] = i
+    if any(m is None for m in mapping):
+        raise Refuse("permutation_not_found")
+    plain = bytearray(n)
+    for j in range(n):
+        plain[mapping[j]] = state["cipher"][j] ^ base[j]
+    return {**state, "kind": "plain", "plain": bytes(plain)}
+
+
+def invert_gf2(state: dict) -> dict:
+    oracle, n = state["oracle"], state["n"]
+    nbits = 8 * n
+    basis = []
+    for bit in range(nbits):
+        item = bytearray(n)
+        item[bit // 8] |= 1 << (bit % 8)
+        basis.append(bytes(item))
+    outs = oracle.call_many(basis)
+    zero_value = int.from_bytes(state["base"], "little")
+    columns = [int.from_bytes(out, "little") ^ zero_value for out in outs]
+    rng = random.Random(0x5EC)
+    for _ in range(6):
+        x1 = bytes(rng.getrandbits(8) for _ in range(n))
+        x2 = bytes(rng.getrandbits(8) for _ in range(n))
+        x12 = bytes(a ^ b for a, b in zip(x1, x2))
+        o1, o2, o12 = oracle.call_many([x1, x2, x12])
+        predicted = (int.from_bytes(o1, "little")
+                     ^ int.from_bytes(o2, "little") ^ zero_value)
+        if predicted != int.from_bytes(o12, "little"):
+            raise Refuse("structure_unknown")
+    target = int.from_bytes(state["cipher"], "little") ^ zero_value
+    solution = gf2_solve(columns, target, nbits)
+    if solution is None:
+        raise Refuse("not_invertible")
+    return {**state, "kind": "plain", "plain": solution.to_bytes(n, "little")}
+
+
+CHARSET = "".join(dict.fromkeys(
+    string.ascii_lowercase + string.digits + "_{}" +
+    string.ascii_uppercase + "!@#$%^&*()-+=[]:;,.<>?/|~ ")).encode()
+
+
+def solve_prefix_checker(state: dict) -> dict:
+    oracle = state["oracle"]
+    current = b""
+    for _ in range(64):
+        found = None
+        for char in CHARSET:
+            if oracle.call(current + bytes([char])) > len(current):
+                found = bytes([char])
+                break
+        if found is None:
+            raise Refuse("checker_stuck")
+        current += found
+        if current.endswith(b"}") and oracle.call(current) == len(current):
+            text = current.decode("utf-8", "replace")
+            return {**state, "kind": "flag", "text": text, "plain": current}
+    raise Refuse("checker_maxlen")
+
+
+def verify_plain(state: dict) -> dict:
+    plain = state["plain"]
+    if state["oracle"].call(plain) != state["cipher"]:
+        raise Refuse("verify_failed")
+    text = plain.decode("utf-8", "replace")
+    if FLAG_RE.search(text):
+        return {**state, "kind": "flag", "text": text}
+    return {**state, "kind": "verified", "text": text}
+
+
+def bytes_to_text(state: dict) -> dict:
+    text = state["plain"].decode("utf-8", "replace").strip()
+    if not text:
+        raise Refuse("empty_text")
+    return {"kind": "text", "text": text}
+
+
+# --------------------------------------------------------------------------------------
+# 文本数据单元：解析器 + 实现
+# --------------------------------------------------------------------------------------
+
+INT_RE = re.compile(r"\b(n|e|c)\s*=\s*(0x[0-9a-fA-F]+|\d+)")
+LONG_B64 = re.compile(r"[A-Za-z0-9+/]{24,}={0,2}")
+LONG_HEX = re.compile(r"\b[0-9a-fA-F]{24,}\b")
+CRC_RE = re.compile(r"CRC32\s*=\s*0x([0-9A-Fa-f]{8})")
+CRC_LEN = re.compile(r"(\d+)\s*个\s*(小写|大写)?\s*(英文字母|字母)")
+CAESAR_RE = re.compile(r"\b[a-z]{4}\{[a-z0-9_]{3,}\}")
+
+
+def unit_rsa_small_e(state: dict) -> dict:
+    found = {name: int(value, 0) for name, value in INT_RE.findall(state["text"])}
+    if not {"n", "e", "c"} <= set(found):
+        raise Refuse("param_extract_failed")
+    import gmpy2
+
+    root, exact = gmpy2.iroot(found["c"], found["e"])
+    if not exact:
+        raise Refuse("not_perfect_power")
+    raw = int(root).to_bytes((int(root).bit_length() + 7) // 8, "big")
+    text = raw.decode("utf-8", errors="replace")
+    if not FLAG_RE.search(text):
+        raise Refuse("no_flag")
+    return {"kind": "flag", "text": text}
+
+
+def unit_base64_chain(state: dict) -> dict:
+    candidates = LONG_B64.findall(state["text"])
+    if not candidates:
+        raise Refuse("param_extract_failed")
+    text = max(candidates, key=len).strip()
+    for _ in range(8):
+        if FLAG_RE.search(text):
+            return {"kind": "flag", "text": text}
+        try:
+            text = base64.b64decode(text, validate=True).decode("utf-8")
+        except Exception:  # noqa: BLE001 - 解码失败即停止
+            break
+    if FLAG_RE.search(text):
+        return {"kind": "flag", "text": text}
+    raise Refuse("no_flag")
+
+
+def unit_xor_single_byte(state: dict) -> dict:
+    candidates = LONG_HEX.findall(state["text"])
+    if not candidates:
+        raise Refuse("param_extract_failed")
+    raw = bytes.fromhex(max(candidates, key=len))
+    for key in range(256):
+        cand = bytes(b ^ key for b in raw)
+        try:
+            text = cand.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        if FLAG_RE.search(text):
+            return {"kind": "flag", "text": text}
+    raise Refuse("no_flag")
+
+
+def unit_crc32_brute(state: dict) -> dict:
+    crc = CRC_RE.search(state["text"])
+    length = CRC_LEN.search(state["text"])
+    if not (crc and length):
+        raise Refuse("param_extract_failed")
+    charset = ("abcdefghijklmnopqrstuvwxyz"
+               if (length.group(2) or "小写") == "小写"
+               else "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    target = int(crc.group(1), 16)
+    count = int(length.group(1))
+    if count > 6:
+        raise Refuse("brute_force_too_large")
+    for combo in itertools.product(charset, repeat=count):
+        word = "".join(combo)
+        if zlib.crc32(word.encode()) & 0xFFFFFFFF == target:
+            return {"kind": "flag", "text": f"flag{{{word}}}"}
+    raise Refuse("no_match")
+
+
+def unit_caesar_brute(state: dict) -> dict:
+    candidates = CAESAR_RE.findall(state["text"])
+    if not candidates:
+        raise Refuse("param_extract_failed")
+    text = candidates[0]
+    for shift in range(26):
+        cand = "".join(
+            chr((ord(ch) - 97 - shift) % 26 + 97) if ch.islower()
+            else chr((ord(ch) - 65 - shift) % 26 + 65) if ch.isupper()
+            else ch for ch in text)
+        if FLAG_RE.search(cand):
+            return {"kind": "flag", "text": cand}
+    raise Refuse("no_flag")
+
+
+# --------------------------------------------------------------------------------------
+# 统一单元库：数据单元 + 黑盒单元
+# --------------------------------------------------------------------------------------
+
+UNITS: list[dict] = [
+    # ---- 基础设施（常驻，不依赖题面召回）----
+    {"id": "probe_facts", "title": "黑盒基本事实：确定性 / 长度 / 依赖矩阵",
+     "technique": ["黑盒", "加密脚本", "探测", "依赖"], "always": True,
+     "accepts": {"oracle"}, "produces": "facts", "guard": None,
+     "params": {"oracle": "脚本句柄"}, "returns": "facts",
+     "fn": probe_facts},
+    {"id": "classify_structure", "title": "按依赖矩阵分类",
+     "technique": ["分类", "结构"], "always": True,
+     "accepts": {"facts"}, "produces": "structure", "guard": None,
+     "params": {"facts": "probe_facts 输出"}, "returns": "structure",
+     "fn": classify_structure},
+    {"id": "verify_plain", "title": "执行验证：重新加密 == 原密文",
+     "technique": ["验证"], "always": True,
+     "accepts": {"plain"}, "produces": "verified", "guard": None,
+     "params": {"plain": "候选明文"}, "returns": "verified 或拒绝",
+     "fn": verify_plain},
+    {"id": "bytes_to_text", "title": "verified 明文转文本",
+     "technique": ["文本"], "always": True,
+     "accepts": {"verified"}, "produces": "text", "guard": None,
+     "params": {"verified": "通过验证的明文"}, "returns": "text",
+     "fn": bytes_to_text},
+    # ---- 黑盒策略单元（需要题面召回）----
+    {"id": "invert_bytewise_affine", "title": "逐字节仿射反解",
+     "technique": ["仿射", "affine", "逐字节"], "always": False,
+     "accepts": {"structure"}, "produces": "plain",
+     "guard": lambda s: s.get("label") == "bytewise",
+     "params": {"structure": "label=bytewise"}, "returns": "plain",
+     "fn": invert_bytewise_affine},
+    {"id": "invert_bytewise_table", "title": "逐字节双射反解（建表）",
+     "technique": ["S盒", "替换表", "逐字节", "建表"], "always": False,
+     "accepts": {"structure"}, "produces": "plain",
+     "guard": lambda s: s.get("label") == "bytewise",
+     "params": {"structure": "label=bytewise"}, "returns": "plain",
+     "fn": invert_bytewise_table},
+    {"id": "invert_permutation", "title": "位置置换反解",
+     "technique": ["置换", "换位", "permutation"], "always": False,
+     "accepts": {"structure"}, "produces": "plain",
+     "guard": lambda s: s.get("label") == "permutation",
+     "params": {"structure": "label=permutation"}, "returns": "plain",
+     "fn": invert_permutation},
+    {"id": "invert_gf2", "title": "GF(2) 仿射反解",
+     "technique": ["GF2", "线性", "矩阵", "Feistel"], "always": False,
+     "accepts": {"structure"}, "produces": "plain",
+     "guard": lambda s: s.get("label") == "dense",
+     "params": {"structure": "label=dense"}, "returns": "plain",
+     "fn": invert_gf2},
+    {"id": "solve_prefix_checker", "title": "前缀校验器爬坡",
+     "technique": ["校验器", "checker", "前缀", "爬坡"], "always": False,
+     "accepts": {"checker"}, "produces": "flag", "guard": None,
+     "params": {"oracle": "校验器句柄"}, "returns": "flag",
+     "fn": solve_prefix_checker},
+    # ---- 文本数据单元（v007 的 5 个）----
+    {"id": "rsa_small_e", "title": "RSA 小公钥指数（小明文）",
+     "technique": ["rsa", "小公钥", "e=3", "小明文", "开三次方", "iroot", "低位指数"],
+     "always": False, "accepts": {"text"}, "produces": "flag", "guard": None,
+     "params": {"n": "int", "e": "int", "c": "int"}, "returns": "flag",
+     "fn": unit_rsa_small_e},
+    {"id": "base64_chain", "title": "多层 Base64 连续解码",
+     "technique": ["base64", "多层", "连续解码", "b64", "编码链"],
+     "always": False, "accepts": {"text"}, "produces": "flag", "guard": None,
+     "params": {"data": "str"}, "returns": "flag",
+     "fn": unit_base64_chain},
+    {"id": "xor_single_byte", "title": "单字节 XOR 爆破",
+     "technique": ["xor", "异或", "单字节", "单字节密钥", "爆破密钥"],
+     "always": False, "accepts": {"text"}, "produces": "flag", "guard": None,
+     "params": {"data": "hex str"}, "returns": "flag",
+     "fn": unit_xor_single_byte},
+    {"id": "crc32_brute", "title": "CRC32 明文校验爆破",
+     "technique": ["crc32", "校验值", "明文校验", "爆破", "zip", "文件内容"],
+     "always": False, "accepts": {"text"}, "produces": "flag", "guard": None,
+     "params": {"target_crc": "int", "length": "int", "charset": "str"},
+     "returns": "flag", "fn": unit_crc32_brute},
+    {"id": "caesar_brute", "title": "凯撒密码爆破",
+     "technique": ["凯撒", "caesar", "移位", "rot", "古典密码"],
+     "always": False, "accepts": {"text"}, "produces": "flag", "guard": None,
+     "params": {"data": "str"}, "returns": "flag", "fn": unit_caesar_brute},
+]
+
+UNIT_INDEX = {unit["id"]: unit for unit in UNITS}
+
+
+def recall(query: str, top_k: int = 6) -> list[dict]:
+    """按技法关键词打分；基础设施单元单独由 always 保证，不参与竞争。"""
+    text = query.casefold()
+    scored: list[tuple[float, dict]] = []
+    for unit in UNITS:
+        if unit["always"]:
+            continue
+        hits = sum(1 for kw in unit["technique"] if kw.casefold() in text)
+        if hits == 0:
+            continue
+        score = hits + hits / len(unit["technique"])
+        scored.append((score, unit))
+    scored.sort(key=lambda item: -item[0])
+    return [unit for _, unit in scored[:top_k]]
+
+
+def allowed_ids(recalled: list[dict]) -> set[str]:
+    return {u["id"] for u in recalled} | {u["id"] for u in UNITS if u["always"]}
+
+
+# --------------------------------------------------------------------------------------
+# 规划器（DFS + 回溯，与 v020 相同）
+# --------------------------------------------------------------------------------------
+
+def plan(initial: dict, allowed: set[str], max_depth: int = 8) -> dict:
+    refusals: list[dict] = []
+
+    def dfs(state: dict, path: list[str], depth: int):
+        if state["kind"] == "flag":
+            return state, path
+        if depth >= max_depth:
+            return None
+        for unit in UNITS:
+            if unit["id"] not in allowed:
+                continue
+            if state["kind"] not in unit["accepts"]:
+                continue
+            if unit["guard"] is not None and not unit["guard"](state):
+                continue
+            try:
+                produced = unit["fn"](state)
+            except Refuse as exc:
+                refusals.append({"unit": unit["id"], "reason": str(exc)})
+                continue
+            found = dfs(produced, path + [unit["id"]], depth + 1)
+            if found is not None:
+                return found
+        return None
+
+    found = dfs(initial, [], 0)
+    if found is not None:
+        state, path = found
+        return {"ok": True, "path": path, "state": state, "refusals": refusals}
+    specific = [r for r in refusals if r["reason"] != "param_extract_failed"]
+    reason = specific[-1]["reason"] if specific else (
+        refusals[-1]["reason"] if refusals else "no_path")
+    return {"ok": False, "path": [], "refusals": refusals, "reason": reason}
+
+
+# --------------------------------------------------------------------------------------
+# 题目与文本渲染
+# --------------------------------------------------------------------------------------
+
+TEXT_TASKS = ["T1", "T2", "T3", "T4", "T5"]
+SECRETS = {
+    "P1": "flag{sbox_but_bijective}",
+    "P2": "flag{byte_affine_here}",
+    "P3": "flag{gf2_matrix_love}",
+    "P4": "flag{feistel_is_linear}",
+    "P5": "flag{prefix_oracle_wins}",
+    "P6": "flag{blackbox_then_base64}",
+    "N1": "flag{sha256_is_one_way}",
+    "N2": "flag{nonlinear_mixing_x}",
+    "N3": "flag{nondeterministic_v}",
+}
+
+TEMPLATES = {
+    "P1": "附件是主办方提供的加密脚本 {module}。明文先做逐字节替换，使用与位置相关的 S盒，"
+          "然后输出密文。密文（hex）：{cipher}",
+    "P2": "附件是加密脚本 {module}，它做了逐字节仿射变换 out = a*x + b。密文（hex）：{cipher}",
+    "P3": "附件是加密脚本 {module}，它把整块数据做 GF2 上的线性变换（矩阵）。密文（hex）：{cipher}",
+    "P4": "附件是加密脚本 {module}，用了三轮 Feistel，轮函数是线性的。密文（hex）：{cipher}",
+    "P5": "附件是校验器脚本 {module}，它只返回正确前缀的长度，请还原完整输入。",
+    "P6": "附件是主办方提供的加密脚本 {module}。明文先做逐字节替换与位置相关的 S盒，"
+          "恢复出的明文还要再做一次 Base64 解码才能得到 flag。密文（hex）：{cipher}",
+    "N1": "附件是加密脚本 {module}，它输出的是哈希值。密文（hex）：{cipher}",
+    "N2": "附件是加密脚本 {module}，做了非线性的 32 位混合。密文（hex）：{cipher}",
+    "N3": "附件是加密脚本 {module}，每次调用都会换随机掩码。密文（hex）：{cipher}",
+}
+
+
+def text_demo_cases() -> list[dict]:
+    cases = []
+    flag1 = "flag{rsa_small_e_no_padding}"
+    m1 = int.from_bytes(flag1.encode(), "big")
+    n1 = (1 << 2048) - 0xE5B1A7C3D9F102468ACE13579BDF02468 + 1
+    cases.append({"id": "T1", "kind": "text", "expected": flag1, "negative": False,
+                  "note": "RSA 小公钥指数",
+                  "text": f"RSA 题：n = {n1}\ne = 3\nc = {pow(m1, 3, n1)}\n明文没有 padding，求 flag。"})
+
+    flag2 = "flag{b4se64_ch41n_1s_e4sy}"
+    blob = base64.b64encode(
+        base64.b64encode(base64.b64encode(flag2.encode()).decode().encode()).decode().encode()
+    ).decode()
+    cases.append({"id": "T2", "kind": "text", "expected": flag2, "negative": False,
+                  "note": "多层 Base64",
+                  "text": f"给了一串经过多层 Base64 编码的字符串，求还原明文：\n{blob}"})
+
+    flag3 = "flag{x0r_w1th_s1ngle_byte}"
+    cases.append({"id": "T3", "kind": "text", "expected": flag3, "negative": False,
+                  "note": "单字节 XOR",
+                  "text": "下面这段 hex 是单字节 XOR 加密的，请爆破密钥还原明文：\n"
+                          + bytes(b ^ 0x5A for b in flag3.encode()).hex()})
+
+    inner = "ctfz"
+    cases.append({"id": "T4", "kind": "text", "expected": f"flag{{{inner}}}",
+                  "negative": False, "note": "CRC32 爆破",
+                  "text": f"ZIP 里文件的 CRC32 = 0x{zlib.crc32(inner.encode()) & 0xFFFFFFFF:08X}，"
+                          "内容为 4 个小写字母，求内容。"})
+
+    flag5 = "flag{caesar_shifts_by_13}"
+    shifted = "".join(
+        chr((ord(ch) - 97 + 13) % 26 + 97) if ch.islower()
+        else chr((ord(ch) - 65 + 13) % 26 + 65) if ch.isupper() else ch
+        for ch in flag5)
+    cases.append({"id": "T5", "kind": "text", "expected": flag5, "negative": False,
+                  "note": "凯撒密码",
+                  "text": f"凯撒密码密文：\n{shifted}"})
+    return cases
+
+
+def text_negative_case() -> dict:
+    return {"id": "N4", "kind": "text", "expected": None, "negative": True,
+            "note": "RSA e=65537（文本题负样本）",
+            "text": "RSA 题：n = 3233\ne = 65537\nc = 12345\n求 flag。"}
+
+
+def blackbox_case(tid: str, module_name: str, mode: str, negative: bool,
+                  note: str) -> dict:
+    return {"id": tid, "kind": "oracle" if mode == "enc" else "checker",
+            "module": module_name, "mode": mode, "expected": SECRETS.get(tid),
+            "negative": negative, "note": note}
+
+
+BLACKBOX_CASES = [
+    ("P1", "p1_sbox.src", "enc", False, "逐字节 S 盒"),
+    ("P2", "p2_byte_affine.src", "enc", False, "逐字节仿射"),
+    ("P3", "p3_gf2.src", "enc", False, "GF(2) 矩阵"),
+    ("P4", "p4_feistel.src", "enc", False, "三轮 Feistel"),
+    ("P5", "p5_checker.src", "check", False, "前缀校验器"),
+    ("P6", "p6_sbox_b64.src", "enc", False, "黑盒 S 盒 + Base64 组合"),
+    ("N1", "n1_sha.src", "enc", True, "sha256"),
+    ("N2", "n2_nonlinear.src", "enc", True, "非线性混合"),
+    ("N3", "n3_random.src", "enc", True, "随机掩码"),
+]
+
+
+def run_case(case: dict) -> dict:
+    tid = case["id"]
+    entry = {"id": tid, "note": case["note"], "negative": case["negative"],
+             "recovered": None, "path": [], "refusals": [], "probes": 0}
+    oracle = None
+    try:
+        if case["kind"] == "text":
+            text = case["text"]
+        else:
+            module = (CHAL_DIR_19 if tid == "P6" else CHAL_DIR_17) / case["module"]
+            oracle = Oracle(module, case["mode"])
+            if case["kind"] == "checker":
+                text = TEMPLATES[tid].format(module=case["module"], cipher="")
+            else:
+                secret = SECRETS[tid]
+                plaintext = (base64.b64encode(secret.encode())
+                             if tid == "P6" else secret.encode())
+                cipher = oracle.call(plaintext)
+                text = TEMPLATES[tid].format(module=case["module"],
+                                             cipher=cipher.hex())
+        recalled = recall(text, top_k=6)
+        entry["recalled"] = [u["id"] for u in recalled]
+        allowed = allowed_ids(recalled)
+
+        if case["kind"] == "text":
+            initial = {"kind": "text", "text": text}
+        elif case["kind"] == "checker":
+            initial = {"kind": "checker", "oracle": oracle}
+        else:
+            initial = {"kind": "oracle", "oracle": oracle, "cipher": cipher}
+
+        result = plan(initial, allowed)
+        entry["path"] = result["path"]
+        entry["refusals"] = result["refusals"]
+        entry["reason"] = result.get("reason")
+        if result["ok"]:
+            entry["recovered"] = result["state"]["text"]
+        entry["solved"] = bool(case["negative"] is False and result["ok"]
+                               and entry["recovered"] == case["expected"])
+        entry["refused"] = bool(case["negative"] and not result["ok"])
+    finally:
+        if oracle is not None:
+            entry["probes"] = oracle.probes
+            oracle.close()
+    return entry
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="统一文本召回 + 契约单元库")
+    parser.add_argument("--only", default=None)
+    parser.add_argument("--list", action="store_true")
+    args = parser.parse_args()
+
+    if args.list:
+        log(f"单元库：{len(UNITS)} 个（基础设施 {sum(1 for u in UNITS if u['always'])} 个）")
+        for unit in UNITS:
+            tag = "常驻" if unit["always"] else "召回"
+            print(f"\n[{unit['id']}] {unit['title']}  ({tag})")
+            print(f"  accepts: {sorted(unit['accepts'])} → produces: {unit['produces']}")
+            print(f"  技法词 : {', '.join(unit['technique'])}")
+        return
+
+    cases = text_demo_cases() + [text_negative_case()] + [
+        blackbox_case(*case) for case in BLACKBOX_CASES]
+    rows = []
+    for case in cases:
+        if args.only and case["id"] != args.only:
+            continue
+        log(f"  {case['id']}: {case['note']} ...")
+        row = run_case(case)
+        rows.append(row)
+        if row["negative"]:
+            verdict = "OK(如实拒绝)" if row["refused"] else "UNEXPECTED"
+            detail = row.get("reason") or ""
+        else:
+            verdict = "OK" if row["solved"] else "FAILED"
+            detail = " → ".join(row["path"]) if row["path"] else (row.get("reason") or "")
+        log(f"  {case['id']}: {verdict:12} recall={row['recalled'][:3]}  {detail}")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "units": len(UNITS),
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for r in negatives if r["refused"]),
+        "total_probes": sum(r["probes"] for r in rows),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0019 — 8 个黑盒单元并入文本召回库", "",
+             "同一份 UNITS / recall / 规划器同时处理文本题与黑盒脚本题。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 规划路径 / 原因 | 召回 | 探测数 |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实拒绝" if row["refused"] else "✗ 不该解出"
+            kind = "负样本"
+            detail = row.get("reason") or "—"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+            detail = " → ".join(row["path"]) if row["path"] else (row.get("reason") or "—")
+        lines.append(f"| {row['id']} | {kind}（{row['note']}） | {mark} | {detail} "
+                     f"| {', '.join(row['recalled'][:3])} | {row['probes']} |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

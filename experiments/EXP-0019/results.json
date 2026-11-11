@@ -1,0 +1,307 @@
+{
+  "summary": {
+    "units": 14,
+    "positive_total": 11,
+    "positive_solved": 11,
+    "negative_total": 4,
+    "negative_correctly_refused": 4,
+    "total_probes": 16894
+  },
+  "rows": [
+    {
+      "id": "T1",
+      "note": "RSA 小公钥指数",
+      "negative": false,
+      "recovered": "flag{rsa_small_e_no_padding}",
+      "path": [
+        "rsa_small_e"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "recalled": [
+        "rsa_small_e"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "T2",
+      "note": "多层 Base64",
+      "negative": false,
+      "recovered": "flag{b4se64_ch41n_1s_e4sy}",
+      "path": [
+        "base64_chain"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "recalled": [
+        "base64_chain"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "T3",
+      "note": "单字节 XOR",
+      "negative": false,
+      "recovered": "flag{x0r_w1th_s1ngle_byte}",
+      "path": [
+        "xor_single_byte"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "recalled": [
+        "xor_single_byte",
+        "crc32_brute"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "T4",
+      "note": "CRC32 爆破",
+      "negative": false,
+      "recovered": "flag{ctfz}",
+      "path": [
+        "crc32_brute"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "recalled": [
+        "crc32_brute"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "T5",
+      "note": "凯撒密码",
+      "negative": false,
+      "recovered": "flag{caesar_shifts_by_13}",
+      "path": [
+        "caesar_brute"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "recalled": [
+        "caesar_brute"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "N4",
+      "note": "RSA e=65537（文本题负样本）",
+      "negative": true,
+      "recovered": null,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "rsa_small_e",
+          "reason": "not_perfect_power"
+        }
+      ],
+      "probes": 0,
+      "recalled": [
+        "rsa_small_e"
+      ],
+      "reason": "not_perfect_power",
+      "solved": false,
+      "refused": true
+    },
+    {
+      "id": "P1",
+      "note": "逐字节 S 盒",
+      "negative": false,
+      "recovered": "flag{sbox_but_bijective}",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_table",
+        "verify_plain"
+      ],
+      "refusals": [
+        {
+          "unit": "invert_bytewise_affine",
+          "reason": "affine_not_applicable"
+        }
+      ],
+      "probes": 6278,
+      "recalled": [
+        "invert_bytewise_table",
+        "invert_bytewise_affine"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "P2",
+      "note": "逐字节仿射",
+      "negative": false,
+      "recovered": "flag{byte_affine_here}",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 124,
+      "recalled": [
+        "invert_bytewise_affine",
+        "invert_bytewise_table"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "P3",
+      "note": "GF(2) 矩阵",
+      "negative": false,
+      "recovered": "flag{gf2_matrix_love}",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_gf2",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 220,
+      "recalled": [
+        "invert_gf2"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "P4",
+      "note": "三轮 Feistel",
+      "negative": false,
+      "recovered": "flag{feistel_is_linear}",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_gf2",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 239,
+      "recalled": [
+        "invert_gf2"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "P5",
+      "note": "前缀校验器",
+      "negative": false,
+      "recovered": "flag{prefix_oracle_wins}",
+      "path": [
+        "solve_prefix_checker"
+      ],
+      "refusals": [],
+      "probes": 375,
+      "recalled": [
+        "solve_prefix_checker"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "P6",
+      "note": "黑盒 S 盒 + Base64 组合",
+      "negative": false,
+      "recovered": "flag{blackbox_then_base64}",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_table",
+        "verify_plain",
+        "bytes_to_text",
+        "base64_chain"
+      ],
+      "refusals": [
+        {
+          "unit": "invert_bytewise_affine",
+          "reason": "affine_not_applicable"
+        }
+      ],
+      "probes": 9410,
+      "recalled": [
+        "invert_bytewise_table",
+        "base64_chain",
+        "invert_bytewise_affine"
+      ],
+      "reason": null,
+      "solved": true,
+      "refused": false
+    },
+    {
+      "id": "N1",
+      "note": "sha256",
+      "negative": true,
+      "recovered": null,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "probe_facts",
+          "reason": "not_length_preserving"
+        }
+      ],
+      "probes": 13,
+      "recalled": [],
+      "reason": "not_length_preserving",
+      "solved": false,
+      "refused": true
+    },
+    {
+      "id": "N2",
+      "note": "非线性混合",
+      "negative": true,
+      "recovered": null,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "invert_gf2",
+          "reason": "structure_unknown"
+        }
+      ],
+      "probes": 232,
+      "recalled": [
+        "invert_gf2"
+      ],
+      "reason": "structure_unknown",
+      "solved": false,
+      "refused": true
+    },
+    {
+      "id": "N3",
+      "note": "随机掩码",
+      "negative": true,
+      "recovered": null,
+      "path": [],
+      "refusals": [
+        {
+          "unit": "probe_facts",
+          "reason": "nondeterministic"
+        }
+      ],
+      "probes": 3,
+      "recalled": [],
+      "reason": "nondeterministic",
+      "solved": false,
+      "refused": true
+    }
+  ]
+}

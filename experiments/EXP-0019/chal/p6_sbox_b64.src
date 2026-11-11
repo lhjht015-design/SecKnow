@@ -1,0 +1,26 @@
+"""P6：黑盒变换 + Base64 的组合。
+
+主办方给的是"先 Base64 编码、再逐字节替换"的加密脚本。
+恢复出的明文是 Base64 文本，还要再做一次解码才能拿到 flag——
+用来验证契约单元库能跨家族组合：黑盒反解 → bytes→text → Base64 单元。
+"""
+
+_K = []
+
+
+def _build():
+    for k in range(4):
+        row = bytearray(256)
+        for b in range(256):
+            row[b] = ((b * 181 + 0x3B + k * 97) ^ (k * 0x5D)) & 0xFF
+        _K.append(bytes(row))
+
+
+_build()
+
+
+def enc(data):
+    out = bytearray(len(data))
+    for i in range(len(data)):
+        out[i] = _K[i & 3][data[i]] ^ ((i * 0x5D + 0x11) & 0xFF)
+    return bytes(out)

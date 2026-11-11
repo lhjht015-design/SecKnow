@@ -30,6 +30,7 @@
 | v018 | [v018_three_protections.src](v018_three_protections.src) | 三保护组合：fmt 泄漏 canary+PIE → GOT 泄漏 libc → ROP | pyelftools/capstone + WSL | 正样本 1/1，负样本 2/2 |
 | v019 | [v019_blackbox_logic.src](v019_blackbox_logic.src) | 黑盒行为刻画：不读源码反解题目自定义逻辑 | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 | v020 | [v020_contract_units.src](v020_contract_units.src) | 把黑盒反解策略接入契约单元库（类型化规划 + guard + 验证） | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
+| v021 | [v021_text_recall_kit.src](v021_text_recall_kit.src) | 文本召回库 + 黑盒单元统一：一个库、两套输入、同一规划器 | 纯 Python（子进程 oracle） | 正样本 11/11，负样本 4/4 |
 
 ## 各版本说明
 
@@ -694,3 +695,49 @@ python versions/v020_contract_units.src --only P1
 ```
 
 **产出**：`experiments/EXP-0018/{results.json,report.md}`（挑战脚本复用 `EXP-0017/chal/`）
+
+### v021_text_recall_kit.src
+
+**回答的问题**：v007 的文本召回库与 v020 的黑盒单元是两套东西。能不能合并成
+同一个 UNITS / recall / 规划器，并让它们互相拼接？
+
+**统一单元库（14 个）**
+
+| 类别 | 单元 | 说明 |
+| --- | --- | --- |
+| 基础设施（常驻） | `probe_facts` / `classify_structure` / `verify_plain` / `bytes_to_text` | 不参与召回竞争，永远可用 |
+| 黑盒策略 | `invert_bytewise_affine` / `invert_bytewise_table` / `invert_permutation` / `invert_gf2` / `solve_prefix_checker` | 按题面技法词召回 |
+| 文本数据 | `rsa_small_e` / `base64_chain` / `xor_single_byte` / `crc32_brute` / `caesar_brute` | v007 的 5 个 |
+
+**跨家族组合（P6）**：主办方脚本 = 先 Base64 再 S 盒。
+规划路径 `probe_facts → classify → invert_bytewise_table → verify_plain →
+bytes_to_text → base64_chain`，没有任何专用胶水代码，靠状态类型接上。
+
+**结果（连续 2 次一致）**
+
+| 组 | 结果 |
+| --- | --- |
+| T1–T5 文本题 | 5/5 |
+| P1–P6 黑盒题（含组合） | 6/6 |
+| N1–N4 负样本 | 4/4 如实拒绝 |
+
+正样本 11/11，负样本 4/4，总探测 16894。
+
+**四条结论**（见 `laws/LAW-0025.md`）：
+1. 召回只产候选，契约决定能不能用；文本题与 oracle 题互不污染。
+2. 基础设施单元常驻：N1/N3 的 recall 为空，仍能给出
+   `not_length_preserving` / `nondeterministic` 的明确拒绝。
+3. 跨家族组合靠状态类型，不靠特判。
+4. 同一份 DFS/Refuse/验证闸门处理两种输入。
+
+**诚实限制**：文本召回仍是关键词匹配（LAW-0011 的改名塌陷未解决）；
+黑盒题依赖题面出现"加密脚本/S盒/Feistel"等线索。
+
+**运行**
+```bash
+python versions/v021_text_recall_kit.src
+python versions/v021_text_recall_kit.src --list
+python versions/v021_text_recall_kit.src --only P6
+```
+
+**产出**：`experiments/EXP-0019/{chal/,results.json,report.md}`
