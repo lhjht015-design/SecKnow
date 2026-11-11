@@ -24,6 +24,7 @@
 | v012 | [v012_zip_members.src](v012_zip_members.src) | 多成员压缩包：全部成员入队 + 先验排序 | 无（纯 Python） | beam_k=32 时 12/12 |
 | v013 | [v013_chain_coverage.src](v013_chain_coverage.src) | 用 726 条真实攻击链测单元库覆盖边界 | 无（纯 Python） | 61.7% 步骤属题目特有逻辑 |
 | v014 | [v014_pwn_units.src](v014_pwn_units.src) | pwn 单元：ELF 分析 + gadget + 偏移探测 + 真实 exploit | pyelftools/capstone + WSL | 正样本 2/2，负样本 2/2 |
+| v015 | [v015_leak_bypass.src](v015_leak_bypass.src) | canary / PIE 绕过：格式化字符串泄漏 + 同进程利用 | pyelftools/capstone + WSL | 3/3 绕过，负样本如实失败 |
 
 ## 各版本说明
 
@@ -426,3 +427,41 @@ python versions/v014_pwn_units.src --only T2
 ```
 
 **产出**：`experiments/EXP-0012/{pwn/,results.json,report.md}`
+
+### v015_leak_bypass.src
+
+**回答的问题**：真实比赛的 pwn 几乎都开 canary / PIE，v014 只能打两者都关的。怎么绕？
+
+**核心约束**：**泄漏与利用必须在同一个进程里**——ASLR 每次运行都变，
+"跑一次拿泄漏、再跑一次用泄漏"必然失败。所以必须交互式喂数据。
+
+**新增四个单元**
+
+| 单元 | 作用 |
+| --- | --- |
+| `leak_stack` | 发 `%p.`×60，解析泄漏值 |
+| `find_canary` | 低字节 0、量级足够大的候选（栈地址排在后面） |
+| `find_pie_base` | 用「低 12 位在 PIE 下不变」匹配 `main`/`stage1` 反推基址 |
+| `frame_layout` | **从反汇编推导**缓冲区 / canary / 返回地址的偏移 |
+
+**结果（连续 3 次稳定）**
+
+| 题 | 保护 | 结果 |
+| --- | --- | --- |
+| C1 | canary | ✓（489 ms） |
+| P1 | PIE | ✓（243 ms） |
+| B1 | canary + PIE | ✓（260 ms） |
+| N1 | 无泄漏原语 | ✓ 如实失败（`leak_stage_not_found`） |
+
+**五个关键点**（见 `laws/LAW-0019.md`）：
+泄漏与利用必须同进程；布局必须读反汇编（我按 64 算，实际是 72/88）；
+capstone 把 `fs:0x28` 渲染成 `fs:[0x28]`；候选必须靠执行逐个验证；
+没有泄漏原语时必须如实失败。
+
+**运行**
+```bash
+python versions/v015_leak_bypass.src
+python versions/v015_leak_bypass.src --only B1
+```
+
+**产出**：`experiments/EXP-0013/{pwn/,results.json,report.md}`

