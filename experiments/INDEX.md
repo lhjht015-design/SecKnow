@@ -24,6 +24,43 @@
 | EXP-0017 | 2026-11-11 | 黑盒逻辑刻画：不读源码反解题目自定义逻辑 | 逐字节/仿射/置换/GF(2)/前缀校验 5/5；sha256/非线性/随机 3/3 拒绝；平均 22.9 ms | `EXP-0017/report.md` |
 | EXP-0018 | 2026-11-11 | 黑盒反解策略接入契约单元库 | 8 个带 guard 的单元；5/5 解出、3/3 拒绝；探测数与单体实现完全一致 | `EXP-0018/report.md` |
 | EXP-0019 | 2026-11-11 | 8 个黑盒单元并入文本召回库 | 14 个单元；文本 5/5、黑盒 6/6（含跨家族组合）、负样本 4/4 | `EXP-0019/report.md` |
+| EXP-0020 | 2026-11-11 | 按附件后缀/魔数自动建立 oracle 入口 | 脚本/zip/ELF/文本 6/6 解出；4/4 负样本如实拒绝；平均 270 ms | `EXP-0020/report.md` |
+
+---
+
+## EXP-0020 — 按附件自动建立 oracle 入口
+
+**背景**：EXP-0019 的黑盒入口依赖题面出现技术词。真实比赛常常只给附件。
+
+**识别规则**：`PK..` → zip（递归成员）；`\x7fELF` → ELF（WSL 逐次执行）；
+后缀 `.py/.src` 或内容含 `def enc/check` → Python（AutoOracle 握手 enc/check/none）；
+可打印文本 → 数据（按形态加提示）；其它 → `attachment_unknown`。
+
+入口建立后所有策略单元可用，选择交给结构分类与 guard。
+
+| 题 | 识别 | 结果 | 路径 / 原因 | 探测数 |
+| --- | --- | --- | --- | --- |
+| A1 `.src` | python | ✓ | `probe_facts → classify → invert_bytewise_affine → verify` | 153 |
+| A2 改名 `.dat` | python | ✓ | 按内容识别，同上 | 178 |
+| A3 zip 内脚本 | python | ✓ | `… → invert_bytewise_table → verify` | 4450 |
+| A4 ELF 变换 | elf | ✓ | `… → invert_bytewise_affine → verify` | 117 |
+| A5 文本 hex | text | ✓ | `xor_single_byte` | 0 |
+| A6 文本 base64 | text | ✓ | `base64_chain` | 0 |
+| N1 随机二进制 | unknown | ✓ 拒绝 | `attachment_unknown` | 0 |
+| N2 无入口脚本 | python | ✓ 拒绝 | `no_enc_or_check` | 0 |
+| N3 zip 无可用成员 | unknown | ✓ 拒绝 | `zip_no_usable_member` | 0 |
+| N4 ELF 校验器 | elf | ✓ 拒绝 | `not_length_preserving` | 12 |
+
+正样本 6/6，负样本 4/4，平均 270 ms/题，连续 3 次一致。
+
+**四个关键点**（`laws/LAW-0026.md`）：
+1. 后缀可伪造，内容与魔数不会（A2）。
+2. zip 是容器不是类型，要递归成员。
+3. ELF 后端让编译程序与脚本同权；每次探测一个进程。
+4. 文本附件按形态路由，不需要题面技术词。
+
+**边界**：ELF 仅支持 stdin→stdout 无状态变换；无 ELF check 模式；
+zip 深度 ≤2；误判只会导致拒绝，不会伪造答案。
 
 ---
 

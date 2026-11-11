@@ -1,0 +1,61 @@
+"""自动 oracle worker：加载 Python 脚本，自己判断入口是 enc 还是 check。
+
+启动时先输出一行握手：
+    MODE enc    模块提供 enc
+    MODE check  模块提供 check
+    MODE none   两者都没有（父进程据此报 no_oracle_entry）
+
+之后按行服务：
+    E <hex> → O <hex>   调用 enc
+    C <hex> → O <int>   调用 check
+"""
+
+from __future__ import annotations
+
+import importlib.machinery
+import importlib.util
+import sys
+
+
+def load_module(path: str):
+    loader = importlib.machinery.SourceFileLoader("challenge", path)
+    spec = importlib.util.spec_from_loader("challenge", loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["challenge"] = module
+    loader.exec_module(module)
+    return module
+
+
+def main() -> None:
+    module = load_module(sys.argv[1])
+    function = None
+    mode = "none"
+    for name in ("enc", "check", "encrypt", "encode", "verify", "validate"):
+        candidate = getattr(module, name, None)
+        if callable(candidate):
+            function = candidate
+            mode = "check" if name in ("check", "verify", "validate") else "enc"
+            break
+    print(f"MODE {mode}", flush=True)
+    if function is None:
+        return
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            op, payload = line.split(" ", 1)
+            data = bytes.fromhex(payload)
+            result = function(data)
+            if isinstance(result, (bytes, bytearray)):
+                sys.stdout.write("O " + bytes(result).hex() + "\n")
+            else:
+                sys.stdout.write("O " + str(int(result)) + "\n")
+        except Exception as exc:  # noqa: BLE001
+            sys.stdout.write("X " + repr(exc) + "\n")
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()

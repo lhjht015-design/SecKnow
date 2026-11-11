@@ -1,0 +1,215 @@
+{
+  "summary": {
+    "positive_total": 6,
+    "positive_solved": 6,
+    "negative_total": 4,
+    "negative_correctly_refused": 4,
+    "total_probes": 4910,
+    "mean_elapsed_ms": 270.0
+  },
+  "rows": [
+    {
+      "id": "A1",
+      "note": "后缀 .src 的 Python 脚本",
+      "negative": false,
+      "attachment": "a1_script.src",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 153,
+      "detected": "python",
+      "detail": "python",
+      "mode": "enc",
+      "statement": "附件：a1_script.src。密文（hex）：9576cabb02735d309c79ad915cd4353728e0c18af869046fb9913cf1。请恢复明文。",
+      "reason": null,
+      "recovered": "flag{attachment_entry_works}",
+      "solved": true,
+      "elapsed_ms": 319.2
+    },
+    {
+      "id": "A2",
+      "note": "改名 .dat，按内容识别",
+      "negative": false,
+      "attachment": "a2_disguised.dat",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 178,
+      "detected": "python",
+      "detail": "python",
+      "mode": "enc",
+      "statement": "附件：a2_disguised.dat。密文（hex）：9576cabb02ad4c8243b35bdcaee58759c5f88ef40639674db9353c09e99c465c10。请恢复明文。",
+      "reason": null,
+      "recovered": "flag{content_sniffed_over_suffix}",
+      "solved": true,
+      "elapsed_ms": 308.6
+    },
+    {
+      "id": "A3",
+      "note": "zip 内的 Python 脚本",
+      "negative": false,
+      "attachment": "a3_bundle.zip",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_table",
+        "verify_plain"
+      ],
+      "refusals": [
+        {
+          "unit": "invert_bytewise_affine",
+          "reason": "affine_not_applicable"
+        }
+      ],
+      "probes": 4450,
+      "detected": "python",
+      "detail": "zip:inner/p1_sbox.src",
+      "mode": "enc",
+      "statement": "附件：a3_bundle.zip。密文（hex）：48cbe30eb754c252eacc33230b49a71d7d。请恢复明文。",
+      "reason": null,
+      "recovered": "flag{sbox_in_zip}",
+      "solved": true,
+      "elapsed_ms": 344.1
+    },
+    {
+      "id": "A4",
+      "note": "ELF 变换程序",
+      "negative": false,
+      "attachment": "chal_transform",
+      "path": [
+        "probe_facts",
+        "classify_structure",
+        "invert_bytewise_affine",
+        "verify_plain"
+      ],
+      "refusals": [],
+      "probes": 117,
+      "detected": "elf",
+      "detail": "elf",
+      "mode": "enc",
+      "statement": "附件：chal_transform。密文（hex）：9576cabb02e7759a62b35bdc559354ef4a543c276c。请恢复明文。",
+      "reason": null,
+      "recovered": "flag{elf_entry_works}",
+      "solved": true,
+      "elapsed_ms": 1126.7
+    },
+    {
+      "id": "A5",
+      "note": "文本附件：hex 密文",
+      "negative": false,
+      "attachment": "a5_cipher.txt",
+      "path": [
+        "xor_single_byte"
+      ],
+      "refusals": [
+        {
+          "unit": "base64_chain",
+          "reason": "no_flag"
+        }
+      ],
+      "probes": 0,
+      "detected": "text",
+      "detail": "text",
+      "recalled": [
+        "base64_chain",
+        "xor_single_byte",
+        "crc32_brute"
+      ],
+      "reason": null,
+      "recovered": "flag{shape_route_hex}",
+      "solved": true,
+      "elapsed_ms": 1.4
+    },
+    {
+      "id": "A6",
+      "note": "文本附件：多层 Base64",
+      "negative": false,
+      "attachment": "a6_b64.txt",
+      "path": [
+        "base64_chain"
+      ],
+      "refusals": [],
+      "probes": 0,
+      "detected": "text",
+      "detail": "text",
+      "recalled": [
+        "base64_chain"
+      ],
+      "reason": null,
+      "recovered": "flag{shape_route_b64}",
+      "solved": true,
+      "elapsed_ms": 1.0
+    },
+    {
+      "id": "N1",
+      "note": "随机二进制",
+      "negative": true,
+      "attachment": "n1_random.bin",
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "detected": "unknown",
+      "detail": null,
+      "reason": "attachment_unknown",
+      "refused": true,
+      "elapsed_ms": 0.8
+    },
+    {
+      "id": "N2",
+      "note": "脚本无 enc/check",
+      "negative": true,
+      "attachment": "n2_noentry.src",
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "detected": "python",
+      "detail": "python",
+      "reason": "no_enc_or_check",
+      "refused": true,
+      "elapsed_ms": 130.3
+    },
+    {
+      "id": "N3",
+      "note": "zip 内无可用成员",
+      "negative": true,
+      "attachment": "n3_bad_bundle.zip",
+      "path": [],
+      "refusals": [],
+      "probes": 0,
+      "detected": "unknown",
+      "detail": null,
+      "reason": "zip_no_usable_member",
+      "refused": true,
+      "elapsed_ms": 1.9
+    },
+    {
+      "id": "N4",
+      "note": "ELF 校验器（非变换）",
+      "negative": true,
+      "attachment": "chal_checker",
+      "path": [],
+      "refusals": [
+        {
+          "unit": "probe_facts",
+          "reason": "not_length_preserving"
+        }
+      ],
+      "probes": 12,
+      "detected": "elf",
+      "detail": "elf",
+      "mode": "enc",
+      "statement": "附件：chal_checker。密文（hex）：77726f6e670a。请恢复明文。",
+      "reason": "not_length_preserving",
+      "refused": true,
+      "elapsed_ms": 466.3
+    }
+  ]
+}

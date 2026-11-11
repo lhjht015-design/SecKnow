@@ -31,6 +31,7 @@
 | v019 | [v019_blackbox_logic.src](v019_blackbox_logic.src) | 黑盒行为刻画：不读源码反解题目自定义逻辑 | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 | v020 | [v020_contract_units.src](v020_contract_units.src) | 把黑盒反解策略接入契约单元库（类型化规划 + guard + 验证） | 纯 Python（子进程 oracle） | 正样本 5/5，负样本 3/3 |
 | v021 | [v021_text_recall_kit.src](v021_text_recall_kit.src) | 文本召回库 + 黑盒单元统一：一个库、两套输入、同一规划器 | 纯 Python（子进程 oracle） | 正样本 11/11，负样本 4/4 |
+| v022 | [v022_attachment_entry.src](v022_attachment_entry.src) | 按附件后缀/魔数自动建立 oracle 入口（脚本/zip/ELF/文本） | Python + WSL | 正样本 6/6，负样本 4/4 |
 
 ## 各版本说明
 
@@ -741,3 +742,56 @@ python versions/v021_text_recall_kit.src --only P6
 ```
 
 **产出**：`experiments/EXP-0019/{chal/,results.json,report.md}`
+
+### v022_attachment_entry.src
+
+**回答的问题**：v021 的 oracle 入口依赖题面出现"加密脚本/S盒/Feistel"。
+真实比赛只给一个附件时，入口应该由**附件本身**建立。
+
+**附件识别**
+
+| 判据 | 类型 | 处理 |
+| --- | --- | --- |
+| `PK\x03\x04` | zip | 递归看成员（深度 ≤2） |
+| `\x7fELF` | ELF | WSL 内逐次执行，stdin → stdout |
+| 后缀 `.py/.src` 或内容含 `def enc/check` | Python | AutoOracle 握手 MODE enc/check/none |
+| 可打印文本 | 数据 | 按形态加召回提示（长 hex → XOR，长 base64 → Base64） |
+| 其它 | unknown | `attachment_unknown` |
+
+入口建立后，**所有策略单元可用**，选择交给依赖矩阵与 guard；题面召回只在
+附件是数据时负责选文本单元。
+
+**结果（连续 3 次一致）**
+
+| 题 | 识别 | 结果 | 路径 / 原因 | 探测数 |
+| --- | --- | --- | --- | --- |
+| A1 `.src` 脚本 | python | ✓ | `probe_facts → classify → invert_bytewise_affine → verify` | 153 |
+| A2 改名 `.dat` | python | ✓ | 同上（按内容识别） | 178 |
+| A3 zip 内脚本 | python | ✓ | `… → invert_bytewise_table → verify` | 4450 |
+| A4 ELF 变换程序 | elf | ✓ | `… → invert_bytewise_affine → verify` | 117 |
+| A5 文本 hex | text | ✓ | `xor_single_byte` | 0 |
+| A6 文本 base64 | text | ✓ | `base64_chain` | 0 |
+| N1 随机二进制 | unknown | ✓ 拒绝 | `attachment_unknown` | 0 |
+| N2 无 enc/check 脚本 | python | ✓ 拒绝 | `no_enc_or_check` | 0 |
+| N3 zip 无可用成员 | unknown | ✓ 拒绝 | `zip_no_usable_member` | 0 |
+| N4 ELF 校验器 | elf | ✓ 拒绝 | `not_length_preserving` | 12 |
+
+正样本 6/6，负样本 4/4，平均 270 ms/题。
+
+**四个关键点**（见 `laws/LAW-0026.md`）：
+1. 后缀可伪造，内容与魔数不会：A2 改名后仍被正确识别。
+2. zip 是容器不是类型：解出成员后递归识别。
+3. ELF 后端让编译后的程序与脚本同权；代价是每次探测一个进程
+   （117 次约 1.8 s，脚本同题约 0.3 s）。
+4. 文本附件按形态路由，不需要题面技术词。
+
+**边界**：ELF 仅支持 stdin→stdout 无状态变换；无 ELF check 模式；
+zip 深度 ≤2；识别是启发式的，误判只会导致拒绝，不会伪造答案。
+
+**运行**
+```bash
+python versions/v022_attachment_entry.src
+python versions/v022_attachment_entry.src --only A4
+```
+
+**产出**：`experiments/EXP-0020/{attachments/,lab/,results.json,report.md}`

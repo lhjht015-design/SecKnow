@@ -688,6 +688,52 @@ solve_prefix_checker / verify_plain`。
 不依赖题面措辞。
 → 见 `laws/LAW-0025.md`。
 
+### 结论 25：入口由附件建立，不由题面措辞建立
+
+v021 的遗留问题是黑盒入口依赖题面出现技术词。本实验把入口改成看附件：
+
+| 判据 | 类型 | 处理 |
+| --- | --- | --- |
+| `PK\x03\x04` | zip | 递归看成员（深度 ≤2） |
+| `\x7fELF` | ELF | WSL 内逐次执行，stdin → stdout |
+| 后缀 `.py/.src` 或内容含 `def enc/check` | Python | 握手决定 enc/check/none |
+| 可打印文本 | 数据 | 按形态加召回提示（长 hex → XOR，长 base64 → Base64） |
+| 其它 | unknown | `attachment_unknown` |
+
+入口建立后**所有策略单元可用**，选择交给依赖矩阵与 guard；题面召回只在
+附件是数据时使用。
+
+| 题 | 识别 | 结果 | 说明 |
+| --- | --- | --- | --- |
+| A1 `.src` 脚本 | python | ✓ 153 次探测 | 题面不提技术名 |
+| A2 改名 `.dat` | python | ✓ 178 次 | 按内容识别，不是后缀 |
+| A3 zip 内脚本 | python | ✓ 4450 次 | 递归成员 |
+| A4 ELF 变换程序 | elf | ✓ 117 次，约 1.8 s | 编译程序与脚本同权 |
+| A5 文本 hex | text | ✓ | 形态路由到 XOR |
+| A6 文本 base64 | text | ✓ | 形态路由到 Base64 |
+| N1 随机二进制 | unknown | ✓ 拒绝 | `attachment_unknown` |
+| N2 无 enc/check 脚本 | python | ✓ 拒绝 | `no_enc_or_check` |
+| N3 zip 无可用成员 | unknown | ✓ 拒绝 | `zip_no_usable_member` |
+| N4 ELF 校验器 | elf | ✓ 拒绝 | `not_length_preserving` |
+
+正样本 6/6，负样本 4/4，平均 270 ms/题，连续 3 次一致。
+
+**四个关键点**
+
+1. **后缀可伪造，内容与魔数不会。** A2 改名成 `.dat` 仍被识别为 Python，
+   判据是 `def enc/check` 这个内容特征。识别顺序应是魔数 → 后缀 → 内容。
+2. **zip 是容器不是类型。** 解出成员后递归识别，而不是把 zip 当"压缩数据"放弃。
+3. **ELF 后端让编译后的程序与脚本同权。** A4 与 A1 走完全相同的
+   probe_facts → classify → invert → verify，只是后端换成 WSL 逐次执行；
+   代价是每次探测一个进程（117 次约 1.8 s，脚本同题约 0.3 s）。
+4. **文本附件按形态路由。** A5/A6 题面没有任何技术词，靠"长 hex / 长 base64"
+   两个形态提示就召回了正确单元。
+
+**边界**：ELF 仅支持 stdin→stdout 无状态变换，没有真正的 ELF check 接口；
+table 策略在 ELF 上会是 256n 次进程启动；zip 深度 ≤2；
+识别是启发式的，误判只会导致拒绝，不会伪造答案。
+→ 见 `laws/LAW-0026.md`。
+
 
 ## 4. 更新日志（追加式）
 
@@ -869,6 +915,19 @@ solve_prefix_checker / verify_plain`。
 - 结果：文本 5/5、黑盒 6/6、负样本 4/4；连续 2 次一致，总探测 16894。
 - 记录 `laws/LAW-0025.md`：召回只产候选、契约决定可用性；基础设施常驻保证
   召回为空时仍能诚实拒绝；跨家族拼接靠状态类型。
+
+### 2026-11-11 — 按附件自动建立 oracle 入口（v022 / EXP-0020）
+
+- 新增 `versions/v022_attachment_entry.src`、`tools/auto_oracle_worker.src`、
+  `tools/elf_oracle_worker.src` 与 `experiments/EXP-0020/lab/{chal_transform,chal_checker}`。
+- 识别：zip 魔数递归成员 / ELF 魔数 / Python 后缀或内容特征 / 文本形态 / 其它拒绝。
+- 入口建立后所有策略单元可用，不再依赖题面技术词。
+- 结果：脚本、改名脚本、zip 内脚本、ELF、文本 hex、文本 base64 共 6/6 解出；
+  随机二进制 / 无入口脚本 / 空 zip / ELF 校验器 4/4 如实拒绝；
+  连续 3 次一致，平均 270 ms/题。
+- 记录 `laws/LAW-0026.md`：后缀可伪造、zip 是容器、ELF 与脚本同权、
+  文本按形态路由；ELF 仅限 stdin→stdout 无状态变换。
+
 
 
 

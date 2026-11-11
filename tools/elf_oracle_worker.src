@@ -1,0 +1,37 @@
+"""ELF oracle worker（在 WSL 内运行）：把可执行文件当黑盒变换。
+
+协议：
+    E <hex> → O <stdout hex>    把输入写进二进制 stdin，回传 stdout
+    C <hex> → O <stdout hex>    同 E（ELF 没有约定好的 check 接口）
+
+每个探测单独起进程——二进制不保证循环读，这是唯一通用的方式。
+单次探测超时 5 秒，超时返回 X timeout。
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+
+def main() -> None:
+    binary = sys.argv[1]
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            _op, payload = line.split(" ", 1)
+            data = bytes.fromhex(payload)
+            done = subprocess.run([binary], input=data, capture_output=True,
+                                  timeout=5)
+            sys.stdout.write("O " + done.stdout.hex() + "\n")
+        except subprocess.TimeoutExpired:
+            sys.stdout.write("X timeout\n")
+        except Exception as exc:  # noqa: BLE001
+            sys.stdout.write("X " + repr(exc) + "\n")
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    main()
