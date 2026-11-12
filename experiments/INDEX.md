@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column,after-borderless}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column,after-borderless,after-table-view}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -112,6 +112,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 （统计每个 x 被词框覆盖的行数）分列，页码列按填充率剪掉。
 表1.2 从 2 列修到 **5 列**，表2.1/2.2、IDA 表17-1/17-2/19-1/21-2、WinDbg 表1-2 列均正确。
 证据：`after-column.jpg`（表1.2）、`after-borderless.jpg`（IDA 无边框表）。详见 `laws/LAW-0039.md`。
+
+**后续（同日）— 表格重复与视图**：同一张表此前会出两张卡（图片一张、OCR 表一张）。
+现在图片行与管道表合并为一个 TABLE 元素并渲染成真 `<table>`；合并表头按
+“组标题向右展开、前导表头从第二行补齐”处理；结果页新增“图文 / 图片 / 文本”切换。
+211 个表格元素全部带图，209 个同时含图与表文本。证据：`after-table-view.jpg`。
+详见 `laws/LAW-0040.md`。
 
 ---
 

@@ -263,6 +263,15 @@ def _items_to_markdown_table(
         ]
         if len(keep) >= 2:
             grid = [[row[index] for index in keep] for row in grid]
+    if len(grid) >= 2 and any(not cell.strip() for cell in grid[0]):
+        # 合并表头：组标题向右展开（colspan），前导空格从第二行补上（rowspan）
+        header = grid[0]
+        for index in range(1, len(header)):
+            if not header[index].strip() and header[index - 1].strip():
+                header[index] = header[index - 1]
+        for index in range(len(header)):
+            if not header[index].strip() and grid[1][index].strip():
+                header[index] = grid[1][index]
     if len(grid) < 2:
         return "\n".join(" | ".join(cell for cell in row if cell) for row in grid)
 
@@ -420,11 +429,13 @@ def _scan_page_table(
         target.write_bytes(pixmap.tobytes("png"))
         relative = os.path.relpath(target, doc_dir).replace("\\", "/")
         alt = caption[1].replace("]", "）").strip()
-        output.append(("image", f"![{alt}]({relative})"))
+        image_line = f"![{alt}]({relative})"
         bounds = _table_column_bounds(target, rect.x0, 2.0)
         table = _items_to_markdown_table(table_items, bounds)
         if table:
-            output.append(("table", table))
+            output.append(("table", f"{image_line}\n\n{table}"))
+        else:
+            output.append(("image", image_line))
         covered_until = y1
     return tuple(output)
 
@@ -504,10 +515,12 @@ def _image_markdown_for(
         doc_dir = (media_dir.parent / Path(document.relative_path).parent)
         relative = os.path.relpath(target, doc_dir).replace("\\", "/")
         alt = caption.replace("]", "）").strip()
-        output.append(("image", f"![{alt}]({relative})"))
+        image_line = f"![{alt}]({relative})"
         table = _ocr_table_markdown(target, ocr)
         if table:
-            output.append(("table", table))
+            output.append(("table", f"{image_line}\n\n{table}"))
+        else:
+            output.append(("image", image_line))
     return tuple(output)
 
 

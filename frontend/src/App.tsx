@@ -533,6 +533,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 function Results({ response }: { response: SearchResponse }) {
   const [copied, setCopied] = useState<string | null>(null)
+  const [tableView, setTableView] = useState<'both' | 'image' | 'text'>('both')
   const evidenceItems = response.answer?.sections.flatMap((section) => section.items) ?? []
   const hits = response.hits.length
     ? response.hits
@@ -567,6 +568,24 @@ function Results({ response }: { response: SearchResponse }) {
         </dl>
       </div>
 
+      <div className="table-view-control" role="group" aria-label="表格显示方式">
+        <span>表格显示</span>
+        {([
+          ['both', '图文'],
+          ['image', '图片'],
+          ['text', '文本'],
+        ] as const).map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            className={tableView === mode ? 'active' : ''}
+            onClick={() => setTableView(mode)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {response.warnings.length > 0 && (
         <div className="warning-stack" role="status">
           {Array.from(new Set(response.warnings)).map((warning) => (
@@ -595,6 +614,7 @@ function Results({ response }: { response: SearchResponse }) {
                 copied={copied === hit.chunk.chunk_id}
                 onCopy={() => void copyText(hit.chunk.chunk_id, hit.chunk.text)}
                 query={response.query}
+                tableView={tableView}
               />
             ))}
           </div>
@@ -664,6 +684,7 @@ type EvidenceBlock =
   | { kind: 'list'; text: string; ordered: boolean }
   | { kind: 'hr' }
   | { kind: 'image'; alt: string; url: string }
+  | { kind: 'table'; rows: string[][] }
 
 const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$/
 const HR_LINE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/
@@ -678,6 +699,7 @@ function splitEvidence(text: string): EvidenceBlock[] {
   let inCode = false
   let inFence = false
   let fence: string[] = []
+  let tableRows: string[][] = []
   const flushProse = () => {
     const value = prose.trim()
     if (value) blocks.push({ kind: 'prose', text: value })
@@ -687,6 +709,10 @@ function splitEvidence(text: string): EvidenceBlock[] {
     if (code.length) blocks.push({ kind: 'code', text: code.join('\n') })
     code = []
     inCode = false
+  }
+  const flushTable = () => {
+    if (tableRows.length) blocks.push({ kind: 'table', rows: tableRows })
+    tableRows = []
   }
   for (const raw of lines) {
     const line = raw.trimEnd()
@@ -706,6 +732,7 @@ function splitEvidence(text: string): EvidenceBlock[] {
       fence.push(raw)
       continue
     }
+    if (!TABLE_HINT.test(line) && tableRows.length) flushTable()
     if (!line.trim()) {
       if (!inCode) flushProse()
       else code.push('')
@@ -753,11 +780,17 @@ function splitEvidence(text: string): EvidenceBlock[] {
       continue
     }
     if (TABLE_HINT.test(line)) {
-      // Markdown 表格按等宽行渲染，至少保持列对齐；跳过分隔行
+      // 管道表按真正的表格渲染，合并表头在入库时已展开成重复组标题
       if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue
       flushProse()
-      code.push(raw)
-      inCode = true
+      flushCode()
+      const cells = line
+        .trim()
+        .replace(/^\|/, '')
+        .replace(/\|$/, '')
+        .split('|')
+        .map((cell) => cell.trim())
+      tableRows.push(cells)
       continue
     }
     const explicitCode = CODE_HINT.test(line) || DATA_LINE.test(line)
@@ -773,6 +806,7 @@ function splitEvidence(text: string): EvidenceBlock[] {
     }
   }
   if (inFence && fence.length) blocks.push({ kind: 'code', text: fence.join('\n') })
+  flushTable()
   flushProse()
   flushCode()
   return blocks
@@ -916,6 +950,29 @@ function EvidenceText({
           }
           case 'hr':
             return <hr key={index} className="evidence-hr" />
+          case 'table': {
+            const [head, ...body] = block.rows
+            return (
+              <table key={index} className="evidence-table">
+                <thead>
+                  <tr>
+                    {(head ?? []).map((cell, cellIndex) => (
+                      <th key={cellIndex}>{renderInline(cell, terms)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {body.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex}>{renderInline(cell, terms)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          }
           case 'image':
             return <EvidenceImage key={index} block={block} citation={citation} />
           default:
@@ -926,16 +983,32 @@ function EvidenceText({
   )
 }
 
+function applyTableView(
+  text: string,
+  mode: 'both' | 'image' | 'text',
+): string {
+  if (mode === 'both' || !text.includes('.secknow-media/pdf-tables')) return text
+  const lines = text.split('\n')
+  if (mode === 'image') {
+    return lines.filter((line) => !line.trim().startsWith('|')).join('\n')
+  }
+  return lines
+    .filter((line) => !line.includes('.secknow-media/pdf-tables'))
+    .join('\n')
+}
+
 function EvidenceCard({
   hit,
   copied,
   onCopy,
   query,
+  tableView,
 }: {
   hit: SearchHit
   copied: boolean
   onCopy: () => void
   query: string
+  tableView: 'both' | 'image' | 'text'
 }) {
   const [expanded, setExpanded] = useState(false)
   const [graphOpen, setGraphOpen] = useState(false)
@@ -949,6 +1022,10 @@ function EvidenceCard({
   const channels = Object.entries(hit.channels).sort((left, right) => right[1] - left[1])
   const previewUrl = pagePreviewUrl(citation)
   const terms = useMemo(() => queryTerms(query), [query])
+  const displayText = useMemo(
+    () => applyTableView(hit.chunk.text, tableView),
+    [hit.chunk.text, tableView],
+  )
   const chunkTail = hit.chunk.text.trimEnd()
   const mayContinue = Boolean(hit.chunk.next_chunk_id) &&
     /[,，:：；;([{（【\\/-]$/.test(chunkTail)
@@ -1002,14 +1079,14 @@ function EvidenceCard({
           <strong>{formatScore(hit.score)}</strong>
         </div>
       </header>
-      <EvidenceText text={hit.chunk.text} expanded={expanded} terms={terms} citation={citation} />
+      <EvidenceText text={displayText} expanded={expanded} terms={terms} citation={citation} />
       {mayContinue && (
         <div className="evidence-continuation">
           {continuation ? (
             <>
               <div className="continuation-label">续（下一块）</div>
               <EvidenceText
-                text={continuation.chunk.text}
+                text={applyTableView(continuation.chunk.text, tableView)}
                 expanded
                 terms={terms}
                 citation={continuation.chunk.citation}
