@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -77,6 +77,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 解析前对整篇做围栏规范化 + 切块层对 Markdown 兜底后，行首判定未闭合 **14→0**；
 剩余 4 个 ``` 奇数计数都是字面内容。顺带修了 ASCII `!` 切句拆散 `![图片](url)`
 的问题，块内合法图片引用 **0→1048**。证据：`after-fence.jpg`。详见 `laws/LAW-0033.md`。
+
+**后续（同日）— 超长代码块**：4 个 >700 token 的块最大 2172 token / 19543 字符，
+全部是单行超长（二进制串、URL 编码 payload）。按行打包对单行无效，且巨型单 token
+让 token 统计失真。新增 `_split_line`（token 密度 + 字符硬上限 + 二分兜底）后，
+全库最大块 **2172→534 token**，>700 的块 4→0；块 ID 纳入序号消除重复片段冲突。
+证据：`after-big.jpg`。详见 `laws/LAW-0034.md`。
 
 ---
 

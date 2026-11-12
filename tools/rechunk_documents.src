@@ -67,6 +67,8 @@ def main() -> None:
     tails_after = 0
     fences_before = 0
     fences_after = 0
+    max_tokens_before = 0
+    max_tokens_after = 0
     failures: list[tuple[str, str]] = []
     started = time.perf_counter()
     for index, row in enumerate(documents, 1):
@@ -90,6 +92,9 @@ def main() -> None:
                 continue
             tails_before += sum(1 for item in old if suspicious_tail(str(item["text"])))
             fences_before += sum(1 for item in old if line_fence_open(str(item["text"])))
+            for item in old:
+                max_tokens_before = max(
+                    max_tokens_before, chunker.token_count(str(item["text"])))
             document = SourceDocument(
                 source_id=row["source_id"],
                 version_id=row["version_id"],
@@ -108,6 +113,8 @@ def main() -> None:
                 continue
             tails_after += sum(1 for chunk in chunks if suspicious_tail(chunk.text))
             fences_after += sum(1 for chunk in chunks if line_fence_open(chunk.text))
+            for chunk in chunks:
+                max_tokens_after = max(max_tokens_after, chunk.token_count)
             store.replace_chunks(row["source_id"], row["version_id"], chunks)
             store.activate_version(row["source_id"], row["version_id"])
             total_chunks += len(chunks)
@@ -127,6 +134,8 @@ def main() -> None:
     print(f"done: chunks={total_chunks} failures={len(failures)} "
           f"tails_before={tails_before} tails_after={tails_after} "
           f"fences_before={fences_before} fences_after={fences_after} "
+          f"max_tokens_before={max_tokens_before} "
+          f"max_tokens_after={max_tokens_after} "
           f"elapsed={elapsed:.1f}s")
     for path, reason in failures[:10]:
         print(f"  FAIL {path}: {reason}")

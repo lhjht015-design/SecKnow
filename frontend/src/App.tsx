@@ -652,6 +652,9 @@ const CJK_HINT = /[一-鿿]/
 const FENCE_HINT = /^```/
 const HEADING_HINT = /^\s*#{1,6}\s+/
 const TABLE_HINT = /^\s*\|.*\|\s*$/
+// 超长的无中文数据行（二进制 / hex / base64 / URL 编码）按代码渲染，
+// 否则切出来的 3–4 KB 片段会变成一整段普通文字。
+const DATA_LINE = /^[^一-鿿]{200,}$/
 
 type EvidenceBlock =
   | { kind: 'prose'; text: string }
@@ -757,7 +760,7 @@ function splitEvidence(text: string): EvidenceBlock[] {
       inCode = true
       continue
     }
-    const explicitCode = CODE_HINT.test(line)
+    const explicitCode = CODE_HINT.test(line) || DATA_LINE.test(line)
     // 已经在代码块里时，短的、不含中文的行视为续行（汇编写法千奇百怪）
     const continuation = inCode && !CJK_HINT.test(line) && line.trim().length <= 48
     if (explicitCode || continuation) {

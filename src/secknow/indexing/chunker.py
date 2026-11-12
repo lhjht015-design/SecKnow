@@ -131,6 +131,7 @@ class SemanticChunker:
                 document.version_id,
                 first.element_id,
                 last.element_id,
+                str(order),
                 content_hash,
             )
             pages = [element.page for element in source_elements if element.page is not None]
@@ -197,18 +198,21 @@ class SemanticChunker:
                 current = []
                 current_tokens = 0
             count = self.token_count(unit.text)
-            if count > self.chunk_size:
+            if count > self.chunk_size or len(unit.text) > self.chunk_size * 8:
                 if current:
                     groups.append(current)
                     current = []
                     current_tokens = 0
-                if unit.kind in CODE_KINDS:
-                    groups.append([unit])
+                if unit.kind == ElementKind.CODE:
+                    pieces = self._split_code(unit.text)
+                elif unit.kind == ElementKind.TABLE:
+                    pieces = self._hard_split(unit.text)
                 else:
-                    groups.extend(
-                        [_Unit(piece, unit.section, unit.elements, unit.kind)]
-                        for piece in self._split_long_sentence(unit.text)
-                    )
+                    pieces = self._split_long_sentence(unit.text)
+                groups.extend(
+                    [_Unit(piece, unit.section, unit.elements, unit.kind)]
+                    for piece in pieces
+                )
                 continue
             if current and current_tokens + count > self.chunk_size:
                 groups.append(current)
@@ -336,18 +340,48 @@ class SemanticChunker:
                 ]
         return self._hard_split(text)
 
+    def _split_line(self, line: str) -> list[str]:
+        """把单行超长代码切成不超过 chunk_size 的片段。
+
+        按 token 密度估算字符宽度；再设一个字符硬上限，避免整行是一个
+        巨型 token（base64/二进制串）时 token_count 失真而完全不切。
+        """
+        tokens = self.token_count(line)
+        char_cap = self.chunk_size * 8
+        if tokens <= self.chunk_size and len(line) <= char_cap:
+            return [line]
+        width = int(len(line) * self.chunk_size / max(1, tokens))
+        width = max(1, min(width, char_cap))
+        parts = [line[index:index + width] for index in range(0, len(line), width)]
+        # token 密度估算会有误差；对仍超限的片段二分，直到落在 chunk_size 内
+        result: list[str] = []
+        pending = list(reversed(parts))
+        while pending:
+            part = pending.pop()
+            if self.token_count(part) <= self.chunk_size:
+                result.append(part)
+                continue
+            middle = max(1, len(part) // 2)
+            pending.append(part[middle:])
+            pending.append(part[:middle])
+        return result
+
     def _pack_lines(self, lines: Sequence[str]) -> list[str]:
         pieces: list[str] = []
         current: list[str] = []
         count = 0
         for line in lines:
-            line_count = max(1, self.token_count(line))
-            if current and count + line_count > self.chunk_size:
-                pieces.append("\n".join(current))
-                current = []
-                count = 0
-            current.append(line)
-            count += line_count
+            for part in self._split_line(line):
+                part_count = max(1, self.token_count(part))
+                if current and count + part_count > self.chunk_size:
+                    pieces.append("\n".join(current))
+                    current = []
+                    count = 0
+                if part_count > self.chunk_size:
+                    pieces.append(part)
+                    continue
+                current.append(part)
+                count += part_count
         if current:
             pieces.append("\n".join(current))
         return pieces or [""]
@@ -356,7 +390,7 @@ class SemanticChunker:
         """超长句子在标点处切分：先找句末，再找逗号/冒号，最后退到空白。"""
         tokens = list(TOKEN_PATTERN.finditer(sentence))
         if len(tokens) <= self.chunk_size:
-            return [sentence]
+            return self._split_line(sentence)
         pieces: list[str] = []
         start = 0
         while start < len(tokens):
@@ -364,7 +398,7 @@ class SemanticChunker:
             if end >= len(tokens):
                 piece = sentence[tokens[start].start():].strip()
                 if piece:
-                    pieces.append(piece)
+                    pieces.extend(self._split_line(piece))
                 break
             cut = tokens[end - 1].end()
             window_start = tokens[max(start, end - max(8, self.chunk_size // 5))].start()
@@ -379,7 +413,7 @@ class SemanticChunker:
                 candidate = space if space > tokens[start].start() else cut
             piece = sentence[tokens[start].start():candidate].strip()
             if piece:
-                pieces.append(piece)
+                pieces.extend(self._split_line(piece))
             new_start = start
             while new_start < len(tokens) and tokens[new_start].start() < candidate:
                 new_start += 1
@@ -387,27 +421,10 @@ class SemanticChunker:
         return pieces
 
     def _hard_split(self, text: str) -> list[str]:
-        tokens = TOKEN_PATTERN.findall(text)
-        if len(tokens) <= self.chunk_size:
+        if (self.token_count(text) <= self.chunk_size
+                and len(text) <= self.chunk_size * 8):
             return [text]
-        lines = text.splitlines(keepends=True)
-        pieces: list[str] = []
-        current: list[str] = []
-        count = 0
-        for line in lines:
-            line_count = max(1, self.token_count(line))
-            if current and count + line_count > self.chunk_size:
-                pieces.append("".join(current).strip())
-                current = []
-                count = 0
-            current.append(line)
-            count += line_count
-        if current:
-            pieces.append("".join(current).strip())
-        if len(pieces) == 1:
-            width = max(1, int(len(text) * self.chunk_size / len(tokens)))
-            return [text[index : index + width] for index in range(0, len(text), width)]
-        return pieces
+        return self._pack_lines(text.splitlines())
 
     @staticmethod
     def token_count(text: str) -> int:
