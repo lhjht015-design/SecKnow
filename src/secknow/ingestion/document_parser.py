@@ -111,6 +111,64 @@ def _table_column_bounds(
     return bounds if len(bounds) >= 3 else None
 
 
+def _column_bounds_from_items(
+    items: list[tuple[tuple[float, float, float, float], str, float]],
+) -> list[float] | None:
+    """无竖线表格：找“竖直空白走廊”作为列边界。
+
+    统计每个 x 上被词框覆盖的行数；覆盖为 0（或只有极少数合并行跨过）
+    且宽度足够的连续区间就是列间空隙。
+    """
+    if len(items) < 6:
+        return None
+    left = min(box[0] for box, _, _ in items)
+    right = max(box[2] for box, _, _ in items)
+    if right - left < 60:
+        return None
+    heights = sorted(box[3] - box[1] for box, _, _ in items)
+    median_height = heights[len(heights) // 2] or 10.0
+    min_gap = max(4.0, median_height * 0.35)
+
+    size = int(right - left) + 2
+    diff = [0] * (size + 1)
+    for box, _, _ in items:
+        start = max(0, int(box[0] - left))
+        finish = min(size - 1, int(box[2] - left))
+        if finish < start:
+            continue
+        diff[start] += 1
+        diff[finish + 1] -= 1
+    coverage = [0] * size
+    running = 0
+    for index in range(size):
+        running += diff[index]
+        coverage[index] = running
+
+    # 允许极少数合并单元格/长描述跨过空隙，不把它们当成列
+    tolerance = max(1, int(len(items) * 0.05))
+    gaps: list[tuple[int, int]] = []
+    start = None
+    for index, value in enumerate(coverage):
+        low = value <= tolerance
+        if low and start is None:
+            start = index
+        elif not low and start is not None:
+            if index - start >= min_gap:
+                gaps.append((start, index - 1))
+            start = None
+    if start is not None and size - start >= min_gap:
+        gaps.append((start, size - 1))
+    if not gaps:
+        return None
+    if len(gaps) > 12:
+        gaps = sorted(gaps, key=lambda gap: gap[1] - gap[0], reverse=True)[:12]
+        gaps.sort()
+    bounds = [left]
+    bounds.extend(left + (a + b) / 2 for a, b in gaps)
+    bounds.append(right)
+    return bounds if len(bounds) >= 3 else None
+
+
 def _items_to_markdown_table(
     items: list[tuple[tuple[float, float, float, float], str, float]],
     column_bounds: list[float] | None = None,
@@ -134,6 +192,8 @@ def _items_to_markdown_table(
     def row_items_sorted(row_items):
         return sorted(row_items, key=lambda item: item[0][0])
 
+    if column_bounds is None:
+        column_bounds = _column_bounds_from_items(items)
     header_items = row_items_sorted(rows[0][1]) if rows else []
     if column_bounds and len(column_bounds) >= 3:
         # 有竖线时直接按线界分列，这是最可靠的列切分
@@ -196,7 +256,7 @@ def _items_to_markdown_table(
         )
     if len(grid) >= 2 and column_count > 2:
         # 页边页码等孤立项会形成几乎全空的列，按填充率剪掉
-        threshold = max(1, len(grid) // 5)
+        threshold = max(1, int(math.ceil(len(grid) * 0.2)))
         keep = [
             index for index in range(column_count)
             if sum(1 for row in grid if row[index].strip()) >= threshold

@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column,after-borderless}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -108,9 +108,10 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 证据：`after-scan-table.jpg`。详见 `laws/LAW-0038.md`。
 
 **后续（同日）— 表格列切分**：列切分改为优先检测裁剪图里的竖线
-（最长连续暗像素行程 ≥45% 图高），线中心作列边界；无竖线的表回退词框聚类。
-表1.2 从 2 列修到 **5 列**，表2.1/2.2、IDA 表17-1、WinDbg 表1-2 列均正确。
-证据：`after-column.jpg`。详见 `laws/LAW-0039.md`。
+（最长连续暗像素行程 ≥45% 图高），线中心作列边界；无竖线的表用“竖直空白走廊”
+（统计每个 x 被词框覆盖的行数）分列，页码列按填充率剪掉。
+表1.2 从 2 列修到 **5 列**，表2.1/2.2、IDA 表17-1/17-2/19-1/21-2、WinDbg 表1-2 列均正确。
+证据：`after-column.jpg`（表1.2）、`after-borderless.jpg`（IDA 无边框表）。详见 `laws/LAW-0039.md`。
 
 ---
 

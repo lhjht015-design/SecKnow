@@ -1,12 +1,12 @@
 {
   "summary": {
-    "elapsed_s": 100.9,
+    "elapsed_s": 96.2,
     "documents": 0,
     "chunks_new": 0,
     "chunks_active": 16129,
     "failed": 0,
-    "tfidf_version": "5cc6d297ab183f1a421870072f5388fec6f4f768197b8b4c18d888865213e27e",
-    "graph_version": "27c6dd5c664a87955536a70ca6f54e0a529d3ed020cedaeb7a8b722585888beb",
+    "tfidf_version": "52891c9a79b49dd869b2c03f53378005fb2cd137efd5269ccd10bd8cfe352d79",
+    "graph_version": "03064d246f09a4e3325111a90370fe9bac0209c5faa964c776ecc96338d78cf4",
     "graph_nodes": 65531,
     "graph_edges": 566008,
     "dense_saved": false
