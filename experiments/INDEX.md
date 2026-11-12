@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -83,6 +83,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 让 token 统计失真。新增 `_split_line`（token 密度 + 字符硬上限 + 二分兜底）后，
 全库最大块 **2172→534 token**，>700 的块 4→0；块 ID 纳入序号消除重复片段冲突。
 证据：`after-big.jpg`。详见 `laws/LAW-0034.md`。
+
+**后续（同日）— PDF 代码缩进**：PDF 文本层没有编码逐行缩进（所有代码行 x0 相同），
+页面此前整页作为一个 paragraph。按等宽字体拆出 code/paragraph 片段，
+并用花括号层级重建缩进后，PDF code 元素 **0→2008**、缩进行 **5340**、
+**340** 个块带 4 空格缩进；4 本扫描书只有 OCR 文本，原始缩进不可恢复。
+证据：`after-pdf-indent.jpg`。详见 `laws/LAW-0035.md`。
 
 ---
 

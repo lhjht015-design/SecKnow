@@ -1,0 +1,153 @@
+"""Re-parse PDFs with font-aware code segmentation, reusing stored OCR text.
+
+Native (PyMuPDF) pages are re-extracted and split into code/paragraph elements
+by monospace font; pages that were OCR'd keep their stored text (no OCR rerun).
+Run v002 with `--index-only --no-encode` afterwards.
+
+Usage:
+    python tools/reingest_pdfs.src --limit 2
+    python tools/reingest_pdfs.src
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+import fitz
+
+ROOT = Path(r"D:\SecKnow")
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.config import get_settings
+from secknow.domain.models import DocumentFormat, ParsedElement
+from secknow.indexing.chunker import SemanticChunker
+from secknow.ingestion.discovery import DocumentDiscovery
+from secknow.ingestion.document_parser import (
+    PageExtraction,
+    PdfExtractor,
+    TextQuality,
+    build_pdf_segments,
+)
+from secknow.stores.metadata import MetadataStore
+
+
+def _quality_from(element: ParsedElement) -> TextQuality:
+    return TextQuality(
+        score=element.extraction_confidence or 1.0,
+        character_count=len(element.text),
+        replacement_ratio=0.0,
+        repetition_ratio=0.0,
+        disposition=str(element.metadata.get("disposition") or "native"),
+        diagnostics=element.diagnostics,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+    store.initialize()
+    chunker = SemanticChunker(settings.chunk_size, settings.chunk_overlap)
+    documents = [
+        document for document in DocumentDiscovery(ROOT / "book").discover()
+        if document.format is DocumentFormat.PDF
+    ]
+    if args.limit:
+        documents = documents[: args.limit]
+    print(f"PDF documents: {len(documents)}")
+
+    total_chunks = 0
+    failures: list[tuple[str, str]] = []
+    started = time.perf_counter()
+    for index, document in enumerate(documents, 1):
+        document_started = time.perf_counter()
+        try:
+            with store.connect() as db:
+                rows = db.execute(
+                    "SELECT element_json FROM elements WHERE source_id=? "
+                    "AND source_version=? AND active=1 ORDER BY position",
+                    (document.source_id, document.version_id),
+                ).fetchall()
+            stored = [ParsedElement.model_validate_json(row["element_json"]) for row in rows]
+            by_page: dict[int, ParsedElement] = {}
+            for element in stored:
+                if element.page is not None:
+                    by_page.setdefault(element.page, element)
+
+            pages: list[PageExtraction] = []
+            with fitz.open(document.absolute_path) as pdf:
+                for number, page in enumerate(pdf, 1):
+                    previous = by_page.get(number)
+                    if previous is not None and previous.parser != "pymupdf":
+                        pages.append(
+                            PageExtraction(
+                                page_number=number,
+                                text=previous.text,
+                                quality=_quality_from(previous),
+                                method=previous.parser,
+                                width=page.rect.width,
+                                height=page.rect.height,
+                                diagnostics=previous.diagnostics,
+                            )
+                        )
+                        continue
+                    segments = build_pdf_segments(page)
+                    if not segments:
+                        continue
+                    pages.append(
+                        PageExtraction(
+                            page_number=number,
+                            text=page.get_text("text", sort=True),
+                            quality=(_quality_from(previous) if previous is not None
+                                     else TextQuality(1.0, 0, 0.0, 0.0, "native", ())),
+                            method="pymupdf",
+                            width=page.rect.width,
+                            height=page.rect.height,
+                            segments=segments,
+                        )
+                    )
+
+            elements = PdfExtractor(ocr=None).to_elements(document, tuple(pages))
+            if not elements:
+                failures.append((document.relative_path, "no elements"))
+                continue
+            chunks = chunker.chunk(document, elements, None)
+            if not chunks:
+                failures.append((document.relative_path, "no chunks"))
+                continue
+            code_elements = sum(1 for element in elements if element.kind.value == "code")
+            indented = sum(
+                1 for element in elements if element.kind.value == "code"
+                and any(line.startswith("    ") for line in element.text.splitlines())
+            )
+            if not args.dry_run:
+                store.upsert_document(document, active=False)
+                store.replace_elements(document.source_id, document.version_id, elements)
+                store.replace_chunks(document.source_id, document.version_id, chunks)
+                store.activate_version(document.source_id, document.version_id)
+            total_chunks += len(chunks)
+            print(f"  {document.relative_path[:50]}: elements={len(elements)} "
+                  f"code={code_elements} indented={indented} chunks={len(chunks)} "
+                  f"{time.perf_counter() - document_started:.1f}s")
+        except Exception as error:  # noqa: BLE001
+            failures.append((document.relative_path, repr(error)))
+        if index % 5 == 0:
+            print(f"  {index}/{len(documents)} chunks={total_chunks} "
+                  f"failures={len(failures)}", flush=True)
+
+    elapsed = time.perf_counter() - started
+    print(f"done: documents={len(documents)} chunks={total_chunks} "
+          f"failures={len(failures)} elapsed={elapsed:.1f}s")
+    for path, reason in failures[:10]:
+        print(f"  FAIL {path}: {reason}")
+
+
+if __name__ == "__main__":
+    main()

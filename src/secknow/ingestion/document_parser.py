@@ -12,7 +12,7 @@ from typing import Any, Protocol
 import fitz
 import numpy as np
 
-from secknow.domain.ids import normalize_text, stable_id
+from secknow.domain.ids import normalize_code_text, normalize_text, stable_id
 from secknow.domain.models import BoundingBox, ElementKind, ParsedElement, SourceDocument
 
 CJK = re.compile(r"[㐀-鿿]")
@@ -43,6 +43,103 @@ class PageExtraction:
     width: float
     height: float
     diagnostics: tuple[str, ...] = ()
+    segments: tuple[tuple[str, str], ...] = ()
+
+
+MONO_FONT = re.compile(r"mono|courier|consol|menlo|monaco|code|fixed", re.IGNORECASE)
+
+
+def _strip_code_literals(line: str, in_block_comment: bool) -> tuple[str, bool]:
+    """去掉字符串与注释后再数括号，避免字面量里的 { } 干扰缩进。"""
+    output: list[str] = []
+    index = 0
+    quote = ""
+    while index < len(line):
+        char = line[index]
+        if in_block_comment:
+            if line.startswith("*/", index):
+                in_block_comment = False
+                index += 2
+                continue
+            index += 1
+            continue
+        if quote:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+            index += 1
+            continue
+        if line.startswith("//", index):
+            break
+        if line.startswith("/*", index):
+            in_block_comment = True
+            index += 2
+            continue
+        if char in "\"'":
+            quote = char
+            index += 1
+            continue
+        output.append(char)
+        index += 1
+    return "".join(output), in_block_comment
+
+
+def reindent_c_like(text: str, unit: int = 4) -> str:
+    """按花括号层级重建 C/C++/Java 风格代码的缩进。
+
+    PDF 文本层通常把每一行都放在同一个 x 坐标，原始缩进没有编码；
+    能可靠恢复的是“块结构”——用 { } 的深度重排。
+    没有花括号的代码（汇编、Python）保持原样。
+    """
+    if text.count("{") < 1 or text.count("}") < 1:
+        return text
+    result: list[str] = []
+    depth = 0
+    in_block_comment = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            result.append("")
+            continue
+        code, in_block_comment = _strip_code_literals(stripped, in_block_comment)
+        leading_close = code.lstrip().startswith(("}", ")", "]"))
+        line_depth = max(0, depth - (1 if leading_close else 0))
+        result.append(" " * (unit * line_depth) + stripped)
+        depth = max(0, depth + code.count("{") - code.count("}"))
+    return "\n".join(result)
+
+
+def build_pdf_segments(page: fitz.Page) -> tuple[tuple[str, str], ...]:
+    """按字体把页面拆成 code / paragraph 片段。
+
+    等宽字体行归为 code，连续同类行合并；code 片段按花括号重建缩进。
+    """
+    segments: list[list[Any]] = []
+    for block in page.get_text("dict").get("blocks", []):
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            raw = "".join(span["text"] for span in spans).rstrip()
+            if not raw.strip():
+                continue
+            # 一行里只要出现等宽字体就按代码处理：代码块里的中文注释
+            # 通常用中文字体渲染，按“主导字体”会把注释行拆成正文。
+            kind = (
+                "code"
+                if any(MONO_FONT.search(str(span.get("font", ""))) for span in spans)
+                else "paragraph"
+            )
+            if segments and segments[-1][0] == kind:
+                segments[-1][1].append(raw)
+            else:
+                segments.append([kind, [raw]])
+    return tuple(
+        (str(kind), reindent_c_like("\n".join(lines)) if kind == "code" else "\n".join(lines))
+        for kind, lines in segments
+    )
 
 
 class OcrEngine(Protocol):
@@ -542,6 +639,7 @@ class PdfExtractor:
                         width=page.rect.width,
                         height=page.rect.height,
                         diagnostics=tuple(diagnostics),
+                        segments=(build_pdf_segments(page) if method == "pymupdf" else ()),
                     )
                 )
         return tuple(pages)
@@ -552,34 +650,51 @@ class PdfExtractor:
         pages: tuple[PageExtraction, ...],
     ) -> tuple[ParsedElement, ...]:
         elements: list[ParsedElement] = []
-        for order, page in enumerate(pages):
-            elements.append(
-                ParsedElement(
-                    element_id=stable_id(
-                        "element", document.source_id, document.version_id, page.page_number
-                    ),
-                    source_id=document.source_id,
-                    source_version=document.version_id,
-                    kind=ElementKind.PARAGRAPH,
-                    text=page.text,
-                    order=order,
-                    page=page.page_number,
-                    bounding_box=BoundingBox(
-                        x0=0,
-                        y0=0,
-                        x1=page.width,
-                        y1=page.height,
-                        page_width=page.width,
-                        page_height=page.height,
-                    ),
-                    parser=page.method,
-                    extraction_confidence=page.quality.score,
-                    diagnostics=tuple(
-                        dict.fromkeys((*page.quality.diagnostics, *page.diagnostics))
-                    ),
-                    metadata={"disposition": page.quality.disposition},
-                )
+        order = 0
+        for page in pages:
+            box = BoundingBox(
+                x0=0,
+                y0=0,
+                x1=page.width,
+                y1=page.height,
+                page_width=page.width,
+                page_height=page.height,
             )
+            segments = page.segments or (("paragraph", page.text),)
+            for segment_index, (kind, text) in enumerate(segments):
+                normalized = (
+                    normalize_code_text(text)
+                    if kind == "code"
+                    else normalize_text(text)
+                )
+                if not normalized:
+                    continue
+                elements.append(
+                    ParsedElement(
+                        element_id=stable_id(
+                            "element",
+                            document.source_id,
+                            document.version_id,
+                            page.page_number,
+                            segment_index,
+                            normalized[:128],
+                        ),
+                        source_id=document.source_id,
+                        source_version=document.version_id,
+                        kind=ElementKind.CODE if kind == "code" else ElementKind.PARAGRAPH,
+                        text=normalized,
+                        order=order,
+                        page=page.page_number,
+                        bounding_box=box,
+                        parser=page.method,
+                        extraction_confidence=page.quality.score,
+                        diagnostics=tuple(
+                            dict.fromkeys((*page.quality.diagnostics, *page.diagnostics))
+                        ),
+                        metadata={"disposition": page.quality.disposition},
+                    )
+                )
+                order += 1
         return tuple(elements)
 
 
