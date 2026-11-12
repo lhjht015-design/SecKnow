@@ -54,8 +54,66 @@ DICT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
 TABLE_CAPTION = re.compile(r"表\s*\d+[-.．]\d+")
 
 
+def _table_column_bounds(
+    image_path: Path,
+    origin_x: float = 0.0,
+    scale: float = 1.0,
+) -> list[float] | None:
+    """从表格裁剪图里检测竖线，返回 PDF/图像坐标下的列边界。
+
+    有竖线的表格（绝大多数扫描书表格）用线界分列最准；
+    检测不到 3 条以上竖线时返回 None，让调用方回退到词框聚类。
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        return None
+    try:
+        with Image.open(image_path) as image:
+            gray = np.asarray(image.convert("L"))
+    except (OSError, ValueError):
+        return None
+    if gray.ndim != 2 or gray.shape[0] < 40 or gray.shape[1] < 60:
+        return None
+    dark = gray < 160
+    height = dark.shape[0]
+
+    # 竖线必须“连续贯穿表体”：文字笔画只有几十像素，长行程能把它们排除掉。
+    # 不用横线先裁 body（有的表横线稀疏，反而会裁出窄条导致误判）。
+    longest = np.zeros(dark.shape[1], dtype=np.int32)
+    run = np.zeros(dark.shape[1], dtype=np.int32)
+    for row in dark:
+        run = (run + 1) * row
+        np.maximum(longest, run, out=longest)
+    mask = longest >= max(30, int(height * 0.45))
+    groups: list[tuple[int, int]] = []
+    start = None
+    for x, flag in enumerate(mask):
+        if flag and start is None:
+            start = x
+        elif not flag and start is not None:
+            groups.append((start, x - 1))
+            start = None
+    if start is not None:
+        groups.append((start, len(mask) - 1))
+    centers = [
+        (a + b) / 2 for a, b in groups
+        if 0 <= b - a <= 10  # 只保留细线，排除整块深色区域
+    ]
+    if len(centers) < 2:
+        return None
+    bounds = [origin_x + center / scale for center in centers]
+    if bounds[0] - origin_x > 8:
+        bounds.insert(0, origin_x)
+    if origin_x + gray.shape[1] / scale - bounds[-1] > 8:
+        bounds.append(origin_x + gray.shape[1] / scale)
+    return bounds if len(bounds) >= 3 else None
+
+
 def _items_to_markdown_table(
     items: list[tuple[tuple[float, float, float, float], str, float]],
+    column_bounds: list[float] | None = None,
 ) -> str:
     """把带坐标的 OCR 结果按行/列重建成 Markdown 表格。"""
     if len(items) < 2:
@@ -77,16 +135,24 @@ def _items_to_markdown_table(
         return sorted(row_items, key=lambda item: item[0][0])
 
     header_items = row_items_sorted(rows[0][1]) if rows else []
-    intervals = sorted((box[0], box[2]) for box, _, _ in items)
-    columns: list[list[float]] = []
-    for x0, x1 in intervals:
-        if columns and x0 <= columns[-1][1]:
-            columns[-1][1] = max(columns[-1][1], x1)
-        else:
-            columns.append([x0, x1])
+    if column_bounds and len(column_bounds) >= 3:
+        # 有竖线时直接按线界分列，这是最可靠的列切分
+        columns = [
+            [column_bounds[index], column_bounds[index + 1]]
+            for index in range(len(column_bounds) - 1)
+        ]
+    else:
+        intervals = sorted((box[0], box[2]) for box, _, _ in items)
+        columns = []
+        for x0, x1 in intervals:
+            if columns and x0 <= columns[-1][1]:
+                columns[-1][1] = max(columns[-1][1], x1)
+            else:
+                columns.append([x0, x1])
+        if len(columns) < 2 or len(columns) < len(header_items):
+            columns = []
 
-    if len(columns) >= 2 and len(columns) >= len(header_items):
-        # 默认按所有单元格的 x 区间合列：标题行与数据行的实际列对齐更可靠
+    if columns:
         grid: list[list[str]] = []
         for _, row in rows:
             cells = [""] * len(columns)
@@ -152,7 +218,7 @@ def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
     """对裁剪出来的表格图做 OCR，带缓存。"""
     if ocr is None or not image_path.exists():
         return ""
-    cache = image_path.with_suffix(".ocr.json")
+    cache = image_path.with_suffix(".ocr-v2.json")
     if cache.exists():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
@@ -173,7 +239,8 @@ def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
                 ]
     except (RuntimeError, OSError, ValueError):
         items = []
-    table = _items_to_markdown_table(items)
+    bounds = _table_column_bounds(image_path, 0.0, 1.0)
+    table = _items_to_markdown_table(items, bounds)
     if table:
         try:
             cache.write_text(json.dumps({"table": table}, ensure_ascii=False), encoding="utf-8")
@@ -289,13 +356,13 @@ def _scan_page_table(
 
         table_index += 1
         target = target_dir / f"p{page_number:04d}-{table_index:02d}.png"
-        if not target.exists():
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
-            target.write_bytes(pixmap.tobytes("png"))
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+        target.write_bytes(pixmap.tobytes("png"))
         relative = os.path.relpath(target, doc_dir).replace("\\", "/")
         alt = caption[1].replace("]", "）").strip()
         output.append(("image", f"![{alt}]({relative})"))
-        table = _items_to_markdown_table(table_items)
+        bounds = _table_column_bounds(target, rect.x0, 2.0)
+        table = _items_to_markdown_table(table_items, bounds)
         if table:
             output.append(("table", table))
         covered_until = y1
@@ -372,9 +439,8 @@ def _image_markdown_for(
         target_dir.mkdir(parents=True, exist_ok=True)
         filename = f"p{page_number:04d}-{len(used):02d}.png"
         target = target_dir / filename
-        if not target.exists():
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
-            target.write_bytes(pixmap.tobytes("png"))
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+        target.write_bytes(pixmap.tobytes("png"))
         doc_dir = (media_dir.parent / Path(document.relative_path).parent)
         relative = os.path.relpath(target, doc_dir).replace("\\", "/")
         alt = caption.replace("]", "）").strip()
