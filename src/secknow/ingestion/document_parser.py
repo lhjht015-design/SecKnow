@@ -73,6 +73,10 @@ def _items_to_markdown_table(
         else:
             rows[-1][1].append(item)
 
+    def row_items_sorted(row_items):
+        return sorted(row_items, key=lambda item: item[0][0])
+
+    header_items = row_items_sorted(rows[0][1]) if rows else []
     intervals = sorted((box[0], box[2]) for box, _, _ in items)
     columns: list[list[float]] = []
     for x0, x1 in intervals:
@@ -80,26 +84,59 @@ def _items_to_markdown_table(
             columns[-1][1] = max(columns[-1][1], x1)
         else:
             columns.append([x0, x1])
-    if len(columns) < 2 or len(rows) < 2:
+
+    if len(columns) >= 2 and len(columns) >= len(header_items):
+        # 默认按所有单元格的 x 区间合列：标题行与数据行的实际列对齐更可靠
+        grid: list[list[str]] = []
+        for _, row in rows:
+            cells = [""] * len(columns)
+            for box, text, _ in row_items_sorted(row):
+                best_index = 0
+                best_overlap = -1.0
+                for index, (left, right) in enumerate(columns):
+                    overlap = min(box[2], right) - max(box[0], left)
+                    if overlap > best_overlap:
+                        best_overlap = overlap
+                        best_index = index
+                cells[best_index] = f"{cells[best_index]} {text}".strip()
+            if any(cells):
+                grid.append([cell.replace("|", "／").replace("\n", " ")
+                             for cell in cells])
+        column_count = len(columns)
+    elif len(header_items) >= 3 and len(rows) >= 2:
+        # 区间法把多列表压成了 2 列（单元格贴边）时，用表头中心重新分列
+        centers = [(box[0] + box[2]) / 2 for box, _, _ in header_items]
+        bounds = [
+            (centers[index] + centers[index + 1]) / 2
+            for index in range(len(centers) - 1)
+        ]
+        grid = []
+        for _, row in rows:
+            cells = [""] * len(centers)
+            for box, text, _ in row_items_sorted(row):
+                center = (box[0] + box[2]) / 2
+                index = 0
+                while index < len(bounds) and center > bounds[index]:
+                    index += 1
+                cells[index] = f"{cells[index]} {text}".strip()
+            if any(cells):
+                grid.append([cell.replace("|", "／").replace("\n", " ")
+                             for cell in cells])
+        column_count = len(centers)
+    else:
         return "\n".join(
-            " | ".join(text for _, text, _ in sorted(row[1], key=lambda item: item[0][0]))
+            " | ".join(text for _, text, _ in row_items_sorted(row[1]))
             for row in rows
         )
-
-    grid: list[list[str]] = []
-    for _, row_items in rows:
-        cells = [""] * len(columns)
-        for box, text, _ in sorted(row_items, key=lambda item: item[0][0]):
-            best_index = 0
-            best_overlap = -1.0
-            for index, (left, right) in enumerate(columns):
-                overlap = min(box[2], right) - max(box[0], left)
-                if overlap > best_overlap:
-                    best_overlap = overlap
-                    best_index = index
-            cells[best_index] = f"{cells[best_index]} {text}".strip()
-        if any(cells):
-            grid.append([cell.replace("|", "／").replace("\n", " ") for cell in cells])
+    if len(grid) >= 2 and column_count > 2:
+        # 页边页码等孤立项会形成几乎全空的列，按填充率剪掉
+        threshold = max(1, len(grid) // 5)
+        keep = [
+            index for index in range(column_count)
+            if sum(1 for row in grid if row[index].strip()) >= threshold
+        ]
+        if len(keep) >= 2:
+            grid = [[row[index] for index in keep] for row in grid]
     if len(grid) < 2:
         return "\n".join(" | ".join(cell for cell in row if cell) for row in grid)
 
@@ -143,6 +180,126 @@ def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
         except OSError:
             pass
     return table
+
+
+def _scan_page_table(
+    document: SourceDocument,
+    page: fitz.Page,
+    page_number: int,
+    media_dir: Path,
+    ocr: OcrEngine | None,
+    stored_text: str,
+) -> tuple[tuple[str, str], ...]:
+    """扫描书没有文本层：用 OCR 词框找题注，再按“下一段宽行”截出表格。"""
+    if ocr is None or not TABLE_CAPTION.search(stored_text):
+        return ()
+    source_key = document.source_id.split(":")[-1]
+    cache = media_dir / "scan-ocr" / source_key / f"p{page_number:04d}.items.json"
+    items: list[tuple[tuple[float, float, float, float], str, float]] = []
+    if cache.exists():
+        try:
+            raw = json.loads(cache.read_text(encoding="utf-8"))
+            items = [
+                ((float(box[0]), float(box[1]), float(box[2]), float(box[3])),
+                 str(text), float(score))
+                for box, text, score in raw
+            ]
+        except (OSError, ValueError, TypeError):
+            items = []
+    if not items:
+        if not hasattr(ocr, "extract_items"):
+            return ()
+        try:
+            items = ocr.extract_items(page, dpi=200)  # type: ignore[attr-defined]
+        except (RuntimeError, OSError, ValueError):
+            return ()
+        if not items:
+            return ()
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            cache.write_text(
+                json.dumps([[list(box), text, score] for box, text, score in items],
+                           ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+
+    scale = 200 / 72
+    pdf_items = [
+        ((box[0] / scale, box[1] / scale, box[2] / scale, box[3] / scale), text, score)
+        for box, text, score in items
+    ]
+    captions = sorted(
+        (item for item in pdf_items if TABLE_CAPTION.match(item[1].strip())),
+        key=lambda item: item[0][1],
+    )
+    if not captions:
+        return ()
+
+    ordered = sorted(pdf_items, key=lambda item: (item[0][1], item[0][0]))
+    max_width = max(box[2] - box[0] for box, _, _ in pdf_items) or page.rect.width
+    heights = sorted(box[3] - box[1] for box, _, _ in pdf_items)
+    median_height = heights[len(heights) // 2] or 10.0
+    target_dir = media_dir / "pdf-tables-scan" / source_key
+    target_dir.mkdir(parents=True, exist_ok=True)
+    doc_dir = media_dir.parent / Path(document.relative_path).parent
+
+    output: list[tuple[str, str]] = []
+    covered_until = 0.0
+    table_index = 0
+    for caption in captions:
+        caption_top = caption[0][1]
+        caption_bottom = caption[0][3]
+        if caption_top < covered_until - 2:
+            continue
+        table_items: list[tuple[tuple[float, float, float, float], str, float]] = []
+        end_y = page.rect.height - 24
+        previous_bottom = caption_bottom
+        for item in ordered:
+            box, text, _ = item
+            if box[1] < caption_bottom - 2:
+                continue
+            width = box[2] - box[0]
+            gap = box[1] - previous_bottom
+            looks_like_paragraph = (
+                len(text) >= 12 and width >= 0.6 * max_width
+            ) or (
+                gap >= 0.9 * median_height and width >= 0.5 * max_width
+            ) or (
+                text.rstrip().endswith(("。", "："))
+                and gap >= 0.5 * median_height
+                and width >= 0.35 * max_width
+            )
+            if looks_like_paragraph:
+                end_y = box[1] - 2
+                break
+            table_items.append(item)
+            previous_bottom = max(previous_bottom, box[3])
+        if len(table_items) < 3:
+            continue
+
+        x0 = min(box[0] for box, _, _ in table_items) - 4
+        x1 = max(box[2] for box, _, _ in table_items) + 4
+        y0 = max(0.0, caption_top - 2)
+        y1 = min(page.rect.height, end_y + 2)
+        rect = fitz.Rect(max(0.0, x0), y0, min(page.rect.width, x1), y1)
+        if rect.width < 40 or rect.height < 20:
+            continue
+
+        table_index += 1
+        target = target_dir / f"p{page_number:04d}-{table_index:02d}.png"
+        if not target.exists():
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+            target.write_bytes(pixmap.tobytes("png"))
+        relative = os.path.relpath(target, doc_dir).replace("\\", "/")
+        alt = caption[1].replace("]", "）").strip()
+        output.append(("image", f"![{alt}]({relative})"))
+        table = _items_to_markdown_table(table_items)
+        if table:
+            output.append(("table", table))
+        covered_until = y1
+    return tuple(output)
 
 
 def _image_markdown_for(

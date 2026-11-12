@@ -34,6 +34,7 @@ from secknow.ingestion.document_parser import (
     build_pdf_segments,
     select_ocr_engine,
     _image_markdown_for,
+    _scan_page_table,
 )
 from secknow.stores.metadata import MetadataStore
 
@@ -113,6 +114,11 @@ def main() -> None:
                 for number, page in enumerate(pdf, 1):
                     previous = by_page.get(number)
                     if previous is not None and previous.parser != "pymupdf":
+                        segments: list[tuple[str, str]] = [("paragraph", previous.text)]
+                        segments.extend(
+                            _scan_page_table(
+                                document, page, number, MEDIA_DIR, ocr, previous.text)
+                        )
                         pages.append(
                             PageExtraction(
                                 page_number=number,
@@ -122,6 +128,7 @@ def main() -> None:
                                 width=page.rect.width,
                                 height=page.rect.height,
                                 diagnostics=previous.diagnostics,
+                                segments=tuple(segments),
                             )
                         )
                         continue

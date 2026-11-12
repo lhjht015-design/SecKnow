@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -100,6 +100,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 按 y 聚类成行、x 重叠聚成列，把 **50 张表**重建成 **396 行** Markdown 管道表，
 作为 TABLE 元素随图片一起入块；OCR 结果缓存 `.ocr.json`，重入库不重跑。
 搜索“bp 设置断点”可命中表1-2。证据：`after-table-ocr.jpg`。详见 `laws/LAW-0037.md`。
+
+**后续（同日）— 扫描书表格**：4 本扫描书没有文本层。用库里已有 OCR 文本筛出
+**171 个含“表X-Y”的页面**，对候选页用 RapidOCR 词框定位题注、按“下一段宽行”
+截出表格，重建 Markdown 表并缓存页面词框。最终得到 **161 个扫描表格元素、
+1300 行**表格文本（IDA 表17-1、加密表2.1/1.2、汇编表2.1/2.2 等）。
+证据：`after-scan-table.jpg`。详见 `laws/LAW-0038.md`。
 
 ---
 
