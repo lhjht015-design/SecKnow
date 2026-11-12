@@ -416,7 +416,10 @@ class KnowledgeGraph:
             for target, edge_score in ordered_neighbours[:per_node_limit]:
                 if target in path:
                     continue
-                candidate = score * edge_score * (0.68 ** (hops + 1))
+                # 扩展只做衰减传播：边权封顶 1.0 再乘 hop 衰减，
+                # 保证邻居分数永远低于其种子，图扩展无法把词法强命中挤出重排窗口。
+                decayed_edge = min(1.0, edge_score)
+                candidate = score * decayed_edge * (0.68 ** (hops + 1))
                 candidate_path = (*path, target)
                 if candidate > best.get(target, (0.0, ()))[0]:
                     best[target] = (candidate, candidate_path)

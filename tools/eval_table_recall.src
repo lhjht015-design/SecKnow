@@ -1,0 +1,88 @@
+"""表格召回基准：用表题与代表性单元格查表，统计 top-12 命中率。
+
+进程内运行，等同于 strict-lexical 检索链路。
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from secknow.config import get_settings  # noqa: E402
+from secknow.graph.builder import KnowledgeGraph  # noqa: E402
+from secknow.indexing.tfidf import TfidfIndex  # noqa: E402
+from secknow.models.bge import BgeReranker  # noqa: E402
+from secknow.retrieval.hybrid import query_channel_weights, weighted_rrf  # noqa: E402
+from secknow.retrieval.reranker import CandidateReranker  # noqa: E402
+from secknow.stores.metadata import MetadataStore  # noqa: E402
+
+CAPTION = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+CELL = re.compile(r"[一-鿿]{2,}")
+TOP_K = 12
+SAMPLE_STEP = 4
+
+
+def queries_for(text: str) -> list[str]:
+    captions = [m.group(1).strip() for m in CAPTION.finditer(text)]
+    caption = next((c for c in captions if CELL.search(c)), "")
+    queries = []
+    if caption:
+        cleaned = re.sub(r"^表\s*\d+[-.．]?\d*\s*", "", caption).strip(" 　:：()（）")
+        if len(cleaned) >= 4:
+            queries.append(cleaned)
+    cells = [c for c in CELL.findall(text) if len(c) >= 3]
+    if cells:
+        queries.append(cells[0])
+    return queries[:2]
+
+
+def main() -> None:
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+    store.initialize()
+    version = str(store.get_setting("active_tfidf_version"))
+    tfidf = TfidfIndex.load(settings.data_root / "tfidf" / version)
+    graph_version = store.get_setting("active_graph_version")
+    graph = KnowledgeGraph.load(settings.data_root / "graph" / f"{graph_version}.json.gz")
+    reranker = CandidateReranker(BgeReranker(settings.reranker_model_path, settings.device))
+    chunks = {c.chunk_id: c for c in store.active_chunks()}
+    table_chunks = [
+        chunk
+        for chunk in chunks.values()
+        if "table" in chunk.metadata.get("element_kinds", []) and "| ---" in chunk.text
+    ][::SAMPLE_STEP]
+
+    total = hits = 0
+    misses = []
+    for chunk in table_chunks:
+        for query in queries_for(chunk.text):
+            weights = query_channel_weights(query)
+            rankings = {
+                "bm25": store.search_fts(query, 40),
+                "tfidf": [(h.chunk_id, h.score) for h in tfidf.search(query, 40)],
+            }
+            fused = weighted_rrf(rankings, weights)
+            lexical = {c.item_id: c.score for c in fused}
+            merged = dict(lexical)
+            for cid, (score, _) in graph.expand(lexical, 2, 160).items():
+                merged[cid] = max(merged.get(cid, 0.0), score)
+            ordered = sorted(merged.items(), key=lambda kv: (-kv[1], kv[0]))[:24]
+            chunk_map = store.get_chunks([cid for cid, _ in ordered])
+            candidates = [(chunk_map[cid], score) for cid, score in ordered if cid in chunk_map]
+            result = reranker.rerank(query, candidates)[:TOP_K]
+            total += 1
+            found = [item.chunk.chunk_id for item in result]
+            if chunk.chunk_id in found:
+                hits += 1
+            else:
+                misses.append((query, chunk.chunk_id, found[:3]))
+    print(f"表格查询 {total} 条，top-12 命中 {hits} 条 = {hits / total:.1%}")
+    for query, chunk_id, top in misses[:12]:
+        print(f"  未命中：{query!r} 目标 {chunk_id[:22]} 前3 {[c[:14] for c in top]}")
+
+
+if __name__ == "__main__":
+    main()

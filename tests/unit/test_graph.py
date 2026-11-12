@@ -49,6 +49,21 @@ def test_graph_expands_through_shared_entity_with_bounds() -> None:
     assert len(expanded["chunk:1"][1]) <= 3
 
 
+def test_graph_expansion_never_outranks_its_seed() -> None:
+    chunks = (
+        chunk("chunk:0", "CVE-2024-1234 affects an ELF parser"),
+        chunk("chunk:1", "CVE-2024-1234 can lead to memory corruption", "chunk:0"),
+        chunk("chunk:2", "unrelated cryptography notes", "chunk:1"),
+    )
+    graph = KnowledgeGraph()
+    graph.build(chunks)
+
+    expanded = graph.expand({"chunk:0": 1.0}, max_hops=2, max_nodes=5)
+
+    assert expanded["chunk:0"][0] == 1.0
+    assert all(score < 1.0 for node, (score, _) in expanded.items() if node != "chunk:0")
+
+
 def test_graph_builds_hierarchy_keywords_and_code_relations() -> None:
     chunks = (
         chunk(

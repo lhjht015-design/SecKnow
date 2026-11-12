@@ -1451,13 +1451,16 @@ class PdfExtractor:
                 page_height=page.height,
             )
             segments = page.segments or (("paragraph", page.text),)
+            # 空白页仍要产出一条元素，否则页面审计和 quarantined 统计看不到它；
+            # 分块阶段会跳过空文本元素，不会污染索引。
+            page_empty = not any(text.strip() for _, text in segments)
             for segment_index, (kind, text) in enumerate(segments):
                 normalized = (
                     normalize_code_text(text)
                     if kind in {"code", "table"}
                     else normalize_text(text)
                 )
-                if not normalized:
+                if not normalized and not page_empty:
                     continue
                 kind_value = {
                     "code": ElementKind.CODE,
