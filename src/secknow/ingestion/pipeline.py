@@ -212,7 +212,11 @@ class IngestionPipeline:
                 executable=self.settings.tesseract_executable,
                 tessdata_dir=self.settings.tesseract_tessdata_dir,
             )
-            extractor = PdfExtractor(ocr, self.settings.ocr_dpi)
+            extractor = PdfExtractor(
+                ocr,
+                self.settings.ocr_dpi,
+                media_dir=self.settings.corpus_root / ".secknow-media",
+            )
             return extractor.to_elements(document, extractor.extract(document))
         if document.format is DocumentFormat.DOCX:
             return self._prefer_unstructured(document, parse_docx)

@@ -19,6 +19,7 @@ from pathlib import Path
 import fitz
 
 ROOT = Path(r"D:\SecKnow")
+MEDIA_DIR = ROOT / "book" / ".secknow-media"
 sys.path.insert(0, str(ROOT / "src"))
 
 from secknow.config import get_settings
@@ -26,10 +27,12 @@ from secknow.domain.models import DocumentFormat, ParsedElement
 from secknow.indexing.chunker import SemanticChunker
 from secknow.ingestion.discovery import DocumentDiscovery
 from secknow.ingestion.document_parser import (
+    DICT_FLAGS,
     PageExtraction,
     PdfExtractor,
     TextQuality,
     build_pdf_segments,
+    _image_markdown_for,
 )
 from secknow.stores.metadata import MetadataStore
 
@@ -76,6 +79,23 @@ def main() -> None:
                     (document.source_id, document.version_id),
                 ).fetchall()
             stored = [ParsedElement.model_validate_json(row["element_json"]) for row in rows]
+            if not stored:
+                # 上一次重入库被中断时 replace_elements 会把旧元素软删；
+                # 先恢复，避免把整本扫描书误判成“无元素”而重跑 OCR。
+                with store.connect() as db:
+                    db.execute(
+                        "UPDATE elements SET active=1 WHERE source_id=? "
+                        "AND source_version=? AND active=0",
+                        (document.source_id, document.version_id),
+                    )
+                    db.commit()
+                    rows = db.execute(
+                        "SELECT element_json FROM elements WHERE source_id=? "
+                        "AND source_version=? AND active=1 ORDER BY position",
+                        (document.source_id, document.version_id),
+                    ).fetchall()
+                stored = [ParsedElement.model_validate_json(row["element_json"])
+                          for row in rows]
             by_page: dict[int, ParsedElement] = {}
             for element in stored:
                 if element.page is not None:
@@ -98,7 +118,12 @@ def main() -> None:
                             )
                         )
                         continue
-                    segments = build_pdf_segments(page)
+                    page_blocks = page.get_text("dict", flags=DICT_FLAGS).get("blocks", [])
+                    segments = (
+                        *build_pdf_segments(page, page_blocks),
+                        *_image_markdown_for(
+                            document, page, number, MEDIA_DIR, page_blocks),
+                    )
                     if not segments:
                         continue
                     pages.append(
@@ -114,7 +139,9 @@ def main() -> None:
                         )
                     )
 
-            elements = PdfExtractor(ocr=None).to_elements(document, tuple(pages))
+            elements = PdfExtractor(
+                ocr=None, media_dir=MEDIA_DIR
+            ).to_elements(document, tuple(pages))
             if not elements:
                 failures.append((document.relative_path, "no elements"))
                 continue
@@ -135,7 +162,7 @@ def main() -> None:
             total_chunks += len(chunks)
             print(f"  {document.relative_path[:50]}: elements={len(elements)} "
                   f"code={code_elements} indented={indented} chunks={len(chunks)} "
-                  f"{time.perf_counter() - document_started:.1f}s")
+                  f"{time.perf_counter() - document_started:.1f}s", flush=True)
         except Exception as error:  # noqa: BLE001
             failures.append((document.relative_path, repr(error)))
         if index % 5 == 0:

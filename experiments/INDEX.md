@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -89,6 +89,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 并用花括号层级重建缩进后，PDF code 元素 **0→2008**、缩进行 **5340**、
 **340** 个块带 4 空格缩进；4 本扫描书只有 OCR 文本，原始缩进不可恢复。
 证据：`after-pdf-indent.jpg`。详见 `laws/LAW-0035.md`。
+
+**后续（同日）— PDF 表格**：这些书的表格基本是位图（`find_tables()` 全书只找到
+1 个 1×2 小表）。按“表X-Y 标题”题注匹配同页图片、2× 裁剪到 `book/.secknow-media/`
+并生成 IMAGE 元素后，新增 **50 个表格图片元素**（51 张裁剪图、40 个块引用），
+题注可检索、图片可渲染。扫描书解析改用不保留图片的 `get_text` flags，
+避免整页位图解码。证据：`after-pdf-table.jpg`。详见 `laws/LAW-0036.md`。
 
 ---
 

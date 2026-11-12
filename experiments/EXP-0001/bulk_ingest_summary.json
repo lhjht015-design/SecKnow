@@ -1,14 +1,14 @@
 {
   "summary": {
-    "elapsed_s": 100.3,
+    "elapsed_s": 101.6,
     "documents": 0,
     "chunks_new": 0,
-    "chunks_active": 16089,
+    "chunks_active": 16090,
     "failed": 0,
-    "tfidf_version": "9f69791d89dbfccb48df73267af61bd7256fb77400734cb8da16e421d3759f9c",
-    "graph_version": "e5e675644f2f1d104c347cd085d11f32ebe2fb2f528ca3863aea170b492e058b",
-    "graph_nodes": 65426,
-    "graph_edges": 564570,
+    "tfidf_version": "53dee67b4fd1856f378731e54dca5fc13a1e536a2dfd37a79a2da547e51288da",
+    "graph_version": "fc5ec886f9dd67a2a3a4f175323c0361b489a32ac45b7cd6b6438854f0e0f40c",
+    "graph_nodes": 65437,
+    "graph_edges": 564606,
     "dense_saved": false
   },
   "failures": []

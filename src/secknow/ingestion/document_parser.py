@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 import shutil
 import unicodedata
@@ -47,6 +48,88 @@ class PageExtraction:
 
 
 MONO_FONT = re.compile(r"mono|courier|consol|menlo|monaco|code|fixed", re.IGNORECASE)
+# 不解码页面里的图片：扫描书每页都是整页位图，默认 flags 会把整本书的图都解一遍。
+DICT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+TABLE_CAPTION = re.compile(r"表\s*\d+[-.．]\d+")
+
+
+def _image_markdown_for(
+    document: SourceDocument,
+    page: fitz.Page,
+    page_number: int,
+    media_dir: Path,
+    blocks: list[dict[str, Any]] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """把带“表X-Y”题注的图片裁出来，输出 Markdown 图片行。
+
+    这些书的表格基本是位图；文本层里没有内容，只能按题注定位后裁剪。
+    """
+    if blocks is None:
+        blocks = page.get_text("dict", flags=DICT_FLAGS).get("blocks", [])
+    captions: list[tuple[str, tuple[float, float, float, float]]] = []
+    for block in blocks:
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            raw = "".join(span["text"] for span in spans).strip()
+            if not raw or not TABLE_CAPTION.search(raw):
+                continue
+            x0 = min(span["bbox"][0] for span in spans)
+            y0 = min(span["bbox"][1] for span in spans)
+            x1 = max(span["bbox"][2] for span in spans)
+            y1 = max(span["bbox"][3] for span in spans)
+            captions.append((raw, (x0, y0, x1, y1)))
+    if not captions:
+        return ()
+    # 优先用“表X-Y 标题”这种题注行；只有“如表X-Y所示”时再用正文行
+    titled = [item for item in captions if TABLE_CAPTION.match(item[0])]
+    if titled:
+        captions = titled
+
+    page_area = page.rect.width * page.rect.height
+    candidates: list[tuple[float, fitz.Rect]] = []
+    for image in page.get_images(full=True)[:300]:
+        try:
+            rects = page.get_image_rects(image[0])
+        except (RuntimeError, ValueError):
+            continue
+        for rect in rects:
+            area = rect.width * rect.height
+            if area < 3000 or area > page_area * 0.8:
+                continue
+            candidates.append((area, rect))
+    if not candidates:
+        return ()
+
+    output: list[tuple[str, str]] = []
+    used: set[tuple[float, float, float, float]] = set()
+    target_dir = media_dir / "pdf-tables" / document.source_id.split(":")[-1]
+    for caption, box in captions:
+        center_y = (box[1] + box[3]) / 2
+        ranked = sorted(
+            candidates,
+            key=lambda item: abs((item[1].y0 + item[1].y1) / 2 - center_y),
+        )
+        if not ranked:
+            continue
+        _, rect = ranked[0]
+        if abs((rect.y0 + rect.y1) / 2 - center_y) > 300:
+            continue
+        key = (round(rect.x0, 1), round(rect.y0, 1),
+               round(rect.x1, 1), round(rect.y1, 1))
+        if key in used:
+            continue
+        used.add(key)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"p{page_number:04d}-{len(used):02d}.png"
+        target = target_dir / filename
+        if not target.exists():
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+            target.write_bytes(pixmap.tobytes("png"))
+        doc_dir = (media_dir.parent / Path(document.relative_path).parent)
+        relative = os.path.relpath(target, doc_dir).replace("\\", "/")
+        alt = caption.replace("]", "）").strip()
+        output.append(("image", f"![{alt}]({relative})"))
+    return tuple(output)
 
 
 def _strip_code_literals(line: str, in_block_comment: bool) -> tuple[str, bool]:
@@ -111,13 +194,18 @@ def reindent_c_like(text: str, unit: int = 4) -> str:
     return "\n".join(result)
 
 
-def build_pdf_segments(page: fitz.Page) -> tuple[tuple[str, str], ...]:
+def build_pdf_segments(
+    page: fitz.Page,
+    blocks: list[dict[str, Any]] | None = None,
+) -> tuple[tuple[str, str], ...]:
     """按字体把页面拆成 code / paragraph 片段。
 
     等宽字体行归为 code，连续同类行合并；code 片段按花括号重建缩进。
     """
+    if blocks is None:
+        blocks = page.get_text("dict", flags=DICT_FLAGS).get("blocks", [])
     segments: list[list[Any]] = []
-    for block in page.get_text("dict").get("blocks", []):
+    for block in blocks:
         for line in block.get("lines", []):
             spans = line.get("spans", [])
             if not spans:
@@ -581,9 +669,15 @@ def score_text(text: str, page_area: float = 1.0) -> TextQuality:
 
 
 class PdfExtractor:
-    def __init__(self, ocr: OcrEngine | None = None, dpi: int = 240) -> None:
+    def __init__(
+        self,
+        ocr: OcrEngine | None = None,
+        dpi: int = 240,
+        media_dir: Path | None = None,
+    ) -> None:
         self.ocr = ocr
         self.dpi = dpi
+        self.media_dir = media_dir
 
     def extract(self, document: SourceDocument) -> tuple[PageExtraction, ...]:
         pages: list[PageExtraction] = []
@@ -630,6 +724,10 @@ class PdfExtractor:
                         "quarantine",
                         quality.diagnostics,
                     )
+                page_blocks = (
+                    page.get_text("dict", flags=DICT_FLAGS).get("blocks", [])
+                    if method == "pymupdf" else []
+                )
                 pages.append(
                     PageExtraction(
                         page_number=index + 1,
@@ -639,7 +737,17 @@ class PdfExtractor:
                         width=page.rect.width,
                         height=page.rect.height,
                         diagnostics=tuple(diagnostics),
-                        segments=(build_pdf_segments(page) if method == "pymupdf" else ()),
+                        segments=(
+                            (
+                                *build_pdf_segments(page, page_blocks),
+                                *(_image_markdown_for(
+                                    document, page, index + 1, self.media_dir,
+                                    page_blocks)
+                                  if self.media_dir is not None else ()),
+                            )
+                            if method == "pymupdf"
+                            else ()
+                        ),
                     )
                 )
         return tuple(pages)
@@ -669,6 +777,10 @@ class PdfExtractor:
                 )
                 if not normalized:
                     continue
+                kind_value = {
+                    "code": ElementKind.CODE,
+                    "image": ElementKind.IMAGE,
+                }.get(kind, ElementKind.PARAGRAPH)
                 elements.append(
                     ParsedElement(
                         element_id=stable_id(
@@ -681,7 +793,7 @@ class PdfExtractor:
                         ),
                         source_id=document.source_id,
                         source_version=document.version_id,
-                        kind=ElementKind.CODE if kind == "code" else ElementKind.PARAGRAPH,
+                        kind=kind_value,
                         text=normalized,
                         order=order,
                         page=page.page_number,
