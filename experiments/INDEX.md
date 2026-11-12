@@ -64,7 +64,12 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence}.jpg`。
+
+**后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
+真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
+改为跨元素按句打包后，全库硬句中断尾 61→11，块 16362→15395。
+证据卡可直接“载入下一块”（`after-sentence.jpg`）。详见 `laws/LAW-0032.md`。
 
 ---
 

@@ -310,6 +310,14 @@ def job(job_id: str, store: StoreDependency) -> dict[str, Any]:
     return parse_json_fields(row)
 
 
+@router.get("/chunks/{chunk_id}", tags=["search"])
+def get_chunk(chunk_id: str, store: StoreDependency) -> dict[str, Any]:
+    chunk = store.get_chunks([chunk_id]).get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=404, detail="chunk not found")
+    return chunk.model_dump(mode="json")
+
+
 @router.post("/search", tags=["search"])
 def search(
     search_request: SearchRequest,

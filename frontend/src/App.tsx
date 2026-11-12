@@ -28,6 +28,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import {
   enqueueIndex,
+  fetchChunk,
   fetchChunkGraph,
   fetchDocumentPageAudit,
   fetchDocuments,
@@ -533,9 +534,9 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 function Results({ response }: { response: SearchResponse }) {
   const [copied, setCopied] = useState<string | null>(null)
   const evidenceItems = response.answer?.sections.flatMap((section) => section.items) ?? []
-  const hits = evidenceItems.length
-    ? evidenceItems.map((item, index) => evidenceToHit(item, index))
-    : response.hits
+  const hits = response.hits.length
+    ? response.hits
+    : evidenceItems.map((item, index) => evidenceToHit(item, index))
   const generatedText = response.generated_answer
 
   const copyText = async (id: string, text: string) => {
@@ -937,11 +938,30 @@ function EvidenceCard({
   const [graphOpen, setGraphOpen] = useState(false)
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
+  const [continuation, setContinuation] = useState<SearchHit | null>(null)
+  const [continuationError, setContinuationError] = useState<string | null>(null)
+  const [continuationLoading, setContinuationLoading] = useState(false)
   const citation = hit.chunk.citation
   const location = formatLocation(citation)
   const channels = Object.entries(hit.channels).sort((left, right) => right[1] - left[1])
   const previewUrl = pagePreviewUrl(citation)
   const terms = useMemo(() => queryTerms(query), [query])
+  const chunkTail = hit.chunk.text.trimEnd()
+  const mayContinue = Boolean(hit.chunk.next_chunk_id) &&
+    /[,，:：；;([{（【\\/-]$/.test(chunkTail)
+
+  const loadContinuation = async () => {
+    if (!hit.chunk.next_chunk_id || continuationLoading) return
+    setContinuationLoading(true)
+    setContinuationError(null)
+    try {
+      setContinuation(await fetchChunk(hit.chunk.next_chunk_id))
+    } catch (error) {
+      setContinuationError(error instanceof Error ? error.message : '下一块加载失败。')
+    } finally {
+      setContinuationLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!graphOpen || graph || graphError) return
@@ -980,6 +1000,31 @@ function EvidenceCard({
         </div>
       </header>
       <EvidenceText text={hit.chunk.text} expanded={expanded} terms={terms} citation={citation} />
+      {mayContinue && (
+        <div className="evidence-continuation">
+          {continuation ? (
+            <>
+              <div className="continuation-label">续（下一块）</div>
+              <EvidenceText
+                text={continuation.chunk.text}
+                expanded
+                terms={terms}
+                citation={continuation.chunk.citation}
+              />
+            </>
+          ) : (
+            <button
+              className="continuation-button"
+              type="button"
+              onClick={() => void loadContinuation()}
+              disabled={continuationLoading}
+            >
+              {continuationLoading ? '载入中…' : '内容可能在下一块继续 · 载入下一块'}
+            </button>
+          )}
+          {continuationError && <span className="continuation-error">{continuationError}</span>}
+        </div>
+      )}
       {hit.chunk.text.length > 320 && (
         <button className="expand-button" type="button" onClick={() => setExpanded((value) => !value)}>
           {expanded ? '收起原文' : '展开原文'}

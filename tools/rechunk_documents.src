@@ -1,0 +1,130 @@
+"""Re-chunk active documents from the stored elements, without re-parsing.
+
+Applies chunker changes (sentence-aware splitting, fence preservation) to all
+documents, including PDFs, without re-running OCR. Run v002 with
+`--index-only --no-encode` afterwards to rebuild TF-IDF and the graph.
+
+Usage:
+    python tools/rechunk_documents.src --limit 5
+    python tools/rechunk_documents.src
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(r"D:\SecKnow")
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.config import get_settings
+from secknow.domain.models import DocumentFormat, ParsedElement, SourceDocument
+from secknow.indexing.chunker import SemanticChunker
+from secknow.stores.metadata import MetadataStore
+
+TAIL_CHARS = set(",，、（(")
+META_LINES = {"---", "***", "___"}
+
+
+def suspicious_tail(text: str) -> bool:
+    """块尾停在逗号/顿号/左括号，视为句中断块。
+
+    `;` 在代码里是语句结尾、`：` 常引出公式，不算；元数据分隔线 `---` 也不算。
+    """
+    stripped = text.rstrip()
+    if not stripped or stripped[-1] not in TAIL_CHARS:
+        return False
+    last_line = stripped.splitlines()[-1].strip()
+    return last_line not in META_LINES and not last_line.startswith(("quality:", "lesson:"))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None)
+    args = parser.parse_args()
+
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+    store.initialize()
+    chunker = SemanticChunker(settings.chunk_size, settings.chunk_overlap)
+
+    with store.connect() as db:
+        documents = db.execute(
+            "SELECT source_id, version_id, title, relative_path, absolute_path, "
+            "format, media_type, size_bytes, sha256, metadata_json "
+            "FROM documents WHERE active=1"
+        ).fetchall()
+    if args.limit:
+        documents = documents[: args.limit]
+    print(f"documents: {len(documents)}")
+
+    total_chunks = 0
+    tails_before = 0
+    tails_after = 0
+    failures: list[tuple[str, str]] = []
+    started = time.perf_counter()
+    for index, row in enumerate(documents, 1):
+        doc_started = time.perf_counter()
+        try:
+            with store.connect() as db:
+                element_rows = db.execute(
+                    "SELECT element_json FROM elements WHERE source_id=? "
+                    "AND source_version=? AND active=1 ORDER BY position",
+                    (row["source_id"], row["version_id"]),
+                ).fetchall()
+                old = db.execute(
+                    "SELECT text FROM chunks WHERE source_id=? AND source_version=? "
+                    "AND active=1",
+                    (row["source_id"], row["version_id"]),
+                ).fetchall()
+            elements = [ParsedElement.model_validate_json(item["element_json"])
+                        for item in element_rows]
+            if not elements:
+                failures.append((row["relative_path"], "no elements"))
+                continue
+            tails_before += sum(1 for item in old if suspicious_tail(str(item["text"])))
+            document = SourceDocument(
+                source_id=row["source_id"],
+                version_id=row["version_id"],
+                title=row["title"],
+                relative_path=row["relative_path"],
+                absolute_path=row["absolute_path"],
+                format=DocumentFormat(row["format"]),
+                media_type=row["media_type"],
+                size_bytes=row["size_bytes"],
+                sha256=row["sha256"],
+                metadata=json.loads(row["metadata_json"]),
+            )
+            chunks = chunker.chunk(document, elements, None)
+            if not chunks:
+                failures.append((row["relative_path"], "no chunks"))
+                continue
+            tails_after += sum(1 for chunk in chunks if suspicious_tail(chunk.text))
+            store.replace_chunks(row["source_id"], row["version_id"], chunks)
+            store.activate_version(row["source_id"], row["version_id"])
+            total_chunks += len(chunks)
+        except Exception as error:  # noqa: BLE001
+            failures.append((row["relative_path"], repr(error)))
+        if args.limit and index >= args.limit:
+            break
+        doc_elapsed = time.perf_counter() - doc_started
+        if doc_elapsed > 5:
+            print(f"  SLOW {doc_elapsed:.1f}s {row['relative_path'][:60]}", flush=True)
+        if index % 200 == 0:
+            print(f"  {index}/{len(documents)} chunks={total_chunks} "
+                  f"failures={len(failures)} "
+                  f"elapsed={time.perf_counter() - started:.0f}s", flush=True)
+
+    elapsed = time.perf_counter() - started
+    print(f"done: chunks={total_chunks} failures={len(failures)} "
+          f"tails_before={tails_before} tails_after={tails_after} "
+          f"elapsed={elapsed:.1f}s")
+    for path, reason in failures[:10]:
+        print(f"  FAIL {path}: {reason}")
+
+
+if __name__ == "__main__":
+    main()

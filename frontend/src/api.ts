@@ -93,6 +93,8 @@ function decodeHit(value: unknown, index: number): SearchHit | null {
       section_path: stringArray(chunk.section_path),
       order: numberValue(chunk.order),
       token_count: numberValue(chunk.token_count),
+      previous_chunk_id: typeof chunk.previous_chunk_id === 'string' ? chunk.previous_chunk_id : null,
+      next_chunk_id: typeof chunk.next_chunk_id === 'string' ? chunk.next_chunk_id : null,
       citation,
       metadata: isRecord(chunk.metadata) ? chunk.metadata : {},
     },
@@ -468,4 +470,17 @@ export async function searchKnowledge(
     throw new Error(await errorMessage(response))
   }
   return decodeResponse(await response.json())
+}
+
+export async function fetchChunk(chunkId: string, signal?: AbortSignal): Promise<SearchHit> {
+  const response = await fetch(`/api/chunks/${encodeURIComponent(chunkId)}`, {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  const hit = decodeHit(await response.json(), 0)
+  if (!hit) throw new Error('块数据解析失败')
+  return hit
 }
