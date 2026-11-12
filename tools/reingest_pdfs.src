@@ -32,6 +32,7 @@ from secknow.ingestion.document_parser import (
     PdfExtractor,
     TextQuality,
     build_pdf_segments,
+    select_ocr_engine,
     _image_markdown_for,
 )
 from secknow.stores.metadata import MetadataStore
@@ -58,6 +59,12 @@ def main() -> None:
     store = MetadataStore(settings.database_path)
     store.initialize()
     chunker = SemanticChunker(settings.chunk_size, settings.chunk_overlap)
+    ocr = select_ocr_engine(
+        settings.ocr_backend,
+        languages=settings.ocr_languages,
+        executable=settings.tesseract_executable,
+        tessdata_dir=settings.tesseract_tessdata_dir,
+    )
     documents = [
         document for document in DocumentDiscovery(ROOT / "book").discover()
         if document.format is DocumentFormat.PDF
@@ -122,7 +129,7 @@ def main() -> None:
                     segments = (
                         *build_pdf_segments(page, page_blocks),
                         *_image_markdown_for(
-                            document, page, number, MEDIA_DIR, page_blocks),
+                            document, page, number, MEDIA_DIR, page_blocks, ocr),
                     )
                     if not segments:
                         continue
@@ -140,7 +147,7 @@ def main() -> None:
                     )
 
             elements = PdfExtractor(
-                ocr=None, media_dir=MEDIA_DIR
+                ocr=ocr, media_dir=MEDIA_DIR
             ).to_elements(document, tuple(pages))
             if not elements:
                 failures.append((document.relative_path, "no elements"))

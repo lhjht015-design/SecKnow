@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -95,6 +95,11 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 并生成 IMAGE 元素后，新增 **50 个表格图片元素**（51 张裁剪图、40 个块引用），
 题注可检索、图片可渲染。扫描书解析改用不保留图片的 `get_text` flags，
 避免整页位图解码。证据：`after-pdf-table.jpg`。详见 `laws/LAW-0036.md`。
+
+**后续（同日）— 表格 OCR**：RapidOCR 新增带词框的 `extract_items()`，
+按 y 聚类成行、x 重叠聚成列，把 **50 张表**重建成 **396 行** Markdown 管道表，
+作为 TABLE 元素随图片一起入块；OCR 结果缓存 `.ocr.json`，重入库不重跑。
+搜索“bp 设置断点”可命中表1-2。证据：`after-table-ocr.jpg`。详见 `laws/LAW-0037.md`。
 
 ---
 

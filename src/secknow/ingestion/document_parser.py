@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
@@ -53,12 +54,104 @@ DICT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
 TABLE_CAPTION = re.compile(r"表\s*\d+[-.．]\d+")
 
 
+def _items_to_markdown_table(
+    items: list[tuple[tuple[float, float, float, float], str, float]],
+) -> str:
+    """把带坐标的 OCR 结果按行/列重建成 Markdown 表格。"""
+    if len(items) < 2:
+        return "\n".join(text for _, text, _ in items)
+
+    heights = sorted(box[3] - box[1] for box, _, _ in items)
+    median_height = heights[len(heights) // 2] or 1.0
+
+    ordered = sorted(items, key=lambda item: ((item[0][1] + item[0][3]) / 2, item[0][0]))
+    rows: list[tuple[float, list[tuple[tuple[float, float, float, float], str, float]]]] = []
+    for item in ordered:
+        center = (item[0][1] + item[0][3]) / 2
+        if not rows or center - rows[-1][0] > max(6.0, median_height * 0.6):
+            rows.append((center, [item]))
+        else:
+            rows[-1][1].append(item)
+
+    intervals = sorted((box[0], box[2]) for box, _, _ in items)
+    columns: list[list[float]] = []
+    for x0, x1 in intervals:
+        if columns and x0 <= columns[-1][1]:
+            columns[-1][1] = max(columns[-1][1], x1)
+        else:
+            columns.append([x0, x1])
+    if len(columns) < 2 or len(rows) < 2:
+        return "\n".join(
+            " | ".join(text for _, text, _ in sorted(row[1], key=lambda item: item[0][0]))
+            for row in rows
+        )
+
+    grid: list[list[str]] = []
+    for _, row_items in rows:
+        cells = [""] * len(columns)
+        for box, text, _ in sorted(row_items, key=lambda item: item[0][0]):
+            best_index = 0
+            best_overlap = -1.0
+            for index, (left, right) in enumerate(columns):
+                overlap = min(box[2], right) - max(box[0], left)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_index = index
+            cells[best_index] = f"{cells[best_index]} {text}".strip()
+        if any(cells):
+            grid.append([cell.replace("|", "／").replace("\n", " ") for cell in cells])
+    if len(grid) < 2:
+        return "\n".join(" | ".join(cell for cell in row if cell) for row in grid)
+
+    header = grid[0]
+    body = grid[1:]
+    lines = ["| " + " | ".join(header) + " |",
+             "| " + " | ".join("---" for _ in header) + " |"]
+    lines.extend("| " + " | ".join(row) + " |" for row in body)
+    return "\n".join(lines)
+
+
+def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
+    """对裁剪出来的表格图做 OCR，带缓存。"""
+    if ocr is None or not image_path.exists():
+        return ""
+    cache = image_path.with_suffix(".ocr.json")
+    if cache.exists():
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            return str(data.get("table") or "")
+        except (OSError, ValueError):
+            pass
+    items: list[tuple[tuple[float, float, float, float], str, float]] = []
+    try:
+        with fitz.open(image_path) as image_doc:
+            page = image_doc[0]
+            if hasattr(ocr, "extract_items"):
+                items = ocr.extract_items(page, dpi=72)  # type: ignore[attr-defined]
+            else:
+                text, _confidence = ocr.extract(page, dpi=72)
+                items = [
+                    ((0.0, float(index * 10), 1000.0, float(index * 10 + 9)), line, 1.0)
+                    for index, line in enumerate(text.splitlines()) if line.strip()
+                ]
+    except (RuntimeError, OSError, ValueError):
+        items = []
+    table = _items_to_markdown_table(items)
+    if table:
+        try:
+            cache.write_text(json.dumps({"table": table}, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return table
+
+
 def _image_markdown_for(
     document: SourceDocument,
     page: fitz.Page,
     page_number: int,
     media_dir: Path,
     blocks: list[dict[str, Any]] | None = None,
+    ocr: OcrEngine | None = None,
 ) -> tuple[tuple[str, str], ...]:
     """把带“表X-Y”题注的图片裁出来，输出 Markdown 图片行。
 
@@ -129,6 +222,9 @@ def _image_markdown_for(
         relative = os.path.relpath(target, doc_dir).replace("\\", "/")
         alt = caption.replace("]", "）").strip()
         output.append(("image", f"![{alt}]({relative})"))
+        table = _ocr_table_markdown(target, ocr)
+        if table:
+            output.append(("table", table))
     return tuple(output)
 
 
@@ -458,7 +554,7 @@ class RapidOcrEngine:
             )
         return image
 
-    def extract(self, page: fitz.Page, dpi: int = 240) -> tuple[str, float]:
+    def _recognize(self, page: fitz.Page, dpi: int) -> list[Any]:
         if not self.available:
             raise RuntimeError("RapidOCR backend is unavailable")
         import numpy as np
@@ -481,8 +577,10 @@ class RapidOcrEngine:
                 f"RapidOCR failed on this page after downscaling: "
                 f"{type(last_error).__name__}: {last_error}"
             )
-        if not result:
-            return "", 0.0
+        return list(result or [])
+
+    def extract(self, page: fitz.Page, dpi: int = 240) -> tuple[str, float]:
+        result = self._recognize(page, dpi)
         lines: list[str] = []
         scores: list[float] = []
         for item in result:
@@ -497,6 +595,28 @@ class RapidOcrEngine:
         if not lines:
             return "", 0.0
         return "\n".join(lines), sum(scores) / len(scores)
+
+    def extract_items(
+        self,
+        page: fitz.Page,
+        dpi: int = 240,
+    ) -> list[tuple[tuple[float, float, float, float], str, float]]:
+        """返回带坐标的识别结果（用于表格重建）。"""
+        items: list[tuple[tuple[float, float, float, float], str, float]] = []
+        for item in self._recognize(page, dpi):
+            if len(item) < 3:
+                continue
+            box, text = item[0], str(item[1]).strip()
+            score = float(item[2])
+            if not text or score < self.min_confidence:
+                continue
+            try:
+                xs = [float(point[0]) for point in box]
+                ys = [float(point[1]) for point in box]
+            except (TypeError, ValueError, IndexError):
+                continue
+            items.append(((min(xs), min(ys), max(xs), max(ys)), text, score))
+        return items
 
 
 def select_ocr_engine(
@@ -742,7 +862,7 @@ class PdfExtractor:
                                 *build_pdf_segments(page, page_blocks),
                                 *(_image_markdown_for(
                                     document, page, index + 1, self.media_dir,
-                                    page_blocks)
+                                    page_blocks, self.ocr)
                                   if self.media_dir is not None else ()),
                             )
                             if method == "pymupdf"
@@ -772,7 +892,7 @@ class PdfExtractor:
             for segment_index, (kind, text) in enumerate(segments):
                 normalized = (
                     normalize_code_text(text)
-                    if kind == "code"
+                    if kind in {"code", "table"}
                     else normalize_text(text)
                 )
                 if not normalized:
@@ -780,6 +900,7 @@ class PdfExtractor:
                 kind_value = {
                     "code": ElementKind.CODE,
                     "image": ElementKind.IMAGE,
+                    "table": ElementKind.TABLE,
                 }.get(kind, ElementKind.PARAGRAPH)
                 elements.append(
                     ParsedElement(
