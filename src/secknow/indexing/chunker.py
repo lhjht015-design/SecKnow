@@ -7,14 +7,24 @@ from dataclasses import dataclass
 import numpy as np
 
 from secknow.domain.ids import (
+    balance_fences,
     normalize_code_text,
     normalize_text,
     sha256_bytes,
     stable_id,
 )
-from secknow.domain.models import Chunk, Citation, ElementKind, ParsedElement, SourceDocument
+from secknow.domain.models import (
+    Chunk,
+    Citation,
+    DocumentFormat,
+    ElementKind,
+    ParsedElement,
+    SourceDocument,
+)
 
-SENTENCE_BOUNDARY = re.compile(r"(?<=[。！？!?；;])\s*|(?<=\.)\s+(?=[A-Z0-9])|\n{2,}")
+SENTENCE_BOUNDARY = re.compile(
+    r"(?<=[。！？；])\s*|(?<=[!?;])(?=\s|$)|\n{2,}|(?<=\.)\s+(?=[A-Z0-9])"
+)
 SENTENCE_END = re.compile(r"[。！？!?；;\n]")
 CLAUSE_END = re.compile(r"[，、,：:]")
 TOKEN_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_./:+-]*|[㐀-鿿]|\d+(?:\.\d+)*")
@@ -104,6 +114,9 @@ class SemanticChunker:
         chunks: list[Chunk] = []
         for order, group in enumerate(grouped):
             text = self._join_units(group)
+            if document.format == DocumentFormat.MARKDOWN:
+                # 只对 Markdown 补围栏；.py 等源码里的 ``` 可能是字面内容。
+                text = balance_fences(text)
             section_path = group[0].section
             source_elements = tuple(
                 {element.element_id: element

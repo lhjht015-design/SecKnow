@@ -21,6 +21,7 @@ ROOT = Path(r"D:\SecKnow")
 sys.path.insert(0, str(ROOT / "src"))
 
 from secknow.config import get_settings
+from secknow.domain.ids import line_fence_open
 from secknow.domain.models import DocumentFormat
 from secknow.indexing.chunker import SemanticChunker
 from secknow.ingestion.discovery import DocumentDiscovery
@@ -78,7 +79,7 @@ def main() -> None:
             code = [c for c in chunks if "```" in c.text]
             indented = sum(1 for c in code if any(
                 line.startswith((" ", "\t")) for line in c.text.splitlines()))
-            unbalanced = sum(1 for c in chunks if c.text.count("```") % 2)
+            unbalanced = sum(1 for c in chunks if line_fence_open(c.text))
             print(f"  {document.relative_path}: elements={len(elements)} "
                   f"chunks={len(chunks)} code_chunks={len(code)} "
                   f"indented={indented} unbalanced={unbalanced}")

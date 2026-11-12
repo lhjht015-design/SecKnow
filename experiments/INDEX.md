@@ -64,12 +64,19 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
 改为跨元素按句打包后，全库硬句中断尾 61→11，块 16362→15395。
 证据卡可直接“载入下一块”（`after-sentence.jpg`）。详见 `laws/LAW-0032.md`。
+
+**后续（同日）— 未闭合围栏**：按渲染器的行首判定，全库有 14 个块在块尾仍处于
+围栏内（子串统计只有 7 个）。根因是解析器只认顶格围栏、源文件还有行内闭合，
+`图片隐写.md` 里 `~~~python` + ` ```python ` 的重复开围栏更让整篇奇偶翻转。
+解析前对整篇做围栏规范化 + 切块层对 Markdown 兜底后，行首判定未闭合 **14→0**；
+剩余 4 个 ``` 奇数计数都是字面内容。顺带修了 ASCII `!` 切句拆散 `![图片](url)`
+的问题，块内合法图片引用 **0→1048**。证据：`after-fence.jpg`。详见 `laws/LAW-0033.md`。
 
 ---
 

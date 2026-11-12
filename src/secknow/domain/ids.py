@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 NAMESPACE = uuid.UUID("f7e26554-1cad-42af-b37d-7bc4b01275b1")
+FENCE_LINE = re.compile(r"^(\s*)(```+|~~~+)([^`~]*)$")
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -29,6 +30,68 @@ def normalize_text(value: str) -> str:
     value = re.sub(r"[ \t]+", " ", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     return value.strip()
+
+
+def line_fence_open(value: str) -> bool:
+    """块尾是否仍处于未闭合围栏内。
+
+    判定与前端 `splitEvidence` 一致：一行去掉行首空白后以 ``` 开头即为围栏，
+    因此行内出现的 ```（如“页码。 ```”）不算围栏。
+    """
+    in_fence = False
+    for line in value.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+    return in_fence
+
+
+def balance_fences(value: str) -> str:
+    """把代码围栏规范成成对的开/闭行。
+
+    - 同时识别 ``` 与 ~~~；输出统一成 ```；
+    - 围栏允许缩进（Markdown 列表里的代码块常缩进 4 个空格）；
+    - 开围栏后紧跟的重复开围栏（作者/生成器写成 `~~~python` + ` ```python `）
+      直接丢弃，避免整篇围栏奇偶翻转；
+    - 行内闭合（代码行末尾直接跟 ```）拆成代码行 + 独立的闭合围栏；
+    - 文本结束时仍未闭合，补一行闭合围栏。
+    """
+    output: list[str] = []
+    open_marker = ""
+    open_indent = ""
+    seen_content = False
+    for line in value.splitlines():
+        match = FENCE_LINE.match(line)
+        if not open_marker:
+            if match:
+                open_indent = match.group(1)
+                open_marker = match.group(2)
+                output.append(f"{open_indent}```{match.group(3).strip()}")
+                seen_content = False
+            else:
+                output.append(line)
+            continue
+        if match and not seen_content and match.group(3).strip():
+            # 开围栏后的重复开围栏，丢掉第二个
+            continue
+        if match and not match.group(3).strip():
+            output.append(f"{open_indent}```")
+            open_marker = ""
+            continue
+        stripped = line.strip()
+        if "```" in stripped and stripped.endswith("```"):
+            before = line.rstrip()[:-3].rstrip()
+            if before.strip():
+                output.append(before)
+                seen_content = True
+            output.append(f"{open_indent}```")
+            open_marker = ""
+            continue
+        if stripped:
+            seen_content = True
+        output.append(line)
+    if open_marker:
+        output.append(f"{open_indent}```")
+    return "\n".join(output)
 
 
 def normalize_code_text(value: str) -> str:

@@ -6,11 +6,11 @@ from pathlib import Path
 from charset_normalizer import from_bytes
 from docx import Document as DocxDocument
 
-from secknow.domain.ids import normalize_code_text, normalize_text, stable_id
+from secknow.domain.ids import balance_fences, normalize_code_text, normalize_text, stable_id
 from secknow.domain.models import ElementKind, ParsedElement, SourceDocument
 
 HEADING = re.compile(r"^(#{1,6})\s+(.+)$")
-FENCE = re.compile(r"^```([A-Za-z0-9_+.-]*)\s*$")
+FENCE = re.compile(r"^\s*```([A-Za-z0-9_+.-]*)\s*$")
 
 
 def decode_text(path: Path) -> str:
@@ -40,7 +40,7 @@ def parse_plain(document: SourceDocument) -> tuple[ParsedElement, ...]:
 
 
 def parse_markdown(document: SourceDocument) -> tuple[ParsedElement, ...]:
-    lines = decode_text(Path(document.absolute_path)).splitlines()
+    lines = balance_fences(decode_text(Path(document.absolute_path))).splitlines()
     elements: list[ParsedElement] = []
     section_stack: list[str] = []
     buffer: list[str] = []
@@ -50,7 +50,8 @@ def parse_markdown(document: SourceDocument) -> tuple[ParsedElement, ...]:
     def flush() -> None:
         nonlocal buffer
         joined = "\n".join(buffer)
-        text = (normalize_code_text(joined) if buffer_kind == ElementKind.CODE
+        text = (normalize_code_text(balance_fences(joined))
+                if buffer_kind == ElementKind.CODE
                 else normalize_text(joined))
         if text:
             order = len(elements)
