@@ -92,7 +92,10 @@
 .rank-badge { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #cfe4e6; border-radius: 8px; color: #138b94; background: #f0f9f9; font-size: 10px; font-weight: 750; }
 .citation-heading { min-width: 0; flex: 1; }
 .citation-heading strong { display: block; overflow: hidden; color: #32444e; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.citation-heading span { display: flex; align-items: center; gap: 5px; margin-top: 5px; overflow: hidden; color: #8b989f; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.citation-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; overflow: hidden; color: #8b989f; font-size: 9px; white-space: nowrap; }
+.citation-path { min-width: 0; overflow: hidden; color: #7d8d97; font-family: "Cascadia Code", Consolas, "Courier New", monospace; text-overflow: ellipsis; }
+.citation-location { flex: 0 0 auto; overflow: hidden; color: #94a1a8; text-overflow: ellipsis; }
+.meta-separator { flex: 0 0 auto; color: #b9c4ca; }
 .score-block { text-align: right; }
 .score-block span { display: block; color: #a0abb1; font-size: 8px; }
 .score-block strong { display: block; margin-top: 3px; color: #257d84; font-size: 12px; }

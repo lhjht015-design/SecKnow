@@ -823,6 +823,7 @@ function EvidenceCard({
   const [graph, setGraph] = useState<GraphResponse | null>(null)
   const [graphError, setGraphError] = useState<string | null>(null)
   const citation = hit.chunk.citation
+  const location = formatLocation(citation)
   const channels = Object.entries(hit.channels).sort((left, right) => right[1] - left[1])
   const previewUrl = pagePreviewUrl(citation)
   const terms = useMemo(() => queryTerms(query), [query])
@@ -845,7 +846,18 @@ function EvidenceCard({
         <div className="rank-badge">{String(hit.rank).padStart(2, '0')}</div>
         <div className="citation-heading">
           <strong>{citation.title}</strong>
-          <span><BookOpen size={13} /> {formatLocation(citation)}</span>
+          <span className="citation-meta">
+            <BookOpen size={13} />
+            <span className="citation-path" title={citation.relative_path ?? undefined}>
+              {citation.relative_path ?? '文档位置未标注'}
+            </span>
+            {location && location !== citation.relative_path && (
+              <>
+                <span className="meta-separator">·</span>
+                <span className="citation-location">{location}</span>
+              </>
+            )}
+          </span>
         </div>
         <div className="score-block">
           <span>排序分</span>

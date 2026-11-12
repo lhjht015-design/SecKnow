@@ -47,9 +47,10 @@
 - 散文与代码按内容切分；PDF 软换行合并；代码用等宽块保留行结构。
 - 解析 Markdown 围栏、表格、标题、加粗、行内代码与链接。
 - 查询词高亮；默认折叠；字号 11→12.5px；长串允许断行。
+- 副标题显示相对路径（等宽字体，过长省略），页码/行号保留。
 - 修复前端 `capabilities[key]` 的 TS 索引错误（此前 dist 是 8 月旧构建）。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path}.jpg`。
 
 ---
 
