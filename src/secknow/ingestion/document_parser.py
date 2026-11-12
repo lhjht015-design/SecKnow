@@ -351,25 +351,195 @@ def _strip_table_rules(image_path: Path) -> Any:  # noqa: ANN401 - PIL.Image
     return Image.fromarray(clean).convert("RGB")
 
 
+CODE_TERMS = {
+    term.lower()
+    for term in (
+        "mov add sub and or xor not neg inc dec lea call ret jmp je jne jg jl "
+        "jge jle ja jb jbe jae cmp test push pop shl shr sar sal imul mul idiv "
+        "div nop int syscall leave enter xchg movzx movsx sete setne setg setl "
+        "loop rep stos lods scas cmps cld std fld fst fadd fsub fmul fdiv "
+        "getmodulehandle loadlibrary getprocaddress calloc malloc free realloc "
+        "printf puts scanf strlen strcpy strcat memset memcpy read write open "
+        "close socket connect send recv execve system main argc argv char int "
+        "void struct return if else for while sizeof unsigned signed long "
+        "short float double const static extern typedef union enum class "
+        "public private protected virtual new delete this nullptr null true false"
+    ).split()
+}
+REGISTER_TERMS = {
+    term.lower()
+    for term in (
+        "rax rbx rcx rdx rsi rdi rbp rsp rip eax ebx ecx edx esi edi ebp esp "
+        "r8 r9 r10 r11 r12 r13 r14 r15 ax bx cx dx al bl cl dl ah bh ch dh "
+        "xmm0 xmm1 xmm2 xmm3 xmm4 xmm5 xmm6 xmm7"
+    ).split()
+}
+CODE_TERMS |= REGISTER_TERMS
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+ROTATIONS = {ALPHABET[index:] + ALPHABET[:index] for index in range(26)}
+
+
+def _table_quality(table: str) -> float:
+    """用领域词表与字母表结构给 OCR 候选打分，选最优的一次识别。"""
+    if not table:
+        return float("-inf")
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9_]*", table)
+    code_hits = sum(1 for token in tokens if token.lower() in CODE_TERMS)
+    alphabet_hits = 0
+    for cell in re.findall(r"\|([^|\n]+)\|", table):
+        text = cell.strip()
+        if text in ROTATIONS:
+            alphabet_hits += 1
+    rows = sum(1 for line in table.splitlines() if line.startswith("|"))
+    return code_hits * 3.0 + alphabet_hits * 3.0 + rows * 0.2
+
+
+def _repair_instruction_table(table: str) -> str:
+    """用“指令示例”列回填“操作码”列：同一行的示例助记符就是操作码。
+
+    合并单元格会让操作码列为空或乱码；示例列里的第一条指令是可靠来源。
+    """
+    lines = [
+        line for line in table.splitlines()
+        if line.strip().startswith("|")
+        and not re.match(r"^\s*\|[\s:|-]+\|\s*$", line)
+    ]
+    if len(lines) < 2:
+        return table
+    rows = [
+        [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for line in lines
+    ]
+    header = rows[0]
+    opcode_col = next(
+        (index for index, cell in enumerate(header)
+         if "操作码" in cell or cell.lower() in {"opcode", "code"}),
+        None,
+    )
+    example_col = next(
+        (index for index, cell in enumerate(header)
+         if "示例" in cell or "example" in cell.lower()),
+        None,
+    )
+    if opcode_col is None or example_col is None:
+        return table
+    current: str | None = None
+    changed = False
+    for row in rows[1:]:
+        if example_col < len(row):
+            match = re.match(r"([A-Za-z]{2,8})\b", row[example_col])
+            if match and match.group(1).lower() in CODE_TERMS:
+                current = match.group(1)
+        if opcode_col >= len(row):
+            continue
+        cell = row[opcode_col]
+        if cell and cell.lower() in CODE_TERMS:
+            current = cell
+        elif current and not re.search(r"[一-鿿]", cell):
+            if not cell or cell.lower() not in CODE_TERMS:
+                row[opcode_col] = current
+                changed = True
+    if not changed:
+        return table
+    rebuilt = [
+        "| " + " | ".join(rows[0]) + " |",
+        "| " + " | ".join("---" for _ in rows[0]) + " |",
+    ]
+    rebuilt.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+    return "\n".join(rebuilt)
+
+
+def _normalize_shortcut_cells(table: str) -> str:
+    """快捷键/命令列的常见 OCR 变体规范化：Im→lm，单字母转小写。"""
+    lines = [
+        line for line in table.splitlines()
+        if line.strip().startswith("|")
+        and not re.match(r"^\s*\|[\s:|-]+\|\s*$", line)
+    ]
+    if len(lines) < 2:
+        return table
+    rows = [
+        [cell.strip() for cell in line.strip().strip("|").split("|")]
+        for line in lines
+    ]
+    header = rows[0]
+    columns = [
+        index for index, cell in enumerate(header)
+        if any(key in cell.lower() for key in ("快捷键", "命令", "key", "shortcut"))
+    ]
+    if not columns:
+        return table
+    changed = False
+    for row in rows[1:]:
+        for index in columns:
+            if index >= len(row):
+                continue
+            cell = row[index]
+            if not cell:
+                continue
+            fixed = cell
+            if re.fullmatch(r"I[a-z]{1,3}", fixed):
+                fixed = "l" + fixed[1:]
+            if re.fullmatch(r"[A-Z]", fixed):
+                fixed = fixed.lower()
+            if fixed != cell:
+                row[index] = fixed
+                changed = True
+    if not changed:
+        return table
+    rebuilt = [
+        "| " + " | ".join(rows[0]) + " |",
+        "| " + " | ".join("---" for _ in rows[0]) + " |",
+    ]
+    rebuilt.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+    return "\n".join(rebuilt)
+
+
 def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
-    """对裁剪出来的表格图做 OCR，带缓存。"""
+    """对裁剪出来的表格图做 OCR，带缓存。
+
+    同一张图跑两档（原尺寸 / 放大）识别，用领域词表与字母表结构选最优结果：
+    小字号表格放大后更准，字母表在放大后可能丢行。
+    """
     if ocr is None or not image_path.exists():
         return ""
-    cache = image_path.with_suffix(".ocr-v3.json")
+    cache = image_path.with_suffix(".ocr-v5.json")
     if cache.exists():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
-            return str(data.get("table") or "")
+            cached = str(data.get("table") or "")
+            if cached:
+                return _normalize_shortcut_cells(_repair_instruction_table(cached))
+            return ""
         except (OSError, ValueError):
             pass
-    items: list[tuple[tuple[float, float, float, float], str, float]] = []
-    from_image = False
+
+    best_table = ""
+    best_score = float("-inf")
     try:
-        image = _strip_table_rules(image_path)
-        if image is not None and hasattr(ocr, "extract_items_from_image"):
-            items = ocr.extract_items_from_image(image)  # type: ignore[attr-defined]
-            from_image = True
-        else:
+        from PIL import Image
+
+        base = _strip_table_rules(image_path)
+    except ImportError:
+        base = None
+    if base is not None and hasattr(ocr, "extract_items_from_image"):
+        max_factor = max(1, min(3, 3000 // max(1, base.width), 3000 // max(1, base.height)))
+        factors = (1, max_factor) if max_factor > 1 else (1,)
+        for factor in factors:
+            image = base if factor == 1 else base.resize(
+                (base.width * factor, base.height * factor), Image.LANCZOS)
+            try:
+                items = ocr.extract_items_from_image(image)  # type: ignore[attr-defined]
+            except (RuntimeError, OSError, ValueError):
+                continue
+            bounds = _table_column_bounds(image_path, 0.0, 1.0 / factor)
+            table = _items_to_markdown_table(items, bounds)
+            score = _table_quality(table)
+            if score > best_score:
+                best_score = score
+                best_table = table
+    else:
+        try:
             with fitz.open(image_path) as image_doc:
                 page = image_doc[0]
                 if hasattr(ocr, "extract_items"):
@@ -380,16 +550,18 @@ def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
                         ((0.0, float(index * 10), 1000.0, float(index * 10 + 9)), line, 1.0)
                         for index, line in enumerate(text.splitlines()) if line.strip()
                     ]
-    except (RuntimeError, OSError, ValueError):
-        items = []
-    bounds = _table_column_bounds(image_path, 0.0, 1.0) if from_image else None
-    table = _items_to_markdown_table(items, bounds)
-    if table:
+            best_table = _items_to_markdown_table(items)
+        except (RuntimeError, OSError, ValueError):
+            best_table = ""
+
+    if best_table:
+        best_table = _normalize_shortcut_cells(_repair_instruction_table(best_table))
         try:
-            cache.write_text(json.dumps({"table": table}, ensure_ascii=False), encoding="utf-8")
+            cache.write_text(json.dumps({"table": best_table}, ensure_ascii=False),
+                             encoding="utf-8")
         except OSError:
             pass
-    return table
+    return best_table
 
 
 def _scan_page_table(
@@ -505,7 +677,8 @@ def _scan_page_table(
         alt = caption[1].replace("]", "）").strip()
         image_line = f"![{alt}]({relative})"
         bounds = _table_column_bounds(target, rect.x0, 2.0)
-        table = _items_to_markdown_table(table_items, bounds)
+        table = _normalize_shortcut_cells(
+            _repair_instruction_table(_items_to_markdown_table(table_items, bounds)))
         if table:
             output.append(("table", f"{image_line}\n\n{table}"))
         else:

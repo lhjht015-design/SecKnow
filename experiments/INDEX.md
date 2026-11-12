@@ -64,7 +64,7 @@
 文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
 API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column,after-borderless,after-table-view,after-ocr-fix}.jpg`。
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image,after-sentence,after-fence,after-big,after-pdf-indent,after-pdf-table,after-table-ocr,after-scan-table,after-column,after-borderless,after-table-view,after-ocr-fix,after-ocr-correction}.jpg`。
 
 **后续（同日）— 句中断块**：先证伪旧指标（1515 个“断块”里多数是 `---`/`;`/`：`），
 真正的逗号尾只有 61 个且全在 PDF；A/B 证明换切句器 0 变化，根因是“按元素组装块”。
@@ -123,6 +123,12 @@ API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔�
 只有一个框。OCR 前抹掉表格线、改用原图像素坐标、整行按括号/字母前缀拆格后，
 两张表分别重建为 4×2 和 1×3；全库 **207 张表全部是管道表**，只有图片的表归零。
 证据：`after-ocr-fix.jpg`。详见 `laws/LAW-0041.md`。
+
+**后续（同日）— OCR 错字**：1× 识别会把 `mov` 读成 `AOII`、`add` 读成 `ppe`；
+3× 放大能修正指令行，但字母表会丢行。现在每张表跑 1×/3× 两档，按领域词表、
+字母表旋转与行数选优；指令表再用“指令示例”列的助记符回填“操作码”列。
+p413 指令表的 12 个操作码全部正确，维吉尼亚表保持 4 行。证据：
+`after-ocr-correction.jpg`。详见 `laws/LAW-0042.md`。
 
 ---
 
