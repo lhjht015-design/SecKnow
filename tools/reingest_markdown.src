@@ -1,0 +1,121 @@
+"""Re-ingest markdown / text / python documents with code-safe normalization.
+
+Only touches `book/Des-CTF-Knowledge/**` (no PDF re-OCR). Chunk IDs change, so
+the affected documents' elements/chunks are replaced and the FTS index is
+rebuilt by MetadataStore.replace_chunks. Run v002 with `--index-only --no-encode`
+afterwards to rebuild TF-IDF and the graph.
+
+Usage:
+    python tools/reingest_markdown.src --dry-run --limit 5
+    python tools/reingest_markdown.src
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(r"D:\SecKnow")
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.config import get_settings
+from secknow.domain.models import DocumentFormat
+from secknow.indexing.chunker import SemanticChunker
+from secknow.ingestion.discovery import DocumentDiscovery
+from secknow.ingestion.text_parser import parse_markdown, parse_plain
+from secknow.stores.metadata import MetadataStore
+
+PREFIX = "Des-CTF-Knowledge/"
+FORMATS = {DocumentFormat.MARKDOWN, DocumentFormat.TEXT, DocumentFormat.PYTHON}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--limit", type=int, default=None)
+    args = parser.parse_args()
+
+    settings = get_settings()
+    store = MetadataStore(settings.database_path)
+    store.initialize()
+    chunker = SemanticChunker(settings.chunk_size, settings.chunk_overlap)
+    discovery = DocumentDiscovery(ROOT / "book")
+    documents = [
+        document for document in discovery.discover()
+        if document.relative_path.startswith(PREFIX)
+        and not document.relative_path.startswith(PREFIX + ".claude/")
+        and document.format in FORMATS
+    ]
+    if args.limit:
+        documents = documents[: args.limit]
+    print(f"documents to re-ingest: {len(documents)}")
+
+    # 防重复：源 id 必须与库中同相对路径的文档一致（LAW-0005）
+    with store.connect() as db:
+        rows = db.execute(
+            "SELECT relative_path, source_id, version_id FROM documents WHERE active=1"
+        ).fetchall()
+    known = {str(row["relative_path"]): (str(row["source_id"]), str(row["version_id"]))
+             for row in rows}
+    mismatched = [
+        document.relative_path for document in documents
+        if document.relative_path in known
+        and known[document.relative_path][0] != document.source_id
+    ]
+    if mismatched:
+        raise SystemExit(f"source_id mismatch, abort: {mismatched[:5]}")
+    matched = sum(1 for document in documents if document.relative_path in known)
+    print(f"matched existing documents: {matched}/{len(documents)}")
+
+    if args.dry_run:
+        for document in documents[:5]:
+            elements = (parse_markdown(document)
+                        if document.format is DocumentFormat.MARKDOWN
+                        else parse_plain(document))
+            chunks = chunker.chunk(document, elements, None)
+            code = [c for c in chunks if "```" in c.text]
+            indented = sum(1 for c in code if any(
+                line.startswith((" ", "\t")) for line in c.text.splitlines()))
+            unbalanced = sum(1 for c in chunks if c.text.count("```") % 2)
+            print(f"  {document.relative_path}: elements={len(elements)} "
+                  f"chunks={len(chunks)} code_chunks={len(code)} "
+                  f"indented={indented} unbalanced={unbalanced}")
+        return
+
+    started = time.perf_counter()
+    total_chunks = 0
+    failures: list[tuple[str, str]] = []
+    for index, document in enumerate(documents, 1):
+        try:
+            elements = (parse_markdown(document)
+                        if document.format is DocumentFormat.MARKDOWN
+                        else parse_plain(document))
+            if not elements:
+                failures.append((document.relative_path, "no elements"))
+                continue
+            chunks = chunker.chunk(document, elements, None)
+            if not chunks:
+                failures.append((document.relative_path, "no chunks"))
+                continue
+            store.upsert_document(document, active=False)
+            store.replace_elements(document.source_id, document.version_id, elements)
+            store.replace_chunks(document.source_id, document.version_id, chunks)
+            store.activate_version(document.source_id, document.version_id)
+            total_chunks += len(chunks)
+        except Exception as error:  # noqa: BLE001
+            failures.append((document.relative_path, repr(error)))
+        if index % 100 == 0:
+            print(f"  {index}/{len(documents)} chunks={total_chunks} "
+                  f"failures={len(failures)}", flush=True)
+
+    elapsed = time.perf_counter() - started
+    print(f"done: documents={len(documents)} chunks={total_chunks} "
+          f"failures={len(failures)} elapsed={elapsed:.1f}s")
+    for path, reason in failures[:10]:
+        print(f"  FAIL {path}: {reason}")
+
+
+if __name__ == "__main__":
+    main()

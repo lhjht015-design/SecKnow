@@ -50,7 +50,21 @@
 - 副标题显示相对路径（等宽字体，过长省略），页码/行号保留。
 - 修复前端 `capabilities[key]` 的 TS 索引错误（此前 dist 是 8 月旧构建）。
 
-**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path}.jpg`。
+**分块审计（2026-11-12，16361 个活跃块）**
+
+| 指标 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 含两个空格以上缩进的块 | 0 | **1548** |
+| 围栏不闭合 | 51 / 2978 | **5 / 2986** |
+| 句中断块（以 , : ( 结尾） | 1516 | 1515（未解决） |
+| 引用图片的块 | 482（外链 939、本地 45） | 本地图片可渲染 |
+
+根因在入库：`normalize_text` 压缩空白、`_hard_split` 切断围栏。
+已新增 `normalize_code_text` 与 `_split_code`，重入库 1347 个 markdown/text/py
+文档（10080 块，107 s）并重建 TF-IDF/图（85.7 s）。
+API `/api/files` 放开语料内栅格图片；前端补全列表/引用/分隔线/围栏/表格/图片渲染。
+
+**证据**：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta,after-path,after-code,after-image}.jpg`。
 
 ---
 

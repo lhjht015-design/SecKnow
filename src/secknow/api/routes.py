@@ -384,8 +384,9 @@ def save_llm_config(
 @router.get("/files/{relative_path:path}", tags=["documents"])
 def source_file(relative_path: str, settings: SettingsDependency) -> FileResponse:
     path = resolve_corpus_path(settings, relative_path, require_file=True)
-    if path.suffix.casefold() != ".pdf":
-        raise HTTPException(status_code=415, detail="only PDF preview is supported")
+    allowed = {".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+    if path.suffix.casefold() not in allowed:
+        raise HTTPException(status_code=415, detail="only PDF and raster image preview is supported")
     return FileResponse(path, media_type=media_type_for(path), filename=path.name)
 
 

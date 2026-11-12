@@ -6,7 +6,7 @@ from pathlib import Path
 from charset_normalizer import from_bytes
 from docx import Document as DocxDocument
 
-from secknow.domain.ids import normalize_text, stable_id
+from secknow.domain.ids import normalize_code_text, normalize_text, stable_id
 from secknow.domain.models import ElementKind, ParsedElement, SourceDocument
 
 HEADING = re.compile(r"^(#{1,6})\s+(.+)$")
@@ -22,7 +22,8 @@ def decode_text(path: Path) -> str:
 
 
 def parse_plain(document: SourceDocument) -> tuple[ParsedElement, ...]:
-    text = normalize_text(decode_text(Path(document.absolute_path)))
+    raw = decode_text(Path(document.absolute_path))
+    text = normalize_code_text(raw) if document.format.value == "py" else normalize_text(raw)
     if not text:
         return ()
     return (
@@ -48,7 +49,9 @@ def parse_markdown(document: SourceDocument) -> tuple[ParsedElement, ...]:
 
     def flush() -> None:
         nonlocal buffer
-        text = normalize_text("\n".join(buffer))
+        joined = "\n".join(buffer)
+        text = (normalize_code_text(joined) if buffer_kind == ElementKind.CODE
+                else normalize_text(joined))
         if text:
             order = len(elements)
             elements.append(

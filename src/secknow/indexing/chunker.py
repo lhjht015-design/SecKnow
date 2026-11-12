@@ -5,7 +5,12 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 
-from secknow.domain.ids import normalize_text, sha256_bytes, stable_id
+from secknow.domain.ids import (
+    normalize_code_text,
+    normalize_text,
+    sha256_bytes,
+    stable_id,
+)
 from secknow.domain.models import Chunk, Citation, ElementKind, ParsedElement, SourceDocument
 
 SENTENCE_BOUNDARY = re.compile(r"(?<=[。！？!?；;])\s*|(?<=\.)\s+(?=[A-Z0-9])|\n{2,}")
@@ -39,12 +44,18 @@ class SemanticChunker:
                 continue
             if not element.text.strip():
                 continue
-            if element.kind in {ElementKind.CODE, ElementKind.TABLE}:
+            if element.kind == ElementKind.CODE:
+                pieces = self._split_code(element.text)
+            elif element.kind == ElementKind.TABLE:
                 pieces = self._hard_split(element.text)
             else:
                 pieces = self._semantic_pieces(element.text, embed)
             for piece in pieces:
-                normalized = normalize_text(piece)
+                normalized = (
+                    normalize_code_text(piece)
+                    if element.kind in {ElementKind.CODE, ElementKind.TABLE}
+                    else normalize_text(piece)
+                )
                 if normalized:
                     drafts.append((normalized, element.section_path, (element,)))
 
@@ -183,6 +194,37 @@ class SemanticChunker:
         if current:
             packed.append(" ".join(current))
         return packed
+
+    def _split_code(self, text: str) -> list[str]:
+        """代码块按行切分；若带围栏，每一片都补上围栏，避免块边界切断代码。"""
+        lines = text.splitlines()
+        if len(lines) >= 2:
+            opening = lines[0]
+            match = re.match(r"^(```+|~~~+)", opening.strip())
+            if match and lines[-1].strip().startswith(match.group(1)):
+                closing = lines[-1]
+                inner = lines[1:-1]
+                return [
+                    f"{opening}\n{piece}\n{closing}"
+                    for piece in self._pack_lines(inner)
+                ]
+        return self._hard_split(text)
+
+    def _pack_lines(self, lines: Sequence[str]) -> list[str]:
+        pieces: list[str] = []
+        current: list[str] = []
+        count = 0
+        for line in lines:
+            line_count = max(1, self.token_count(line))
+            if current and count + line_count > self.chunk_size:
+                pieces.append("\n".join(current))
+                current = []
+                count = 0
+            current.append(line)
+            count += line_count
+        if current:
+            pieces.append("\n".join(current))
+        return pieces or [""]
 
     def _hard_split(self, text: str) -> list[str]:
         tokens = TOKEN_PATTERN.findall(text)

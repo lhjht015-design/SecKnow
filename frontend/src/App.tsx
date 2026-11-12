@@ -649,11 +649,22 @@ const CODE_HINT =
 
 const CJK_HINT = /[一-鿿]/
 const FENCE_HINT = /^```/
-const LIST_HINT = /^\s*(?:\d+[.)]|[-*+])\s+/
 const HEADING_HINT = /^\s*#{1,6}\s+/
 const TABLE_HINT = /^\s*\|.*\|\s*$/
 
-type EvidenceBlock = { kind: 'prose' | 'code' | 'heading'; text: string }
+type EvidenceBlock =
+  | { kind: 'prose'; text: string }
+  | { kind: 'code'; text: string }
+  | { kind: 'heading'; text: string }
+  | { kind: 'quote'; text: string }
+  | { kind: 'list'; text: string; ordered: boolean }
+  | { kind: 'hr' }
+  | { kind: 'image'; alt: string; url: string }
+
+const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$/
+const HR_LINE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/
+const QUOTE_LINE = /^\s*>\s?(.*)$/
+const LIST_ITEM = /^\s*(?:(\d+)[.)]|[-*+])\s+(.+)$/
 
 function splitEvidence(text: string): EvidenceBlock[] {
   const lines = text.replace(/\r\n/g, '\n').split('\n')
@@ -696,16 +707,45 @@ function splitEvidence(text: string): EvidenceBlock[] {
       else code.push('')
       continue
     }
+    const image = IMAGE_LINE.exec(line)
+    if (image) {
+      flushProse()
+      flushCode()
+      blocks.push({ kind: 'image', alt: image[1] ?? '', url: image[2] ?? '' })
+      continue
+    }
+    if (HR_LINE.test(line)) {
+      flushProse()
+      flushCode()
+      blocks.push({ kind: 'hr' })
+      continue
+    }
+    const quote = QUOTE_LINE.exec(line)
+    if (quote) {
+      flushProse()
+      flushCode()
+      const last = blocks[blocks.length - 1]
+      if (last && last.kind === 'quote') last.text += `\n${quote[1] ?? ''}`
+      else blocks.push({ kind: 'quote', text: quote[1] ?? '' })
+      continue
+    }
+    const item = LIST_ITEM.exec(line)
+    if (item) {
+      flushProse()
+      flushCode()
+      const ordered = item[1] !== undefined
+      const last = blocks[blocks.length - 1]
+      if (last && last.kind === 'list' && last.ordered === ordered) {
+        last.text += `\n${(item[2] ?? '').trim()}`
+      } else {
+        blocks.push({ kind: 'list', text: (item[2] ?? '').trim(), ordered })
+      }
+      continue
+    }
     if (HEADING_HINT.test(line)) {
       flushProse()
       flushCode()
       blocks.push({ kind: 'heading', text: line.replace(HEADING_HINT, '') })
-      continue
-    }
-    if (LIST_HINT.test(line)) {
-      flushProse()
-      flushCode()
-      blocks.push({ kind: 'prose', text: line.trim() })
       continue
     }
     if (TABLE_HINT.test(line)) {
@@ -782,27 +822,102 @@ function renderInline(text: string, terms: string[]): ReactNode {
   )
 }
 
+function resolveImageUrl(citation: Citation, url: string): string | null {
+  if (/^(?:https?:)?\/\//i.test(url) || url.startsWith('data:')) return null
+  const docPath = citation.relative_path
+  if (!docPath) return null
+  const normalized: string[] = []
+  for (const raw of [...docPath.split('/').slice(0, -1), ...url.split('/')]) {
+    const part = raw.trim()
+    if (!part || part === '.') continue
+    if (part === '..') {
+      normalized.pop()
+      continue
+    }
+    normalized.push(part)
+  }
+  if (!normalized.length) return null
+  const encoded = normalized
+    .map((part) => {
+      try {
+        return encodeURIComponent(decodeURIComponent(part))
+      } catch {
+        return encodeURIComponent(part)
+      }
+    })
+    .join('/')
+  return `/api/files/${encoded}`
+}
+
+function EvidenceImage({ block, citation }: {
+  block: Extract<EvidenceBlock, { kind: 'image' }>
+  citation: Citation
+}) {
+  const src = resolveImageUrl(citation, block.url)
+  if (!src) {
+    return (
+      <p className="evidence-image-remote">
+        外部图片（离线不可用）：{block.alt || block.url}
+      </p>
+    )
+  }
+  return (
+    <figure className="evidence-figure">
+      <img src={src} alt={block.alt} loading="lazy" />
+      {block.alt && <figcaption>{block.alt}</figcaption>}
+    </figure>
+  )
+}
+
 function EvidenceText({
   text,
   expanded,
   terms,
+  citation,
 }: {
   text: string
   expanded: boolean
   terms: string[]
+  citation: Citation
 }) {
   const blocks = useMemo(() => splitEvidence(text), [text])
   return (
     <div className={expanded ? 'evidence-body' : 'evidence-body collapsed'}>
-      {blocks.map((block, index) =>
-        block.kind === 'code' ? (
-          <pre key={index} className="evidence-code">{highlightTerms(block.text, terms)}</pre>
-        ) : block.kind === 'heading' ? (
-          <p key={index} className="evidence-heading">{renderInline(block.text, terms)}</p>
-        ) : (
-          <p key={index}>{renderInline(block.text, terms)}</p>
-        ),
-      )}
+      {blocks.map((block, index) => {
+        switch (block.kind) {
+          case 'code':
+            return (
+              <pre key={index} className="evidence-code">
+                {highlightTerms(block.text, terms)}
+              </pre>
+            )
+          case 'heading':
+            return <p key={index} className="evidence-heading">{renderInline(block.text, terms)}</p>
+          case 'quote': {
+            const quoteText = block.text
+              .split('\n')
+              .filter((line) => !/^\s*```/.test(line))
+              .join('\n')
+            return <blockquote key={index}>{renderInline(quoteText, terms)}</blockquote>
+          }
+          case 'list': {
+            const items = block.text.split('\n').map((item, itemIndex) => (
+              <li key={itemIndex}>{renderInline(item, terms)}</li>
+            ))
+            return block.ordered ? (
+              <ol key={index} className="evidence-list">{items}</ol>
+            ) : (
+              <ul key={index} className="evidence-list">{items}</ul>
+            )
+          }
+          case 'hr':
+            return <hr key={index} className="evidence-hr" />
+          case 'image':
+            return <EvidenceImage key={index} block={block} citation={citation} />
+          default:
+            return <p key={index}>{renderInline(block.text, terms)}</p>
+        }
+      })}
     </div>
   )
 }
@@ -864,7 +979,7 @@ function EvidenceCard({
           <strong>{formatScore(hit.score)}</strong>
         </div>
       </header>
-      <EvidenceText text={hit.chunk.text} expanded={expanded} terms={terms} />
+      <EvidenceText text={hit.chunk.text} expanded={expanded} terms={terms} citation={citation} />
       {hit.chunk.text.length > 320 && (
         <button className="expand-button" type="button" onClick={() => setExpanded((value) => !value)}>
           {expanded ? '收起原文' : '展开原文'}

@@ -1139,6 +1139,37 @@ v025 只把批量 Y 接进检测与前缀分数；本版本把 `call_many` 全�
   （`cft竞赛权威指南pwn`、`1ibpivot.so`）与 PDF 提取的断行。
 - 截图：`experiments/EXP-0025/rendering/{before-ocr,after-ocr,after-meta}.jpg`。
 
+### 2026-11-12 — 分块审计：缩进、围栏、图片与 Markdown（EXP-0025 扩展）
+
+**审计 16361 个活跃块**
+
+| 指标 | 修复前 | 修复后 |
+| --- | --- | --- |
+| 含两个空格以上缩进的块 | 0 | **1548** |
+| 含 ``` 的块 / 围栏不闭合 | 2978 / **51** | 2986 / **5** |
+| 以逗号/冒号/左括号结尾（疑似句中断块） | 1516 | 1515 |
+| 引用图片的块 | 482（外链 939、本地 45） | 同左，本地图片现在可渲染 |
+
+**根因（数据层，不是显示层）**：`normalize_text` 的 `[ \t]+ → " "` 把代码缩进
+压成一列；`parse_markdown` 的 fence 缓冲与 `parse_plain` 的 `.py` 文本都走它；
+`_hard_split` 按行硬切超长代码，切开后两半各带半截围栏。elements 表里 4177 个
+code 元素有 1818 个本身带缩进，说明源数据没问题，是入库时被压平了。
+
+**修复**
+
+- 新增 `normalize_code_text`（保留行首空白/行结构），用于 fence 缓冲、`.py` 文本、
+  CODE/TABLE 切片；新增 `_split_code`，切片后给每片补开/闭围栏。
+- 重新入库 `book/Des-CTF-Knowledge` 下 1347 个 markdown/text/py 文档
+  （10080 块，107 s；未重跑 PDF OCR），再重建 TF-IDF 与图（85.7 s）。
+- API `/api/files` 放开只读栅格图片（png/jpg/jpeg/gif/webp/bmp，仍限制在语料内）；
+  前端补全 Markdown 块渲染：有序/无序列表、引用块、分隔线、围栏、表格、
+  相对图片（经 `/api/files` 解析）、外链图片离线占位。
+- 截图：`experiments/EXP-0025/rendering/{after-code,after-image}.jpg`。
+
+**仍未解决**：1515 个句中断块（token 上限导致）；PDF 块的缩进仍是提取时的单空格
+（本次未重跑 PDF OCR）。下一步应在切分时优先句末/空行，并在 UI 标注“下一块继续”。
+→ 见 `laws/LAW-0031.md`。
+
 
 
 
