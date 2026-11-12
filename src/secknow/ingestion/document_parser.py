@@ -169,13 +169,48 @@ def _column_bounds_from_items(
     return bounds if len(bounds) >= 3 else None
 
 
+def _textual_row_cells(text: str) -> list[str] | None:
+    """当 OCR 把整行识别成一个框时，尝试用括号/空白/字母前缀拆格。"""
+    tokens = re.findall(r"\[[^\]]+\]|[^\s\[]+", text)
+    if len(tokens) >= 2:
+        return tokens
+    match = re.match(r"^([A-Za-z])[\-—]\s*(.+)$", text)
+    if match:
+        return [match.group(1), match.group(2).strip()]
+    return None
+
+
+def _textual_table(
+    rows: list[tuple[float, list[tuple[tuple[float, float, float, float], str, float]]]],
+) -> list[list[str]] | None:
+    grid: list[list[str]] = []
+    for _, row_items in rows:
+        if len(row_items) != 1:
+            return None
+        cells = _textual_row_cells(row_items[0][1])
+        if not cells:
+            return None
+        grid.append(cells)
+    if not grid:
+        return None
+    width = max(len(row) for row in grid)
+    return [row + [""] * (width - len(row)) for row in grid]
+
+
 def _items_to_markdown_table(
     items: list[tuple[tuple[float, float, float, float], str, float]],
     column_bounds: list[float] | None = None,
 ) -> str:
     """把带坐标的 OCR 结果按行/列重建成 Markdown 表格。"""
     if len(items) < 2:
-        return "\n".join(text for _, text, _ in items)
+        text = "\n".join(item[1] for item in items)
+        cells = _textual_row_cells(text) if text else None
+        if cells and len(cells) >= 2:
+            return "\n".join([
+                "| " + " | ".join(cells) + " |",
+                "| " + " | ".join("---" for _ in cells) + " |",
+            ])
+        return text
 
     heights = sorted(box[3] - box[1] for box, _, _ in items)
     median_height = heights[len(heights) // 2] or 1.0
@@ -250,10 +285,14 @@ def _items_to_markdown_table(
                              for cell in cells])
         column_count = len(centers)
     else:
-        return "\n".join(
-            " | ".join(text for _, text, _ in row_items_sorted(row[1]))
-            for row in rows
-        )
+        textual = _textual_table(rows)
+        if textual is None or len(textual[0]) < 2:
+            return "\n".join(
+                " | ".join(text for _, text, _ in row_items_sorted(row[1]))
+                for row in rows
+            )
+        grid = textual
+        column_count = len(textual[0])
     if len(grid) >= 2 and column_count > 2:
         # 页边页码等孤立项会形成几乎全空的列，按填充率剪掉
         threshold = max(1, int(math.ceil(len(grid) * 0.2)))
@@ -272,6 +311,13 @@ def _items_to_markdown_table(
         for index in range(len(header)):
             if not header[index].strip() and grid[1][index].strip():
                 header[index] = grid[1][index]
+    if len(grid) == 1 and len(grid[0]) >= 2:
+        # 单行表（如“操作码 [操作数1] [操作数2]”）也按表格输出
+        header = grid[0]
+        return "\n".join([
+            "| " + " | ".join(header) + " |",
+            "| " + " | ".join("---" for _ in header) + " |",
+        ])
     if len(grid) < 2:
         return "\n".join(" | ".join(cell for cell in row if cell) for row in grid)
 
@@ -283,11 +329,33 @@ def _items_to_markdown_table(
     return "\n".join(lines)
 
 
+def _strip_table_rules(image_path: Path) -> Any:  # noqa: ANN401 - PIL.Image
+    """抹掉表格横/竖线后再交给 OCR；线会干扰文字框检测。"""
+    try:
+        from PIL import Image
+        import numpy as np
+    except ImportError:
+        return None
+    try:
+        gray = np.asarray(Image.open(image_path).convert("L"))
+    except (OSError, ValueError):
+        return None
+    if gray.ndim != 2 or gray.shape[0] < 20 or gray.shape[1] < 20:
+        return None
+    dark = gray < 160
+    clean = gray.copy()
+    for y in np.where(dark.mean(axis=1) > 0.5)[0]:
+        clean[max(0, int(y) - 1):int(y) + 2, :] = 255
+    for x in np.where((clean < 160).mean(axis=0) > 0.5)[0]:
+        clean[:, max(0, int(x) - 1):int(x) + 2] = 255
+    return Image.fromarray(clean).convert("RGB")
+
+
 def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
     """对裁剪出来的表格图做 OCR，带缓存。"""
     if ocr is None or not image_path.exists():
         return ""
-    cache = image_path.with_suffix(".ocr-v2.json")
+    cache = image_path.with_suffix(".ocr-v3.json")
     if cache.exists():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
@@ -295,20 +363,26 @@ def _ocr_table_markdown(image_path: Path, ocr: OcrEngine | None) -> str:
         except (OSError, ValueError):
             pass
     items: list[tuple[tuple[float, float, float, float], str, float]] = []
+    from_image = False
     try:
-        with fitz.open(image_path) as image_doc:
-            page = image_doc[0]
-            if hasattr(ocr, "extract_items"):
-                items = ocr.extract_items(page, dpi=72)  # type: ignore[attr-defined]
-            else:
-                text, _confidence = ocr.extract(page, dpi=72)
-                items = [
-                    ((0.0, float(index * 10), 1000.0, float(index * 10 + 9)), line, 1.0)
-                    for index, line in enumerate(text.splitlines()) if line.strip()
-                ]
+        image = _strip_table_rules(image_path)
+        if image is not None and hasattr(ocr, "extract_items_from_image"):
+            items = ocr.extract_items_from_image(image)  # type: ignore[attr-defined]
+            from_image = True
+        else:
+            with fitz.open(image_path) as image_doc:
+                page = image_doc[0]
+                if hasattr(ocr, "extract_items"):
+                    items = ocr.extract_items(page, dpi=144)  # type: ignore[attr-defined]
+                else:
+                    text, _confidence = ocr.extract(page, dpi=144)
+                    items = [
+                        ((0.0, float(index * 10), 1000.0, float(index * 10 + 9)), line, 1.0)
+                        for index, line in enumerate(text.splitlines()) if line.strip()
+                    ]
     except (RuntimeError, OSError, ValueError):
         items = []
-    bounds = _table_column_bounds(image_path, 0.0, 1.0)
+    bounds = _table_column_bounds(image_path, 0.0, 1.0) if from_image else None
     table = _items_to_markdown_table(items, bounds)
     if table:
         try:
@@ -468,10 +542,11 @@ def _image_markdown_for(
             captions.append((raw, (x0, y0, x1, y1)))
     if not captions:
         return ()
-    # 优先用“表X-Y 标题”这种题注行；只有“如表X-Y所示”时再用正文行
-    titled = [item for item in captions if TABLE_CAPTION.match(item[0])]
-    if titled:
-        captions = titled
+    # 只认“表X-Y 标题”这种独立题注行；正文里的“见表1-5”常指向别处的表，
+    # 按它裁剪容易得到一张无关截图。
+    captions = [item for item in captions if TABLE_CAPTION.match(item[0])]
+    if not captions:
+        return ()
 
     page_area = page.rect.width * page.rect.height
     candidates: list[tuple[float, fitz.Rect]] = []
@@ -892,14 +967,12 @@ class RapidOcrEngine:
             return "", 0.0
         return "\n".join(lines), sum(scores) / len(scores)
 
-    def extract_items(
+    def _items_from_result(
         self,
-        page: fitz.Page,
-        dpi: int = 240,
+        result: list[Any],
     ) -> list[tuple[tuple[float, float, float, float], str, float]]:
-        """返回带坐标的识别结果（用于表格重建）。"""
         items: list[tuple[tuple[float, float, float, float], str, float]] = []
-        for item in self._recognize(page, dpi):
+        for item in result:
             if len(item) < 3:
                 continue
             box, text = item[0], str(item[1]).strip()
@@ -913,6 +986,26 @@ class RapidOcrEngine:
                 continue
             items.append(((min(xs), min(ys), max(xs), max(ys)), text, score))
         return items
+
+    def extract_items(
+        self,
+        page: fitz.Page,
+        dpi: int = 240,
+    ) -> list[tuple[tuple[float, float, float, float], str, float]]:
+        """返回带坐标的识别结果（用于表格重建）。"""
+        return self._items_from_result(self._recognize(page, dpi))
+
+    def extract_items_from_image(
+        self,
+        image: Any,  # noqa: ANN401 - PIL.Image
+    ) -> list[tuple[tuple[float, float, float, float], str, float]]:
+        """直接识别一张 PIL 图像，坐标即图像像素，供表格裁剪图使用。"""
+        if not self.available:
+            raise RuntimeError("RapidOCR backend is unavailable")
+        import numpy as np
+
+        result, _elapsed = self._load()(np.asarray(image.convert("RGB")))
+        return self._items_from_result(list(result or []))
 
 
 def select_ocr_engine(
