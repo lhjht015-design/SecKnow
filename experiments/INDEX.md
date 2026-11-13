@@ -36,7 +36,7 @@
 | EXP-0029 | 2026-11-13 | 调用图补“有入口但没链” | 无线索后门（含 strip）2/2 解出；silent / reachable 2/2 拒绝；产品接口同步 | `EXP-0029/report.md` |
 | EXP-0030 | 2026-11-13 | 自研单元 vs pwntools A/B | 简单题打平；多指令 gadget 自研漏检、工具解出；执行耗时 431→69 ms | `EXP-0030/report.md` |
 | EXP-0031 | 2026-11-13 | 适配层（常驻 pwntools worker）A/B | 自研 3/4、一次性 4/4、适配层 4/4；总耗时 921→131 ms | `EXP-0031/report.md` |
-| EXP-0032 | 2026-11-13 | 真实赛题验证（7 题，全 32 位） | 解 5（含 syscall、格式化串泄漏/写）、拒 1（canary）、不支持 1（题目特有）；连跑 3 次一致 | `EXP-0032/report.md` |
+| EXP-0032 | 2026-11-13 | 真实赛题验证（10 题，全 32 位） | 解 7（libc 直调/泄漏、syscall、fmtstr、staged-call）、拒 1、不支持 2；连跑 3 次一致 | `EXP-0032/report.md` |
 
 ---
 

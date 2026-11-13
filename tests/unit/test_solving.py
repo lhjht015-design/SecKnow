@@ -173,3 +173,60 @@ def test_format_string_chain_requires_execution() -> None:
 
     assert chains[0].status == "needs-execution"
     assert any(step.unit == "fmt_offset" for step in chains[0].steps)
+
+
+def test_staged_call_chain_when_system_without_binsh() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"gets", "system"},
+        symbols={},
+        plt={0x8048460: "gets", 0x8048490: "system"},
+        bits=32,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "staged-call"
+    assert chains[0].status == "needs-execution"
+
+
+def test_ret2libc_leak_chain_without_system() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"gets", "puts"},
+        symbols={},
+        plt={0x8048440: "gets", 0x8048460: "puts"},
+        bits=32,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "ret2libc-leak"
+    assert chains[0].status == "needs-execution"
+
+
+def test_shellcode_chain_is_unsupported_without_stack_leak() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=False,
+        relro="partial",
+        imports={"gets"},
+        symbols={},
+        plt={0x8048460: "gets"},
+        bits=32,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "ret2shellcode"
+    assert chains[0].status == "unsupported"

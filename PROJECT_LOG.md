@@ -1784,3 +1784,23 @@ worker 初始化约 0.3 s，一次性成本。
 由链选择器组合；剩余缺口是多阶段布局与题目特有逻辑。
 
 → `versions/v032_real_challenges.src`，`experiments/EXP-0032/report.md`，`laws/LAW-0051.md`
+
+## 2026-11-13 — 真题扩到 10 道 + 多阶段利用单元（v032）
+
+**新增真题**：ret2libc2、ret2libc3、ret2shellcode、leakmemory、overwrite。
+
+**新增单元**：
+- `staged-call`：先 `gets(buf2)` 写 `/bin/sh`，再 `system(buf2)`（ret2libc2）；
+- `ret2libc-leak`：`puts@got` 泄漏 → 计算 system → 二次溢出（ret2libc3）。
+
+**结果**：解出 7/10（原 5 题 + ret2libc2/ret2libc3），contacts 拒绝，
+pwn3 与 ret2shellcode 不支持；连跑 3 次一致。
+
+**踩到的坑**：泄漏偏移 112 但重入后第二阶段偏移 104；stdio 预读会吞掉后续 shell 命令，
+必须分阶段发送；泄漏行混有多个 GOT/PLT 值，要按 libc base 页对齐筛选；
+题目自带 libc 与本机运行时不一定是同一版本。
+
+**工具层**：pwntools 4.15 / ROPgadget 7.7 / capstone 6.0 / pyelftools 0.33 /
+LibcSearcher 1.1.5，worker ping 会返回版本清单。
+
+→ `versions/v032_real_challenges.src`，`experiments/EXP-0032/`，`laws/LAW-0052.md`

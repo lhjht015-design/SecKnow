@@ -150,6 +150,24 @@ class PwntoolsWorker:
     def version(self) -> str | None:
         return self._version
 
+    def ret2libc_bss(self, binary: str | Path, offsets: list[int],
+                     bss: int | None = None) -> dict[str, Any]:
+        return self._request("ret2libc_bss", path=_wsl_path(binary),
+                             offsets=offsets, bss=bss)
+
+    def shellcode_chain(self, binary: str | Path, offsets: list[int],
+                        bss: int | None = None) -> dict[str, Any]:
+        return self._request("shellcode_chain", path=_wsl_path(binary),
+                             offsets=offsets, bss=bss)
+
+    def ret2libc_leak(self, binary: str | Path, offsets: list[int],
+                      libc_path: str | Path | None = None,
+                      leak_symbol: str = "puts") -> dict[str, Any]:
+        return self._request("ret2libc_leak", path=_wsl_path(binary),
+                             offsets=offsets,
+                             libc_path=_wsl_path(libc_path) if libc_path else None,
+                             leak_symbol=leak_symbol)
+
     def execve_chain(self, binary: str | Path, shell: int, offset: int) -> dict[str, Any]:
         return self._request("execve_chain", path=_wsl_path(binary),
                              shell=shell, offset=offset)

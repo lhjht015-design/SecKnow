@@ -4,10 +4,10 @@
 
 ```json
 {
-  "cases": 7,
-  "solved": 5,
+  "cases": 10,
+  "solved": 7,
   "refused": 1,
-  "unsupported": 1,
+  "unsupported": 2,
   "failed": 0
 }
 ```
@@ -16,13 +16,16 @@
 
 | 题 | 位数 | 保护 | 入口 | 链 | 判定 | 耗时 |
 | --- | --- | --- | --- | --- | --- | --- |
-| ret2text | 32 | canary=False pie=False | unsafe_copy | libc-call, pwn-ret2win | solved（—） | 485.2 ms |
-| ret2libc1 | 32 | canary=False pie=False | unsafe_copy | libc-call, pwn-ret2win | solved（—） | 326.6 ms |
-| rop | 32 | canary=False pie=False | unsafe_copy | syscall-execve, pwn-ret2win | solved（—） | 930.4 ms |
-| contacts | 32 | canary=True pie=False | 无 | — | refused（canary_present） | 5.5 ms |
-| pwn3 | 32 | canary=False pie=False | format_string, unsafe_copy | format-string, pwn-ret2win | unsupported（challenge_specific_logic） | 5.6 ms |
-| leakmemory | 32 | canary=False pie=False | 无 | — | solved（—） | 27.9 ms |
-| overwrite | 32 | canary=False pie=False | 无 | — | solved（—） | 29.2 ms |
+| ret2text | 32 | canary=False pie=False | unsafe_copy | libc-call, pwn-ret2win | solved（—） | 1475.0 ms |
+| ret2libc1 | 32 | canary=False pie=False | unsafe_copy | libc-call, pwn-ret2win | solved（—） | 1310.2 ms |
+| rop | 32 | canary=False pie=False | unsafe_copy | syscall-execve, pwn-ret2win | solved（—） | 1906.5 ms |
+| contacts | 32 | canary=True pie=False | 无 | — | refused（canary_present） | 6.4 ms |
+| pwn3 | 32 | canary=False pie=False | format_string, unsafe_copy | format-string, pwn-ret2win | unsupported（challenge_specific_logic） | 6.1 ms |
+| leakmemory | 32 | canary=False pie=False | 无 | — | solved（—） | 31.3 ms |
+| overwrite | 32 | canary=False pie=False | 无 | — | solved（—） | 34.6 ms |
+| ret2libc2 | 32 | canary=False pie=False | unsafe_copy | staged-call, pwn-ret2win | solved（—） | 4033.5 ms |
+| ret2libc3 | 32 | canary=False pie=False | unsafe_copy | ret2libc-leak, pwn-ret2win | solved（—） | 2329.0 ms |
+| ret2shellcode | 32 | canary=False pie=False | unsafe_copy | ret2shellcode, pwn-ret2win | unsupported（needs_stack_address） | 5.1 ms |
 
 ## 说明
 
@@ -33,19 +36,32 @@
 
 ## 稳定性
 
-扩展与新增的真题连跑 3 次，结果一致：解出 5/7、拒绝 1、不支持 1、失败 0。
+10 道真题连跑 3 次，结果一致：解出 7、拒绝 1、不支持 2、失败 0。
 
-## 本轮新增的两类链
+## 工具层（WSL 内常驻 worker）
 
-- **syscall-execve**：没有 system 时，用 `pop eax/ebx/edx:ecx:ebx + int 0x80`
-  构造 `execve("/bin/sh",0,0)`；在 bamboofox ret2syscall 上真拿到 shell（偏移 112）。
-- **format-string**：偏移探测（标记 0x41414141）→ 泄漏 / 写；
-  在 leakmemory 上泄漏 8 个地址，在 overwrite 上写入 `c=16` 并触发
-  “modified c.” 输出。
+| 工具 | 版本 | 用途 |
+| --- | --- | --- |
+| pwntools | 4.15.0 | ELF/ROP/process/shellcraft/fmtstr_payload |
+| ROPgadget | 7.7 | gadget 搜索（pwntools 依赖） |
+| capstone | 6.0.0a11 | 反汇编 |
+| pyelftools | 0.33 | ELF 解析 |
+| LibcSearcher | 1.1.5 | libc 候选查找（多候选需二次校验，暂作参考） |
+
+## 本轮新增单元与教训
+
+- **staged-call**（ret2libc2）：先 `gets(buf2)` 写 `/bin/sh`，再 `system(buf2)`。
+- **ret2libc-leak**（ret2libc3）：`puts@got` 泄漏 → 计算 system → 二次溢出。
+- 教训：
+  1. 泄漏与第二阶段必须在同一进程；偏移也不一定相同
+     （ret2libc3 泄漏偏移 112、第二阶段偏移 104，因为 main 重入后栈对齐变化）。
+  2. stdio 会把多余输入缓冲在父进程里，链里若有第二次 `gets`，
+     后续 shell 命令必须等它消费后再发，否则 shell 读不到。
+  3. 泄漏候选要按“libc base 页对齐”筛选；直接用首个 `0xf7...` 会选错 GOT 表项。
+  4. 题目自带的 libc 与本机运行时不一定是同一个；本地跑用 `elf.libc`，
+     远程/跨环境才需要 libc 数据库。
 
 ## 边界
 
-- contacts 仍是 canary + 多阶段堆布局，未实现完整链，拒绝。
-- pwn3 需要从二进制里反推题目特有的口令变换（`sysbdmin` 每位 -1），
-  属于 LAW-0017 的“题目特有逻辑”，标为不支持。
-- leakmemory 的“解出”判据是成功泄漏多个地址，不是拿 flag（该题本身没有 flag）。
+- ret2shellcode：NX 关闭，但需要栈地址（ASLR），当前没有栈泄漏单元，标为不支持。
+- contacts：canary + 多阶段堆布局；pwn3：题目特有口令变换。

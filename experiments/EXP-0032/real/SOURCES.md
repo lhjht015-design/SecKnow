@@ -10,6 +10,9 @@
 | rop / rop.c | `pwn/linux/user-mode/stackoverflow/ret2syscall/bamboofox-ret2syscall/` |
 | contacts | `pwn/linux/user-mode/fmtstr/2015-CSAW-contacts/` |
 | pwn3 | `pwn/linux/user-mode/fmtstr/2016-CCTF-pwn3/` |
+| ret2libc2 / ret2libc2.c | `pwn/linux/user-mode/stackoverflow/ret2libc/ret2libc2/` |
+| ret2libc3 / ret2libc3.c | `pwn/linux/user-mode/stackoverflow/ret2libc/ret2libc3/` |
+| ret2shellcode / ret2shellcode.c | `pwn/linux/user-mode/stackoverflow/ret2shellcode/ret2shellcode-example/` |
 | leakmemory / leakmemory.c | `pwn/linux/user-mode/fmtstr/leakmemory/` |
 | overwrite / overwrite.c | `pwn/linux/user-mode/fmtstr/overwrite/` |
 

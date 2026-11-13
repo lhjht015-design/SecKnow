@@ -40,6 +40,17 @@ def build_chains(
                 syscall_chain = _syscall_execve(profile)
                 if syscall_chain is not None:
                     chains.append(syscall_chain)
+                else:
+                    shellcode = _shellcode(profile)
+                    if shellcode is not None:
+                        chains.append(shellcode)
+                    staged = _staged_call(profile)
+                    if staged is not None:
+                        chains.append(staged)
+                    if shellcode is None:
+                        leak_chain = _ret2libc_leak(profile)
+                        if leak_chain is not None:
+                            chains.append(leak_chain)
         if category == "command_injection":
             chains.append(_command_injection(profile))
         elif category == "format_string":
@@ -98,6 +109,63 @@ def _syscall_execve(profile: BinaryProfile) -> Chain | None:
                       "按位数选择 pop 寄存器 gadget + int 0x80 / syscall"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标二进制；请在靶场环境复核"),
+        ))
+
+
+def _shellcode(profile: BinaryProfile) -> Chain | None:
+    if profile.has_nx or "gets" not in profile.imports:
+        return None
+    return Chain(
+        "ret2shellcode", "栈上 shellcode", "unsafe_copy", "unsupported",
+        "NX 关闭，但需要栈地址（ASLR）；当前没有栈泄漏单元",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            ChainStep("stack_address", "栈地址", "unknown",
+                      "需要泄漏栈地址或关闭 ASLR；当前未实现"),
+        ))
+
+
+def _staged_call(profile: BinaryProfile) -> Chain | None:
+    plt = profile.plt_names
+    shell = profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash")
+    if "system" not in plt or "gets" not in plt or shell:
+        return None
+    return Chain(
+        "staged-call", "先 gets('/bin/sh') 再 system(buf2)", "unsafe_copy",
+        "needs-execution",
+        "二进制有 system 和 gets，但没有 /bin/sh；需要把字符串写进可写段",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("stage1", "写入 /bin/sh", "requires-execution",
+                      "溢出后先调用 gets(buf2) 写入字符串"),
+            ChainStep("stage2", "调用 system", "requires-execution",
+                      "gets 返回后跳到 system(buf2)"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
+def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
+    plt = profile.plt_names
+    if "system" in plt:
+        return None
+    if "puts" not in plt or "gets" not in plt:
+        return None
+    symbol = "puts" if "puts" in profile.imports else "printf"
+    return Chain(
+        "ret2libc-leak", "泄漏 libc → system('/bin/sh')", "unsafe_copy",
+        "needs-execution",
+        "没有 system；需要先泄漏 libc 地址再计算 system",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("leak", "泄漏 libc", "requires-execution",
+                      f"返回 {symbol}@{hex(plt[symbol])} 打印 GOT 表项，再返回 main"),
+            ChainStep("stage2", "二次利用", "requires-execution",
+                      "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标程序；请在靶场环境复核"),
         ))
 
 

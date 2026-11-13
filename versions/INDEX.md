@@ -41,7 +41,7 @@
 | v029 | [v029_call_graph.src](v029_call_graph.src) | 调用图补后门候选：不可达且会输出的死函数 | Python + WSL | 正样本 2/2、负样本 2/2；3 个种子稳定 |
 | v030 | [v030_tool_ab.src](v030_tool_ab.src) | 自研单元 vs pwntools 的 A/B（gadget/ROP/执行） | Python + WSL + pwntools | 自研 3/4、pwntools 4/4；多指令 gadget 工具胜 |
 | v031 | [v031_adapter_ab.src](v031_adapter_ab.src) | 适配层（常驻 pwntools worker）vs 自研 vs 一次性 | Python + WSL + pwntools | 自研 3/4、一次性 4/4、适配层 4/4；耗时 921→131 ms |
-| v032 | [v032_real_challenges.src](v032_real_challenges.src) | 真实赛题验证（ctf-wiki 收录，7 题） | Python + WSL + pwntools | 解 5/7、拒 1、不支持 1；连跑 3 次一致 |
+| v032 | [v032_real_challenges.src](v032_real_challenges.src) | 真实赛题验证（ctf-wiki 收录，10 题） | Python + WSL + pwntools | 解 7/10、拒 1、不支持 2；连跑 3 次一致 |
 
 ## 各版本说明
 

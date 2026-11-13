@@ -1,9 +1,9 @@
 {
   "summary": {
-    "cases": 7,
-    "solved": 5,
+    "cases": 10,
+    "solved": 7,
     "refused": 1,
-    "unsupported": 1,
+    "unsupported": 2,
     "failed": 0
   },
   "cases": [
@@ -47,7 +47,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 485.2
+      "elapsed_ms": 1475.0
     },
     {
       "id": "ret2libc1",
@@ -88,7 +88,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 326.6
+      "elapsed_ms": 1310.2
     },
     {
       "id": "rop",
@@ -123,7 +123,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 930.4
+      "elapsed_ms": 1906.5
     },
     {
       "id": "contacts",
@@ -142,7 +142,7 @@
       "win_candidates": [],
       "verdict": "refused",
       "reason": "canary_present",
-      "elapsed_ms": 5.5
+      "elapsed_ms": 6.4
     },
     {
       "id": "pwn3",
@@ -174,7 +174,7 @@
       "win_candidates": [],
       "verdict": "unsupported",
       "reason": "challenge_specific_logic",
-      "elapsed_ms": 5.6
+      "elapsed_ms": 6.1
     },
     {
       "id": "leakmemory",
@@ -201,7 +201,7 @@
       "leaked": 8,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 27.9
+      "elapsed_ms": 31.3
     },
     {
       "id": "overwrite",
@@ -228,7 +228,123 @@
       "address": "0xffffd1cc",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 29.2
+      "elapsed_ms": 34.6
+    },
+    {
+      "id": "ret2libc2",
+      "note": "溢出 → gets(buf2) 后 system(buf2)",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\ret2libc2",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "gets",
+        "printf",
+        "system"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "staged-call",
+          "status": "needs-execution",
+          "reason": "二进制有 system 和 gets，但没有 /bin/sh；需要把字符串写进可写段"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "needs-execution",
+          "reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证"
+        }
+      ],
+      "win_candidates": [
+        {
+          "address": 134514173,
+          "symbol": "secure",
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "mode": "staged-call",
+      "offset": 112,
+      "attempts": 17,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 4033.5
+    },
+    {
+      "id": "ret2libc3",
+      "note": "泄漏 puts → system",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\ret2libc3",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "gets",
+        "printf"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "ret2libc-leak",
+          "status": "needs-execution",
+          "reason": "没有 system；需要先泄漏 libc 地址再计算 system"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "needs-execution",
+          "reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证"
+        }
+      ],
+      "win_candidates": [
+        {
+          "address": 134514125,
+          "symbol": "secure",
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "mode": "ret2libc-leak",
+      "offset": 104,
+      "leak_offset": 112,
+      "attempts": null,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 2329.0
+    },
+    {
+      "id": "ret2shellcode",
+      "note": "栈 shellcode（需栈地址）",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\ret2shellcode",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": false,
+      "imports": [
+        "gets",
+        "printf"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "ret2shellcode",
+          "status": "unsupported",
+          "reason": "NX 关闭，但需要栈地址（ASLR）；当前没有栈泄漏单元"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked",
+          "reason": "win_not_found"
+        }
+      ],
+      "win_candidates": [],
+      "verdict": "unsupported",
+      "reason": "needs_stack_address",
+      "elapsed_ms": 5.1
     }
   ]
 }
