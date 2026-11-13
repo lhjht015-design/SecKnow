@@ -259,6 +259,7 @@ export interface ChainRecommendation {
 }
 
 export interface BinarySummary {
+  bits: number
   is_pie: boolean
   has_canary: boolean
   has_nx: boolean

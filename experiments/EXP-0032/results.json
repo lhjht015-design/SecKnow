@@ -1,0 +1,172 @@
+{
+  "summary": {
+    "cases": 5,
+    "solved": 2,
+    "refused": 1,
+    "unsupported": 2,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "ret2text",
+      "note": "栈溢出 → system('/bin/sh') 调用点",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\ret2text",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "gets",
+        "printf",
+        "system"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "libc-call",
+          "status": "needs-execution",
+          "reason": "导入 system 且存在 /bin/sh 字符串；调用与偏移需执行验证"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "needs-execution",
+          "reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证"
+        }
+      ],
+      "win_candidates": [
+        {
+          "address": 134514173,
+          "symbol": "secure",
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "solved": true,
+      "attempts": 5,
+      "offset": 112,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 642.3
+    },
+    {
+      "id": "ret2libc1",
+      "note": "栈溢出 → system@plt('/bin/sh')",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\ret2libc1",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "gets",
+        "system"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "libc-call",
+          "status": "needs-execution",
+          "reason": "导入 system 且存在 /bin/sh 字符串；调用与偏移需执行验证"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "needs-execution",
+          "reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证"
+        }
+      ],
+      "win_candidates": [
+        {
+          "address": 134514125,
+          "symbol": "secure",
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "solved": true,
+      "attempts": 5,
+      "offset": 112,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 330.9
+    },
+    {
+      "id": "rop",
+      "note": "ret2syscall：无 system，需要 execve 链",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\rop",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "gets",
+        "read"
+      ],
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked",
+          "reason": "win_not_found"
+        }
+      ],
+      "win_candidates": [],
+      "verdict": "unsupported",
+      "reason": "no_chain_for_this_class",
+      "elapsed_ms": 464.1
+    },
+    {
+      "id": "contacts",
+      "note": "格式化字符串 + canary",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\contacts",
+      "bits": 32,
+      "pie": false,
+      "canary": true,
+      "nx": true,
+      "imports": [
+        "fgets",
+        "printf"
+      ],
+      "entries": [],
+      "chains": [],
+      "win_candidates": [],
+      "verdict": "refused",
+      "reason": "canary_present",
+      "elapsed_ms": 5.0
+    },
+    {
+      "id": "pwn3",
+      "note": "格式化字符串",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\pwn3",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "printf"
+      ],
+      "entries": [
+        "format_string",
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-leak-chain",
+          "reason": "需要泄漏链（栈偏移 → 读 → 写），当前单元库未实现"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked",
+          "reason": "win_not_found"
+        }
+      ],
+      "win_candidates": [],
+      "verdict": "unsupported",
+      "reason": "needs_leak_chain",
+      "elapsed_ms": 5.4
+    }
+  ]
+}

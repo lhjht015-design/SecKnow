@@ -74,6 +74,7 @@ def recommend(
     payload_binary = None
     if profile is not None:
         payload_binary = {
+            "bits": profile.bits,
             "is_pie": profile.is_pie,
             "has_canary": profile.has_canary,
             "has_nx": profile.has_nx,

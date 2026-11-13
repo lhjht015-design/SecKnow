@@ -1735,3 +1735,25 @@ worker 初始化约 0.3 s，一次性成本。
 **边界**：适配层只在求解侧显式调用，产品 API 仍不执行目标程序；
 入口、后门定位与保护闸门仍归自研。→ `tools/pwn_worker.src`，
 `src/secknow/solving/adapters/`，`experiments/EXP-0031/report.md`，`laws/LAW-0049.md`
+
+## 2026-11-13 — 真实赛题验证（v032）
+
+**做了什么**：从 ctf-wiki 下载 5 道真实赛题（全 32 位），
+用产品分析 + 适配层执行，成功判据是真拿到 shell。
+
+| 题 | 类型 | 结果 |
+| --- | --- | --- |
+| ret2text | 栈溢出 → system 调用点 | ✓ 偏移 112 |
+| ret2libc1 | 栈溢出 → system@plt('/bin/sh') | ✓ 偏移 112 |
+| rop (ret2syscall) | 需要 execve 链 | 不支持 |
+| contacts | 格式化字符串 + canary | 拒绝（canary） |
+| pwn3 | 格式化字符串 | 不支持（需泄漏链） |
+
+连跑 3 次一致：解 2/5、拒 1、不支持 2。
+
+**真题逼出的修正**：32 位反汇编；32 位 `.plt` 桩长 16、重定位在 `.rel.plt`；
+32 位 printf 字面量是 `mov [esp], imm` 且常量格式串不一定含 `%`；
+命令注入要看参数是否非常量；符号启发式加词边界（`_Unwind_*` 误报）。
+并新增 `libc-call` 链：真实 ret2text 没有 win，正确单元是调用 `system('/bin/sh')`。
+
+→ `versions/v032_real_challenges.src`，`experiments/EXP-0032/`，`laws/LAW-0050.md`

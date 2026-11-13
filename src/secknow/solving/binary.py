@@ -9,7 +9,7 @@ from typing import Any
 
 _SHELLS = {"system", "popen", "execl", "execlp", "execv", "execvp"}
 _UNSAFE_READS = {"gets", "strcpy", "strcat", "sprintf", "scanf"}
-_SYMBOL_HINTS = re.compile(r"(win|flag|grant|backdoor|secret)", re.I)
+_SYMBOL_HINTS = re.compile(r"(win|flag|grant|backdoor|secret)", re.I)
 
 
 def dependencies_available() -> bool:
@@ -39,22 +39,29 @@ class BinaryProfile:
     imports: set[str]
     symbols: dict[str, int]
     plt: dict[int, str]
+    bits: int = 64
+    strings: dict[str, list[int]] = field(default_factory=dict)
     flag_string: str | None = None
     flag_string_addr: int | None = None
     win_candidates: list[dict[str, Any]] = field(default_factory=list)
     stack_hints: list[int] = field(default_factory=list)
     instruction_count: int = 0
     printf_entry: int | None = None
+    command_input_entry: int | None = None
     call_graph: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def plt_names(self) -> dict[str, int]:
+        return {name: address for address, name in self.plt.items()}
 
     def findings(self) -> list[BinaryFinding]:
         found: list[BinaryFinding] = []
         shells = sorted(self.imports & _SHELLS)
         reads = self.imports & (_UNSAFE_READS | {"fgets", "read"})
-        if shells and reads:
+        if shells and reads and self.command_input_entry is not None:
             found.append(BinaryFinding(
-                "command_injection", "命令注入（system 家族 + 输入读取）",
-                f"导入 {', '.join(shells)}"))
+                "command_injection", "命令注入（system 家族 + 非常量参数）",
+                f"导入 {', '.join(shells)}；调用点 {hex(self.command_input_entry)}"))
         if self.printf_entry is not None:
             found.append(BinaryFinding(
                 "format_string", "格式化字符串（非字面量格式参数）",
@@ -66,8 +73,8 @@ class BinaryProfile:
         return found
 
 
-def _disassemble(profile_path: Path) -> list[Any]:
-    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+def _disassemble(profile_path: Path, bits: int = 64) -> list[Any]:
+    from capstone import CS_ARCH_X86, CS_MODE_32, CS_MODE_64, Cs
     from elftools.elf.elffile import ELFFile
 
     with open(profile_path, "rb") as handle:
@@ -75,7 +82,7 @@ def _disassemble(profile_path: Path) -> list[Any]:
         text = elf.get_section_by_name(".text")
         if text is None:
             return []
-        engine = Cs(CS_ARCH_X86, CS_MODE_64)
+        engine = Cs(CS_ARCH_X86, CS_MODE_32 if bits == 32 else CS_MODE_64)
         return list(engine.disasm(text.data(), text["sh_addr"]))
 
 
@@ -84,7 +91,7 @@ def _function_starts(instructions: list[Any]) -> list[int]:
     for index, instruction in enumerate(instructions):
         if instruction.mnemonic == "endbr64":
             starts.add(instruction.address)
-        elif instruction.mnemonic == "push" and instruction.op_str == "rbp":
+        elif instruction.mnemonic == "push" and instruction.op_str in {"rbp", "ebp"}:
             if index > 0 and instructions[index - 1].mnemonic == "endbr64":
                 continue
             starts.add(instruction.address)
@@ -116,8 +123,45 @@ def _xref_function(instructions: list[Any], starts: list[int], target: int) -> i
     return None
 
 
+def _sink_input_entry(instructions: list[Any], plt: dict[int, str],
+                      rodata_addr: int, rodata_len: int, bits: int) -> int | None:
+    """找参数不是常量的 system/popen 调用点；常量串（如 system("/bin/sh")）不算注入。"""
+    for index, instruction in enumerate(instructions):
+        if instruction.mnemonic != "call" or not instruction.op_str.startswith("0x"):
+            continue
+        try:
+            target = int(instruction.op_str, 16)
+        except ValueError:
+            continue
+        if plt.get(target) not in {"system", "popen"}:
+            continue
+        constant = False
+        for back in range(1, 9):
+            if index - back < 0:
+                break
+            previous = instructions[index - back]
+            if bits == 32:
+                if previous.mnemonic == "push" and previous.op_str.startswith("0x"):
+                    constant = True
+                elif previous.mnemonic == "mov":
+                    parts = [item.strip() for item in previous.op_str.split(",")]
+                    if len(parts) == 2 and "[esp]" in parts[0] and parts[1].startswith("0x"):
+                        constant = True
+            else:
+                if (previous.mnemonic == "lea" and "rdi" in previous.op_str
+                        and "rip" in previous.op_str) or (previous.mnemonic == "mov"
+                      and previous.op_str.startswith("rdi,")
+                      and previous.op_str.split(",", 1)[1].strip().startswith("0x")):
+                    constant = True
+            if constant:
+                break
+        if not constant:
+            return int(instruction.address)
+    return None
+
+
 def _printf_entry(instructions: list[Any], plt: dict[int, str],
-                  rodata_addr: int, rodata_data: bytes) -> int | None:
+                  rodata_addr: int, rodata_data: bytes, bits: int = 64) -> int | None:
     for index, instruction in enumerate(instructions):
         if instruction.mnemonic != "call" or not instruction.op_str.startswith("0x"):
             continue
@@ -132,22 +176,38 @@ def _printf_entry(instructions: list[Any], plt: dict[int, str],
             if index - back < 0:
                 break
             previous = instructions[index - back]
-            if previous.mnemonic != "lea" or "rip" not in previous.op_str:
-                continue
-            parts = [item.strip() for item in previous.op_str.split(",")]
-            match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", parts[-1])
-            if not match:
-                continue
-            offset = int(match.group(2), 16)
-            if match.group(1) == "-":
-                offset = -offset
-            address = previous.address + previous.size + offset
+            if bits == 32:
+                address = None
+                if previous.mnemonic == "push" and previous.op_str.startswith("0x"):
+                    try:
+                        address = int(previous.op_str, 16)
+                    except ValueError:
+                        address = None
+                elif previous.mnemonic == "mov":
+                    parts = [item.strip() for item in previous.op_str.split(",")]
+                    if len(parts) == 2 and "[esp]" in parts[0] and parts[1].startswith("0x"):
+                        try:
+                            address = int(parts[1], 16)
+                        except ValueError:
+                            address = None
+                if address is None:
+                    continue
+            else:
+                if previous.mnemonic != "lea" or "rip" not in previous.op_str:
+                    continue
+                parts = [item.strip() for item in previous.op_str.split(",")]
+                match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", parts[-1])
+                if not match:
+                    continue
+                offset = int(match.group(2), 16)
+                if match.group(1) == "-":
+                    offset = -offset
+                address = previous.address + previous.size + offset
             relative = address - rodata_addr
             if 0 <= relative < len(rodata_data):
-                chunk = rodata_data[relative:relative + 200].split(b"\0")[0]
-                if b"%" in chunk:
-                    literal = True
-                    break
+                # 常量格式串就是字面量；有没有 % 都安全（printf(buf) 才是入口）
+                literal = True
+                break
         if not literal:
             return int(instruction.address)
     return None
@@ -241,6 +301,11 @@ def _main_address(instructions: list[Any], starts: list[int], plt: dict[int, str
                     candidate = int(text, 16)
                 except ValueError:
                     candidate = None
+        elif instruction.mnemonic == "push" and instruction.op_str.startswith("0x"):
+            try:
+                candidate = int(instruction.op_str, 16)
+            except ValueError:
+                candidate = None
         if candidate in known:
             return int(candidate)
     return None
@@ -276,10 +341,12 @@ def analyze(path: Path) -> BinaryProfile:
         plt_map: dict[int, str] = {}
         plt = elf.get_section_by_name(".plt")
         plt_sec = elf.get_section_by_name(".plt.sec")
-        rela = elf.get_section_by_name(".rela.plt")
+        rela = (elf.get_section_by_name(".rela.plt")
+                or elf.get_section_by_name(".rel.plt"))
         dynsym = elf.get_section_by_name(".dynsym")
         if plt is not None and rela is not None and dynsym is not None:
-            stride = int(plt["sh_entsize"] or 16)
+            # 32 位 .plt 的 sh_entsize 是 4（指令长度），不是桩长度；桩固定 16 字节
+            stride = 16
             base, bias = (int(plt_sec["sh_addr"]), 0) if plt_sec is not None \
                 else (int(plt["sh_addr"]), 1)
             for index, relocation in enumerate(rela.iter_relocations()):  # type: ignore[attr-defined]
@@ -289,10 +356,21 @@ def analyze(path: Path) -> BinaryProfile:
         rodata = elf.get_section_by_name(".rodata")
         rodata_addr = rodata["sh_addr"] if rodata else 0
         rodata_data = rodata.data() if rodata else b""
+        bits = 64 if elf.elfclass == 64 else 32
+
+    strings: dict[str, list[int]] = {}
+    for needle in (b"/bin/sh", b"/bin/bash"):
+        found: list[int] = []
+        start = rodata_data.find(needle)
+        while start != -1:
+            found.append(rodata_addr + start)
+            start = rodata_data.find(needle, start + 1)
+        if found:
+            strings[needle.decode()] = found
 
     profile = BinaryProfile(path=path, is_pie=is_pie, has_canary=has_canary,
                             has_nx=has_nx, relro=relro, imports=imports,
-                            symbols=symbols, plt=plt_map)
+                            symbols=symbols, plt=plt_map, bits=bits, strings=strings)
 
     for match in re.finditer(rb"[ -~]{3,200}", rodata_data):
         text = match.group(0).decode("ascii", "ignore")
@@ -301,9 +379,11 @@ def analyze(path: Path) -> BinaryProfile:
             profile.flag_string_addr = rodata_addr + match.start()
             break
 
-    instructions = _disassemble(path)
+    instructions = _disassemble(path, bits)
     profile.instruction_count = len(instructions)
-    profile.printf_entry = _printf_entry(instructions, plt_map, rodata_addr, rodata_data)
+    profile.printf_entry = _printf_entry(instructions, plt_map, rodata_addr, rodata_data, bits)
+    profile.command_input_entry = _sink_input_entry(instructions, plt_map, rodata_addr,
+                                                   len(rodata_data), bits)
     starts = _function_starts(instructions)
 
     if profile.flag_string_addr is not None:
@@ -327,7 +407,7 @@ def analyze(path: Path) -> BinaryProfile:
     if main_address is not None and main_address in set(starts):
         roots.add(main_address)
     for start in starts:
-        if library_calls.get(start, set()) & {"gets", "fgets", "read", "scanf", "__isoc99_scanf"}:
+        if library_calls.get(start, set()) & {"gets", "fgets", "read"}:
             roots.add(start)
     reachable = _reachable(roots, edges)
 
@@ -366,7 +446,7 @@ def analyze(path: Path) -> BinaryProfile:
     profile.win_candidates = unique
 
     for instruction in instructions:
-        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith(("rsp,", "esp,")):
             try:
                 size = int(instruction.op_str.split(",")[1].strip(), 0)
             except ValueError:

@@ -112,3 +112,24 @@ def test_chain_api_rejects_empty_request(tmp_path: Path) -> None:
         response = client.post("/api/chain", json={})
 
     assert response.status_code == 422
+
+
+def test_binary_profile_offers_libc_call_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"gets", "system"},
+        symbols={},
+        plt={0x8048490: "system"},
+        bits=32,
+        strings={"/bin/sh": [0x8048763]},
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "libc-call"
+    assert chains[0].status == "needs-execution"
+    assert any(step.unit == "string" and "/bin/sh" in step.detail for step in chains[0].steps)

@@ -153,6 +153,15 @@ class PwntoolsWorker:
     def gadgets(self, binary: str | Path) -> dict[str, Any]:
         return self._request("gadgets", path=_wsl_path(binary))
 
+    def facts(self, binary: str | Path, search: list[str] | None = None) -> dict[str, Any]:
+        return self._request("facts", path=_wsl_path(binary), search=search or ["/bin/sh"])
+
+    def run_chain(self, binary: str | Path, payloads: list[bytes], post: bytes = b"",
+                  marker: str = "", timeout: float = 3.0) -> dict[str, Any]:
+        return self._request("run_chain", path=_wsl_path(binary),
+                             payloads=[payload.hex() for payload in payloads],
+                             post=post.hex(), marker=marker, timeout=timeout)
+
     def build(self, binary: str | Path, target: int, mode: str,
               arg: int, offset: int) -> dict[str, Any]:
         return self._request("build", path=_wsl_path(binary), target=target,
