@@ -59,6 +59,8 @@ def build_chains(
             chains.append(_overflow(profile))
         elif category == "blackbox_check":
             chains.append(_blackbox(profile))
+    if not chains and profile is not None:
+        chains.append(_symbolic(profile))
     return chains
 
 
@@ -182,6 +184,22 @@ def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
                       "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
+def _symbolic(profile: BinaryProfile) -> Chain:
+    return Chain(
+        "symbolic-execution", "符号执行求输入（angr）", "symbolic", "needs-execution",
+        "没有可用的 pwn 链；可用 angr 约束求解输入（需要成功/失败判据）",
+        (
+            ChainStep("load", "加载二进制", "ok",
+                      f"{profile.bits} 位，{len(profile.imports)} 个符号"),
+            ChainStep("condition", "确定判据", "requires-execution",
+                      "成功输出串或目标地址；由分析或人工给出"),
+            ChainStep("explore", "符号执行", "requires-execution",
+                      "angr 探索状态，求解到达成功分支的输入"),
+            ChainStep("execute", "复核", "requires-execution",
+                      "把求解输入喂给原程序确认"),
         ))
 
 

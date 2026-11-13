@@ -193,6 +193,67 @@ def _handle(request: dict) -> dict:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "angr_solve":
+            import angr
+            import claripy
+
+            path = request["path"]
+            length = int(request.get("stdin_len", 32))
+            timeout = float(request.get("timeout", 120))
+            find = str(request.get("find_output") or "WIN").encode()
+            avoid = str(request.get("avoid_output") or "FAIL").encode()
+            mode = request.get("input_mode", "stdin")
+            find_addr = request.get("find_addr")
+            avoid_addr = request.get("avoid_addr")
+            options = {
+                angr.options.ZERO_FILL_UNCONSTRAINED_MEMORY,
+                angr.options.ZERO_FILL_UNCONSTRAINED_REGISTERS,
+            }
+            if request.get("use_unicorn"):
+                options |= angr.options.unicorn
+            started = time.perf_counter()
+            project = angr.Project(path, auto_load_libs=False)
+            solution_vector = None
+            if mode == "argv1":
+                argv1 = claripy.BVS("argv1", int(request.get("argv_len", 100)) * 8)
+                state = project.factory.entry_state(
+                    args=[path, argv1], add_options=options)
+                solution_vector = argv1
+            else:
+                chars = [claripy.BVS(f"c{index}", 8) for index in range(length)]
+                content = claripy.Concat(*chars)
+                state = project.factory.full_init_state(
+                    stdin=angr.SimFileStream(name="stdin", content=content,
+                                             has_end=True),
+                    add_options=options)
+                solution_vector = content
+            simgr = project.factory.simgr(state)
+            found_input = None
+            while simgr.active and time.perf_counter() - started < timeout:
+                simgr.step()
+                for candidate in list(simgr.active):
+                    if find_addr is not None and candidate.addr == int(find_addr):
+                        found_input = candidate.solver.eval(solution_vector,
+                                                            cast_to=bytes)
+                        break
+                    output = candidate.posix.dumps(1)
+                    if find in output:
+                        if avoid and avoid in output:
+                            continue
+                        found_input = candidate.posix.dumps(0)
+                        break
+                if found_input is not None:
+                    break
+            if found_input is None:
+                return {"ok": True, "data": {
+                    "solved": False,
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            printable = bytes(value for value in found_input if 32 <= value < 127)
+            return {"ok": True, "data": {
+                "solved": True,
+                "input": found_input.hex(),
+                "printable": printable.decode("ascii", "replace"),
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "staged_printf_leak":
             from pwn import p32, p64, u32, u64
 
@@ -300,7 +361,7 @@ def _handle(request: dict) -> dict:
 
             tools = {}
             for name in ("pwntools", "ropgadget", "capstone", "pyelftools",
-                         "LibcSearcher"):
+                         "LibcSearcher", "angr"):
                 try:
                     tools[name] = version(name)
                 except PackageNotFoundError:

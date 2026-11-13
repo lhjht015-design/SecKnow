@@ -42,6 +42,7 @@
 | v030 | [v030_tool_ab.src](v030_tool_ab.src) | 自研单元 vs pwntools 的 A/B（gadget/ROP/执行） | Python + WSL + pwntools | 自研 3/4、pwntools 4/4；多指令 gadget 工具胜 |
 | v031 | [v031_adapter_ab.src](v031_adapter_ab.src) | 适配层（常驻 pwntools worker）vs 自研 vs 一次性 | Python + WSL + pwntools | 自研 3/4、一次性 4/4、适配层 4/4；耗时 921→131 ms |
 | v032 | [v032_real_challenges.src](v032_real_challenges.src) | 真实赛题验证（ctf-wiki 收录，10 题） | Python + WSL + pwntools | 解 9/10、不支持 1；连跑 3 次一致 |
+| v033 | [v033_angr.src](v033_angr.src) | angr 符号执行接入（stdin/argv、地址/输出判据） | Python + WSL + angr | 真实逆向题 2/4（ais3、r100 秒级） |
 
 ## 各版本说明
 

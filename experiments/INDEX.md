@@ -37,6 +37,7 @@
 | EXP-0030 | 2026-11-13 | 自研单元 vs pwntools A/B | 简单题打平；多指令 gadget 自研漏检、工具解出；执行耗时 431→69 ms | `EXP-0030/report.md` |
 | EXP-0031 | 2026-11-13 | 适配层（常驻 pwntools worker）A/B | 自研 3/4、一次性 4/4、适配层 4/4；总耗时 921→131 ms | `EXP-0031/report.md` |
 | EXP-0032 | 2026-11-13 | 真实赛题验证（10 题，全 32 位） | 解 9（含 contacts 栈迁移、ret2shellcode staged printf）、不支持 1；连跑 3 次一致 | `EXP-0032/report.md` |
+| EXP-0033 | 2026-11-13 | angr 符号执行真实逆向题 | ais3_crackme 4.4s、defcamp_r100 2.2s 解出；wyvern/rev100 限时未解 | `EXP-0033/report.md` |
 
 ---
 

@@ -1,0 +1,194 @@
+"""
+v033_angr.src — 接入 angr：符号执行求解真实逆向题输入
+
+题目（公开真实赛题，附件在 experiments/EXP-0033/real）
+    ais3_crackme   AIS3 2015：argv[1] 校验，成功打印 “Correct!”
+    defcamp_r100   DefCamp 2014：stdin 校验，成功分支 0x400844
+    csaw_wyvern    CSAW 2015：stdin 28 字节，成功输出含 flag{
+    rev100         Volga CTF 2014：静态迷宫题，成功输出 WIN
+
+流程
+    1. 产品分析（secknow.solving.binary）给出没有 pwn 链时，链选择器给出
+       symbolic-execution（needs-execution）；
+    2. 适配层调用 angr worker：符号化输入，按“目标地址 / 成功输出”探索；
+    3. 把求出的输入喂回原程序，确认成功输出。
+
+运行
+    python versions/v033_angr.src
+    python versions/v033_angr.src --only ais3_crackme
+
+产出
+    experiments/EXP-0033/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0033"
+REAL_DIR = OUT_DIR / "real"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+CASES = [
+    {
+        "id": "ais3_crackme", "note": "AIS3 2015：argv[1] 校验",
+        "kwargs": {"input_mode": "argv1", "argv_len": 100,
+                   "find_addr": 0x400602, "timeout": 60},
+        "success": "Correct",
+    },
+    {
+        "id": "defcamp_r100", "note": "DefCamp 2014：stdin 校验",
+        "kwargs": {"input_mode": "stdin", "stdin_len": 32,
+                   "find_addr": 0x400844, "avoid_addr": 0x400855, "timeout": 90},
+        "success": "Nice",
+    },
+    {
+        "id": "csaw_wyvern", "note": "CSAW 2015：C++ 校验（已知较慢）",
+        "kwargs": {"input_mode": "stdin", "stdin_len": 29,
+                   "find_output": "flag{", "avoid_output": "",
+                   "use_unicorn": True, "timeout": 60},
+        "success": "flag{",
+    },
+    {
+        "id": "rev100", "note": "Volga CTF 2014：静态迷宫（已知较慢）",
+        "kwargs": {"input_mode": "stdin", "stdin_len": 24,
+                   "find_output": "WIN", "avoid_output": "FAIL", "timeout": 60},
+        "success": "WIN",
+    },
+]
+
+
+def wsl_path(path: Path) -> str:
+    resolved = path.resolve()
+    drive = resolved.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(resolved)[2:].replace("\\", "/")
+
+
+def verify(binary: Path, input_bytes: bytes, mode: str, success: str) -> bool:
+    command = ["wsl", "-e", wsl_path(binary)]
+    data = input_bytes
+    if mode == "argv1":
+        argument = input_bytes.split(b"\0")[0].decode("utf-8", "replace")
+        command.append(argument)
+        data = b""
+    try:
+        done = subprocess.run(command, input=data, capture_output=True, timeout=10)
+        return success.encode() in done.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
+    binary = REAL_DIR / case["id"]
+    started = time.perf_counter()
+    record = {"id": case["id"], "note": case["note"]}
+    try:
+        profile = analyze(binary)
+        categories = [finding.category for finding in profile.findings()]
+        chains = build_chains(categories, profile)
+        record.update({
+            "bits": profile.bits, "entries": categories,
+            "chains": [{"id": chain.chain_id, "status": chain.status}
+                       for chain in chains],
+        })
+    except Exception as error:  # noqa: BLE001
+        record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}",
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    try:
+        result = worker.angr_solve(binary, **case["kwargs"])
+    except ToolUnavailable as error:
+        record.update({"verdict": "failed", "reason": str(error),
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
+    record["input"] = result.get("printable")
+    if not result.get("solved"):
+        record.update({"verdict": "unsolved", "reason": "timeout_or_no_path"})
+    else:
+        verified = verify(binary, bytes.fromhex(result["input"]),
+                          case["kwargs"].get("input_mode", "stdin"), case["success"])
+        record.update({"verdict": "solved" if verified else "failed",
+                       "reason": None if verified else "input_not_accepted"})
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    log(f"{case['id']}: {record['verdict']} ({record.get('reason') or '—'})"
+        f" {record['elapsed_ms']} ms  input={record.get('input')}")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "solved": sum(1 for item in results if item.get("verdict") == "solved"),
+        "unsolved": sum(1 for item in results if item.get("verdict") == "unsolved"),
+        "failed": sum(1 for item in results if item.get("verdict") == "failed"),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0033 — angr 接入真实逆向题", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "| 题 | 判定 | 输入 | 耗时 |", "| --- | --- | --- | --- |"]
+    for item in results:
+        lines.append(f"| {item['id']} | {item.get('verdict')}"
+                     f"（{item.get('reason') or '—'}） | `{item.get('input') or '—'}` "
+                     f"| {item.get('elapsed_ms')} ms |")
+    lines += ["", "## 说明", "",
+              "- 附件来自 angr-doc 示例（真实 CTF 赛题：AIS3 2015 / DefCamp 2014 / "
+              "CSAW 2015 / Volga CTF 2014）；",
+              "- 输入由 angr 求解，随后喂回原程序确认成功输出；",
+              "- 产品链选择在没有 pwn 链时给出 symbolic-execution（needs-execution）。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="angr 符号执行真实逆向题")
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    cases = CASES
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+
+    worker = PwntoolsWorker(request_timeout=240)
+    available = worker.available(timeout=60)
+    log(f"worker available={available} version={worker.version}")
+    results = [evaluate(worker, case) for case in cases]
+    worker.close()
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：解出 {summary['solved']}/{summary['cases']}，"
+        f"未解 {summary['unsolved']}，失败 {summary['failed']}")
+
+
+if __name__ == "__main__":
+    main()

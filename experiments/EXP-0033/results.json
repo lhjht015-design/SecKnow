@@ -1,0 +1,74 @@
+{
+  "summary": {
+    "cases": 4,
+    "solved": 2,
+    "unsolved": 2,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "ais3_crackme",
+      "note": "AIS3 2015：argv[1] 校验",
+      "bits": 64,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "ais3{I_tak3_g00d_n0t3s}",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 4358.8
+    },
+    {
+      "id": "defcamp_r100",
+      "note": "DefCamp 2014：stdin 校验",
+      "bits": 64,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "Code_Talkers",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 2008.0
+    },
+    {
+      "id": "csaw_wyvern",
+      "note": "CSAW 2015：C++ 校验（已知较慢）",
+      "bits": 64,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "input": null,
+      "verdict": "unsolved",
+      "reason": "timeout_or_no_path",
+      "elapsed_ms": 29571.6
+    },
+    {
+      "id": "rev100",
+      "note": "Volga CTF 2014：静态迷宫（已知较慢）",
+      "bits": 64,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "input": null,
+      "verdict": "unsolved",
+      "reason": "timeout_or_no_path",
+      "elapsed_ms": 62084.3
+    }
+  ]
+}

@@ -269,3 +269,22 @@ def test_canary_does_not_block_format_string_chain() -> None:
 
     assert chains[0].chain_id == "format-string"
     assert chains[0].status == "needs-execution"
+
+
+def test_profile_without_pwn_entry_offers_symbolic_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"scanf", "puts"},
+        symbols={},
+        plt={},
+        bits=64,
+    )
+
+    chains = build_chains([], profile)
+
+    assert chains[0].chain_id == "symbolic-execution"
+    assert chains[0].status == "needs-execution"

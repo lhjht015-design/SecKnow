@@ -1822,3 +1822,26 @@ LibcSearcher 1.1.5，worker ping 会返回版本清单。
 
 → `versions/v032_real_challenges.src`，`tools/pwn_worker.src`，
 `src/secknow/solving/chains.py`，`experiments/EXP-0032/report.md`，`laws/LAW-0053.md`
+
+## 2026-11-13 — angr 符号执行接入（v033）
+
+**做了什么**：WSL 常驻 worker 增加 `angr_solve`（stdin/argv1 符号化、
+目标地址或成功输出判据、avoid、unicorn 加速、超时），
+产品链选择在没有 pwn 链时给出 `symbolic-execution`。
+
+**真题验证**（angr-doc 示例中的真实赛题）：
+
+| 题 | 结果 |
+| --- | --- |
+| ais3_crackme（AIS3 2015） | ✓ 4.4 s，解出 `ais3{I_tak3_g00d_n0t3s}` |
+| defcamp_r100（DefCamp 2014） | ✓ 2.2 s，解出 `Code_Talkers` |
+| csaw_wyvern（CSAW 2015） | 未解（已知约 15 分钟，给 60 s 上限） |
+| rev100（Volga 2014，1.2MB 静态） | 未解（状态空间过大） |
+
+连跑 2 次一致（2/4）。
+
+**结论（LAW-0054）**：符号执行按题型分工，作为“没有 pwn 链”的回退；
+判据（地址 vs 输出）决定速度与正确性；慢题限时如实记录。
+
+→ `versions/v033_angr.src`，`tools/pwn_worker.src`，`experiments/EXP-0033/`，
+`laws/LAW-0054.md`

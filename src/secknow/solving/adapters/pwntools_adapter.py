@@ -193,6 +193,19 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def angr_solve(self, binary: str | Path, find_output: str = "WIN",
+                   avoid_output: str = "FAIL", stdin_len: int = 32,
+                   timeout: float = 120.0, input_mode: str = "stdin",
+                   argv_len: int = 100, find_addr: int | None = None,
+                   avoid_addr: int | None = None,
+                   use_unicorn: bool = False) -> dict[str, Any]:
+        return self._request("angr_solve", path=_wsl_path(binary),
+                             find_output=find_output, avoid_output=avoid_output,
+                             stdin_len=stdin_len, timeout=timeout,
+                             input_mode=input_mode, argv_len=argv_len,
+                             find_addr=find_addr, avoid_addr=avoid_addr,
+                             use_unicorn=use_unicorn)
+
     def staged_printf_leak(self, binary: str | Path,
                            offsets: list[int]) -> dict[str, Any]:
         return self._request("staged_printf_leak", path=_wsl_path(binary),
