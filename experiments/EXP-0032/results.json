@@ -47,7 +47,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1476.7
+      "elapsed_ms": 1513.6
     },
     {
       "id": "ret2libc1",
@@ -88,7 +88,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1318.7
+      "elapsed_ms": 1314.7
     },
     {
       "id": "rop",
@@ -103,9 +103,20 @@
         "read"
       ],
       "entries": [
+        "unsafe_copy",
         "unsafe_copy"
       ],
       "chains": [
+        {
+          "id": "syscall-execve",
+          "status": "needs-execution",
+          "reason": "无 system；需要 execve gadget，执行前确认"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked",
+          "reason": "win_not_found"
+        },
         {
           "id": "syscall-execve",
           "status": "needs-execution",
@@ -123,7 +134,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1931.7
+      "elapsed_ms": 1916.7
     },
     {
       "id": "contacts",
@@ -152,7 +163,7 @@
       "leak_offset": 136473,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 5198.2
+      "elapsed_ms": 5574.7
     },
     {
       "id": "pwn3",
@@ -167,6 +178,7 @@
       ],
       "entries": [
         "format_string",
+        "unsafe_copy",
         "unsafe_copy"
       ],
       "chains": [
@@ -174,6 +186,21 @@
           "id": "format-string",
           "status": "needs-execution",
           "reason": "需要先确定格式串偏移与写入目标，再执行验证"
+        },
+        {
+          "id": "ret2libc-leak",
+          "status": "needs-execution",
+          "reason": "没有 system；需要先泄漏 libc 地址再计算 system"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked",
+          "reason": "win_not_found"
+        },
+        {
+          "id": "ret2libc-leak",
+          "status": "needs-execution",
+          "reason": "没有 system；需要先泄漏 libc 地址再计算 system"
         },
         {
           "id": "pwn-ret2win",
@@ -184,7 +211,7 @@
       "win_candidates": [],
       "verdict": "unsupported",
       "reason": "challenge_specific_logic",
-      "elapsed_ms": 5.9
+      "elapsed_ms": 6.7
     },
     {
       "id": "leakmemory",
@@ -219,7 +246,7 @@
       "leaked": 8,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 31.7
+      "elapsed_ms": 36.7
     },
     {
       "id": "overwrite",
@@ -254,7 +281,7 @@
       "address": "0xffffd1cc",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 33.3
+      "elapsed_ms": 45.8
     },
     {
       "id": "ret2libc2",
@@ -296,7 +323,7 @@
       "attempts": 17,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 4074.5
+      "elapsed_ms": 4078.1
     },
     {
       "id": "ret2libc3",
@@ -338,7 +365,7 @@
       "attempts": null,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 2383.0
+      "elapsed_ms": 2358.9
     },
     {
       "id": "ret2shellcode",
@@ -373,7 +400,7 @@
       "leak_offset": 112,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 60689.5
+      "elapsed_ms": 60674.5
     }
   ]
 }

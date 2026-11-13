@@ -49,10 +49,10 @@ def log(message: str) -> None:
 
 CASES = [
     {"id": "blind", "note": "64 位盲格式化字符串，flag 在栈上", "strategy": "fmtstr_blind"},
-    {"id": "b0verfl0w", "note": "X-CTF 2016：fgets(50) + jmp esp",
-     "strategy": "unsupported", "reason": "fgets_limit_blocks_jmp_esp"},
+    {"id": "b0verfl0w", "note": "X-CTF 2016：fgets(50) + libc 泄漏",
+     "strategy": "ret2libc_leak"},
     {"id": "pwn100", "note": "2016 XDCTF：ret2csu + libc 泄漏",
-     "strategy": "unsupported", "reason": "ret2csu_not_implemented"},
+     "strategy": "ret2csu"},
 ]
 
 
@@ -76,6 +76,24 @@ def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
 
     if case["strategy"] == "unsupported":
         record.update({"verdict": "unsupported", "reason": case["reason"]})
+    elif case["strategy"] == "ret2libc_leak":
+        try:
+            result = worker.ret2libc_leak(binary, [36], leak_symbol="puts",
+                                          reentry="vul",
+                                          sync=b"What's your name?")
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else result.get("error")})
+    elif case["strategy"] == "ret2csu":
+        try:
+            result = worker.ret2csu(binary, [64, 68, 72, 76, 80])
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else result.get("error")})
     elif case["strategy"] == "fmtstr_blind":
         try:
             result = worker.fmtstr_blind_leak(binary)

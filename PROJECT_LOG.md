@@ -1862,3 +1862,20 @@ LibcSearcher 1.1.5，worker ping 会返回版本清单。
 fgets 长度限制直接淘汰一类链；ret2csu 是 64 位无 pop rdi 场景的必备单元，缺口显式记录。
 
 → `versions/v034_more_real.src`，`experiments/EXP-0034/`，`laws/LAW-0055.md`
+
+## 2026-11-13 — 补 ret2csu 与 fgets 版泄漏（v034，3/3）
+
+- **ret2csu**（pwn100，64 位 stripped）：自动发现两段 csu gadget，
+  `puts(puts@got)` 泄漏 → libc `pop rdi;ret` → `system('/bin/sh')`；
+  题目按字节读满 200 次，两阶段都必须正好 200 字节。
+- **fgets 版泄漏**（b0verfl0w，32 位）：放弃放不下的 jmp-esp shellcode，
+  改为 `puts(puts@got)` 泄漏、返回 `vul` 二次输入、调 `system`。
+- 新增入口规则：`lea [ebp-X]` + 紧邻 call 的拷贝长度 > X → unsafe_copy，
+  没有 `gets` 也能识别 fgets/自定义 read 溢出。
+
+结果：EXP-0034 **3/3**（2 次一致），EXP-0032 回归 **9/10**。
+回归事故：调试输出误伤 staged-printf 的同名片段，导致 ret2shellcode 短暂失败，
+按 LAW-0056 的教训改为带上下文修改后恢复。
+
+→ `tools/pwn_worker.src`，`src/secknow/solving/{binary,chains}.py`，
+`versions/v034_more_real.src`，`laws/LAW-0056.md`

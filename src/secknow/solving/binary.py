@@ -48,6 +48,7 @@ class BinaryProfile:
     instruction_count: int = 0
     printf_entry: int | None = None
     command_input_entry: int | None = None
+    oversized_copy_entry: int | None = None
     call_graph: dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -66,6 +67,10 @@ class BinaryProfile:
             found.append(BinaryFinding(
                 "format_string", "格式化字符串（非字面量格式参数）",
                 f"call printf at {hex(self.printf_entry)}", self.printf_entry))
+        if self.oversized_copy_entry is not None:
+            found.append(BinaryFinding(
+                "unsafe_copy", "栈溢出 / 拷贝长度大于缓冲区",
+                f"call {hex(self.oversized_copy_entry)}"))
         unsafe = sorted(self.imports & _UNSAFE_READS)
         if unsafe:
             found.append(BinaryFinding(
@@ -156,6 +161,40 @@ def _sink_input_entry(instructions: list[Any], plt: dict[int, str],
             if constant:
                 break
         if not constant:
+            return int(instruction.address)
+    return None
+
+
+def _oversized_copy_entry(instructions: list[Any]) -> int | None:
+    """lea reg,[rbp-X] 后把大于 X 的长度传给紧接着的 call → 溢出。"""
+    for index, instruction in enumerate(instructions):
+        if instruction.mnemonic != "call":
+            continue
+        buffer_size = None
+        copy_size = None
+        for back in range(1, 10):
+            if index - back < 0:
+                break
+            previous = instructions[index - back]
+            if previous.mnemonic == "lea" and buffer_size is None:
+                match = re.search(r"\[(?:e|r)bp - (0x[0-9a-fA-F]+)\]", previous.op_str)
+                if match:
+                    buffer_size = int(match.group(1), 16)
+            if previous.mnemonic == "mov" and copy_size is None:
+                parts = [item.strip() for item in previous.op_str.split(",")]
+                if len(parts) != 2 or not parts[1].startswith("0x"):
+                    continue
+                destination = parts[0]
+                is_size_reg = destination in {"esi", "edx", "rsi", "rdx"}
+                is_size_stack = "[esp + 4]" in destination or "[esp+4]" in destination
+                if is_size_reg or is_size_stack:
+                    try:
+                        copy_size = int(parts[1], 16)
+                    except ValueError:
+                        copy_size = None
+            if buffer_size is not None and copy_size is not None:
+                break
+        if buffer_size and copy_size and copy_size > buffer_size:
             return int(instruction.address)
     return None
 
@@ -402,6 +441,7 @@ def analyze(path: Path) -> BinaryProfile:
     profile.printf_entry = _printf_entry(instructions, plt_map, rodata_addr, rodata_data, bits)
     profile.command_input_entry = _sink_input_entry(instructions, plt_map, rodata_addr,
                                                    len(rodata_data), bits)
+    profile.oversized_copy_entry = _oversized_copy_entry(instructions)
     starts = _function_starts(instructions)
 
     if profile.flag_string_addr is not None:

@@ -48,6 +48,9 @@ def build_chains(
                     if staged is not None:
                         chains.append(staged)
                     if shellcode is None:
+                        csu_chain = _ret2csu_leak(profile)
+                        if csu_chain is not None:
+                            chains.append(csu_chain)
                         leak_chain = _ret2libc_leak(profile)
                         if leak_chain is not None:
                             chains.append(leak_chain)
@@ -164,11 +167,35 @@ def _staged_call(profile: BinaryProfile) -> Chain | None:
         ))
 
 
+def _ret2csu_leak(profile: BinaryProfile) -> Chain | None:
+    plt = profile.plt_names
+    if profile.bits != 64 or "system" in plt:
+        return None
+    if "puts" not in plt or "read" not in plt:
+        return None
+    return Chain(
+        "ret2csu-leak", "ret2csu 泄漏 libc → system", "unsafe_copy",
+        "needs-execution",
+        "64 位且没有 pop rdi；用 __libc_csu_init 的通用 gadget 设置参数",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("csu", "ret2csu", "requires-execution",
+                      "pop rbx/rbp/r12-r15 + call [r12+rbx*8]，先调用 puts(puts@got)"),
+            ChainStep("libc", "换算 libc", "requires-execution",
+                      "按泄漏的 puts 计算 system / /bin/sh"),
+            ChainStep("stage2", "二次利用", "requires-execution",
+                      "用 libc 的 pop rdi 调 system('/bin/sh')"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
 def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
     plt = profile.plt_names
     if "system" in plt:
         return None
-    if "puts" not in plt or "gets" not in plt:
+    if "puts" not in plt:
         return None
     symbol = "puts" if "puts" in profile.imports else "printf"
     return Chain(

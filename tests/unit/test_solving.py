@@ -288,3 +288,41 @@ def test_profile_without_pwn_entry_offers_symbolic_chain() -> None:
 
     assert chains[0].chain_id == "symbolic-execution"
     assert chains[0].status == "needs-execution"
+
+
+def test_ret2csu_chain_for_64bit_without_system() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"read", "puts"},
+        symbols={},
+        plt={0x400500: "puts", 0x400520: "read"},
+        bits=64,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "ret2csu-leak"
+    assert chains[0].status == "needs-execution"
+
+
+def test_ret2libc_leak_chain_works_with_fgets_binary() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=False,
+        relro="partial",
+        imports={"fgets", "puts"},
+        symbols={},
+        plt={0x80483C0: "fgets", 0x80483D0: "puts"},
+        bits=32,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "ret2libc-leak"
+    assert chains[0].status == "needs-execution"

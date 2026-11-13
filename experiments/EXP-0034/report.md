@@ -5,17 +5,17 @@
 ```json
 {
   "cases": 3,
-  "solved": 1,
-  "unsupported": 2,
+  "solved": 3,
+  "unsupported": 0,
   "failed": 0
 }
 ```
 
 | 题 | 位数 | 判据 | 判定 | 耗时 |
 | --- | --- | --- | --- | --- |
-| blind | 64 | flag{this_is_flag} | solved | 387.0 ms |
-| b0verfl0w | 32 | fgets_limit_blocks_jmp_esp | unsupported | 4.7 ms |
-| pwn100 | 64 | ret2csu_not_implemented | unsupported | 3.5 ms |
+| blind | 64 | flag{this_is_flag} | solved | 191.1 ms |
+| b0verfl0w | 32 | — | solved | 372.9 ms |
+| pwn100 | 64 | — | solved | 20455.5 ms |
 
 ## 说明
 
@@ -25,12 +25,21 @@
 
 ## 稳定性
 
-连跑 2 次结果一致：解出 1、不支持 2、失败 0。
+连跑 2 次结果一致：解出 3、不支持 0、失败 0。
 
-## 边界
+## 本轮补齐的两条链
 
-- blind：64 位盲格式化字符串，用位置参数 `%N$lx` 依次取出栈值、
-  按小端拼回字节流，直接找到 `flag{this_is_flag}`。
-- b0verfl0w：`fgets` 最多 49 字节，`jmp esp` + 栈上 shellcode 放不下；
-  可行替代是 fgets 版 staged printf 泄漏 libc，当前单元只实现了 gets 版本。
-- pwn100：64 位 stripped，需要 ret2csu 链才能先泄漏 libc；该单元未实现。
+- **ret2csu（pwn100）**：自动发现 `pop rbx/rbp/r12-r15; ret` 与
+  `mov rdx,..; mov rsi,..; mov edi,..; call [r12+rbx*8]` 两段；
+  先用 csu 调 `puts(puts@got)` 泄漏 libc，再用 libc 的 `pop rdi; ret` 调 `system`。
+  细节：题目按字节读满 200 次，第一阶段必须正好喂 200 字节，否则残留字节会让
+  第二阶段错位；`puts` 只打印到 NUL，泄漏值要用 4–8 字节窗口 + 页对齐重建。
+- **fgets 版泄漏（b0verfl0w）**：32 位 `fgets(50)` 溢出无法容纳 jmp-esp shellcode，
+  改为 `puts(puts@got)` 泄漏后返回 `vul` 重新输入，第二阶段直接
+  `system('/bin/sh')`；偏移 36，同步串是 `What's your name?`。
+
+## 回归发现
+
+- 给 ret2csu 加调试输出时，误改了 staged-printf 的共享片段，导致 ret2shellcode
+  在 v032 回归里短暂掉到 8/10；定位后恢复为 9/10。
+  教训：每个 op 的 `open_and_leak` 是独立副本，改动必须带上下文。

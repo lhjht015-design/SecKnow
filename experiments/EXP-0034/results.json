@@ -1,8 +1,8 @@
 {
   "summary": {
     "cases": 3,
-    "solved": 1,
-    "unsupported": 2,
+    "solved": 3,
+    "unsupported": 0,
     "failed": 0
   },
   "cases": [
@@ -26,45 +26,61 @@
       "input": "flag{this_is_flag}",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 387.0
+      "elapsed_ms": 191.1
     },
     {
       "id": "b0verfl0w",
-      "note": "X-CTF 2016：fgets(50) + jmp esp",
-      "strategy": "unsupported",
+      "note": "X-CTF 2016：fgets(50) + libc 泄漏",
+      "strategy": "ret2libc_leak",
       "bits": 32,
       "pie": false,
       "canary": false,
       "nx": false,
-      "entries": [],
+      "entries": [
+        "unsafe_copy"
+      ],
       "chains": [
         {
-          "id": "symbolic-execution",
+          "id": "ret2libc-leak",
           "status": "needs-execution"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked"
         }
       ],
-      "verdict": "unsupported",
-      "reason": "fgets_limit_blocks_jmp_esp",
-      "elapsed_ms": 4.7
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 372.9
     },
     {
       "id": "pwn100",
       "note": "2016 XDCTF：ret2csu + libc 泄漏",
-      "strategy": "unsupported",
+      "strategy": "ret2csu",
       "bits": 64,
       "pie": false,
       "canary": false,
       "nx": true,
-      "entries": [],
+      "entries": [
+        "unsafe_copy"
+      ],
       "chains": [
         {
-          "id": "symbolic-execution",
+          "id": "ret2csu-leak",
           "status": "needs-execution"
+        },
+        {
+          "id": "ret2libc-leak",
+          "status": "needs-execution"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked"
         }
       ],
-      "verdict": "unsupported",
-      "reason": "ret2csu_not_implemented",
-      "elapsed_ms": 3.5
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 20455.5
     }
   ]
 }

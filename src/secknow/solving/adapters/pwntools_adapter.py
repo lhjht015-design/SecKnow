@@ -162,11 +162,13 @@ class PwntoolsWorker:
 
     def ret2libc_leak(self, binary: str | Path, offsets: list[int],
                       libc_path: str | Path | None = None,
-                      leak_symbol: str = "puts") -> dict[str, Any]:
+                      leak_symbol: str = "puts", reentry: str = "main",
+                      sync: bytes | None = None) -> dict[str, Any]:
         return self._request("ret2libc_leak", path=_wsl_path(binary),
                              offsets=offsets,
                              libc_path=_wsl_path(libc_path) if libc_path else None,
-                             leak_symbol=leak_symbol)
+                             leak_symbol=leak_symbol, reentry=reentry,
+                             sync=sync.hex() if sync else None)
 
     def execve_chain(self, binary: str | Path, shell: int, offset: int) -> dict[str, Any]:
         return self._request("execve_chain", path=_wsl_path(binary),
@@ -192,6 +194,11 @@ class PwntoolsWorker:
                     address: int | None = None, timeout: float = 3.0) -> dict[str, Any]:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
+
+    def ret2csu(self, binary: str | Path, offsets: list[int],
+                reentry: str = "main") -> dict[str, Any]:
+        return self._request("ret2csu", path=_wsl_path(binary),
+                             offsets=offsets, reentry=reentry)
 
     def fmtstr_blind_leak(self, binary: str | Path, count: int = 150,
                           marker: str = "flag{") -> dict[str, Any]:
