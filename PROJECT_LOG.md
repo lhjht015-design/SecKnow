@@ -1714,3 +1714,24 @@ B 臂 pwntools（ELF/ROP.find_gadget/process）。
 采用适配层：pwntools 当单元实现，入口/调用图/验证闸门仍归自研。
 
 → `versions/v030_tool_ab.src`，`tools/pwntools_arm.src`，`experiments/EXP-0030/report.md`
+
+## 2026-11-13 — 工具适配层：常驻 pwntools worker（v031）
+
+**做了什么**：`src/secknow/solving/adapters/` 增加 pwntools 适配层——
+常驻 WSL worker（JSON 行协议：ping / gadgets / build / run），
+Windows 侧客户端复用同一进程，不再每次尝试起 `wsl -e`。
+
+**结果**（复用 v030 题目，三组种子一致）：
+
+| 臂 | 解出 | 总耗时 |
+| --- | --- | --- |
+| 自研 | 3/4 | 921 ms |
+| 一次性 wsl + pwntools | 4/4 | 201 ms |
+| 常驻适配层 | 4/4 | 131 ms |
+
+适配层的 gadget 报告能识别 `pop rsi; pop rbp; ret`，自研朴素扫描不能；
+worker 初始化约 0.3 s，一次性成本。
+
+**边界**：适配层只在求解侧显式调用，产品 API 仍不执行目标程序；
+入口、后门定位与保护闸门仍归自研。→ `tools/pwn_worker.src`，
+`src/secknow/solving/adapters/`，`experiments/EXP-0031/report.md`，`laws/LAW-0049.md`

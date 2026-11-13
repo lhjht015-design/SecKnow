@@ -35,6 +35,7 @@
 | EXP-0028 | 2026-11-13 | 验证链面板（产品集成） | `/api/chain` 与 ELF 上传；源码 3 入口/3 链、二进制画像与后门候选；不改动执行 | `EXP-0028/report.md` |
 | EXP-0029 | 2026-11-13 | 调用图补“有入口但没链” | 无线索后门（含 strip）2/2 解出；silent / reachable 2/2 拒绝；产品接口同步 | `EXP-0029/report.md` |
 | EXP-0030 | 2026-11-13 | 自研单元 vs pwntools A/B | 简单题打平；多指令 gadget 自研漏检、工具解出；执行耗时 431→69 ms | `EXP-0030/report.md` |
+| EXP-0031 | 2026-11-13 | 适配层（常驻 pwntools worker）A/B | 自研 3/4、一次性 4/4、适配层 4/4；总耗时 921→131 ms | `EXP-0031/report.md` |
 
 ---
 
@@ -1037,3 +1038,19 @@ A_mean_latency_s            6.7
 三组种子一致（3/4 vs 4/4）；执行耗时 431/459 ms vs 69/70 ms，
 差距主要来自每次尝试起一个 `wsl` 进程。结论：工具包成熟子问题，
 不替代入口/后门/验证。详见 `laws/LAW-0048.md`。
+
+## EXP-0031 — 适配层（常驻 pwntools worker）A/B
+
+**背景**：EXP-0030 暴露两个问题——多指令 gadget 自研漏检、每次尝试起 `wsl` 进程太慢。
+
+**做法**：`src/secknow/solving/adapters/pwntools_adapter.py` + `tools/pwn_worker.src`，
+worker 常驻 WSL，JSON 行协议提供 ping / gadgets / build / run。
+
+| 臂 | 解出 | 总耗时 |
+| --- | --- | --- |
+| 自研 | 3/4 | 921 ms |
+| 一次性 wsl + pwntools | 4/4 | 201 ms |
+| 常驻适配层 | 4/4 | 131 ms |
+
+三组种子一致；P3 的多指令 gadget 只有适配层识别。适配层只在求解侧调用，
+产品 API 仍不执行目标程序。详见 `laws/LAW-0049.md`。

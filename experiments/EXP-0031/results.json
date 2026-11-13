@@ -1,0 +1,180 @@
+{
+  "summary": {
+    "cases": 4,
+    "self_ok": 3,
+    "adapter_ok": 4,
+    "one_shot_ok": 4,
+    "self_ms": 921.2,
+    "adapter_ms": 130.5,
+    "one_shot_ms": 200.5,
+    "worker_startup_ms": 272.5
+  },
+  "cases": [
+    {
+      "id": "P1",
+      "note": "ret2win 无参数",
+      "negative": false,
+      "self": {
+        "arm": "self",
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": null,
+        "error": null,
+        "elapsed_ms": 410.4
+      },
+      "adapter": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "ret",
+        "elapsed_ms": 65.0,
+        "arm": "adapter",
+        "wall_ms": 66.2
+      },
+      "one_shot": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "ret",
+        "error": null,
+        "elapsed_ms": 64.3,
+        "arm": "pwntools"
+      },
+      "gadgets": {
+        "count": 4,
+        "found": {
+          "pop rdi; ret": false,
+          "pop rsi; pop rbp; ret": false
+        }
+      },
+      "self_ok": true,
+      "adapter_ok": true,
+      "one_shot_ok": true
+    },
+    {
+      "id": "P2",
+      "note": "需要 rdi；存在 pop rdi; ret",
+      "negative": false,
+      "self": {
+        "arm": "self",
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rdi; ret",
+        "error": null,
+        "elapsed_ms": 509.7
+      },
+      "adapter": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rdi;ret@0x4010f3",
+        "elapsed_ms": 28.4,
+        "arm": "adapter",
+        "wall_ms": 29.6
+      },
+      "one_shot": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rdi;ret@0x4010f3",
+        "error": null,
+        "elapsed_ms": 64.0,
+        "arm": "pwntools"
+      },
+      "gadgets": {
+        "count": 5,
+        "found": {
+          "pop rdi; ret": true,
+          "pop rsi; pop rbp; ret": false
+        }
+      },
+      "self_ok": true,
+      "adapter_ok": true,
+      "one_shot_ok": true
+    },
+    {
+      "id": "P3",
+      "note": "需要 rsi；只有 pop rsi; pop rbp; ret",
+      "negative": false,
+      "self": {
+        "arm": "self",
+        "solved": false,
+        "offset": null,
+        "attempts": 0,
+        "gadget": null,
+        "error": "gadget_missing:pop rsi; ret",
+        "elapsed_ms": 1.1
+      },
+      "adapter": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rsi;pop rbp;ret@0x4010f7",
+        "elapsed_ms": 33.5,
+        "arm": "adapter",
+        "wall_ms": 34.7
+      },
+      "one_shot": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rsi;pop rbp;ret@0x4010f7",
+        "error": null,
+        "elapsed_ms": 72.2,
+        "arm": "pwntools"
+      },
+      "gadgets": {
+        "count": 5,
+        "found": {
+          "pop rdi; ret": false,
+          "pop rsi; pop rbp; ret": true
+        }
+      },
+      "self_ok": false,
+      "adapter_ok": true,
+      "one_shot_ok": true
+    },
+    {
+      "id": "N1",
+      "note": "canary：两臂都必须拒绝",
+      "negative": true,
+      "self": {
+        "arm": "self",
+        "solved": false,
+        "offset": null,
+        "attempts": 0,
+        "gadget": null,
+        "error": "protection_gate",
+        "reason": "canary_present",
+        "elapsed_ms": 0.0
+      },
+      "adapter": {
+        "arm": "adapter",
+        "solved": false,
+        "error": "protection_gate",
+        "attempts": 0,
+        "elapsed_ms": 0.0
+      },
+      "one_shot": {
+        "arm": "pwntools",
+        "solved": false,
+        "error": "protection_gate",
+        "reason": "canary_present",
+        "attempts": 0,
+        "elapsed_ms": 0.0
+      },
+      "gadgets": {
+        "count": 5,
+        "found": {
+          "pop rdi; ret": false,
+          "pop rsi; pop rbp; ret": false
+        }
+      },
+      "self_ok": true,
+      "adapter_ok": true,
+      "one_shot_ok": true
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+"""
+v031_adapter_ab.src — 适配层（常驻 pwntools worker）vs 自研 vs 一次性调用
+
+背景
+    v030 的 A/B 显示两处差距：多指令 gadget 自研会漏；每次尝试起一个
+    `wsl -e` 进程约 140 ms。适配层把 pwntools 放进常驻 WSL worker，
+    同时解决这两点。
+
+测什么
+    复用 v030 的 P1/P2/P3/N1 题目和自研臂：
+      self     自研（与 v030 相同）
+      one-shot 每次调用都起 wsl（v030 的工具臂）
+      adapter  常驻 worker（本实验）
+    指标：解出率、耗时、多指令 gadget 是否可用。
+
+运行
+    python versions/v031_adapter_ab.src
+    python versions/v031_adapter_ab.src --seed 3
+
+产出
+    experiments/EXP-0031/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import json
+import runpy
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0031"
+V030 = ROOT / "versions" / "v030_tool_ab.src"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+def adapter_arm(case: dict, candidates: list[int], worker: PwntoolsWorker) -> dict:
+    profile = analyze(case["binary"])
+    if profile.has_canary or profile.is_pie:
+        return {"arm": "adapter", "solved": False, "error": "protection_gate",
+                "attempts": 0, "elapsed_ms": 0.0}
+    preferred = ("win_arg", "win") if case["mode"] != "none" else ("win", "win_arg")
+    target = next((profile.symbols[name] for name in preferred if name in profile.symbols), None)
+    if target is None:
+        return {"arm": "adapter", "solved": False, "error": "win_not_found",
+                "attempts": 0, "elapsed_ms": 0.0}
+    started = time.perf_counter()
+    try:
+        result = worker.run(case["binary"], target, case["mode"], case["arg"],
+                            candidates, case["expected"])
+    except ToolUnavailable as error:
+        return {"arm": "adapter", "solved": False, "error": str(error),
+                "attempts": 0, "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}
+    result["arm"] = "adapter"
+    result["wall_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    return result
+
+
+def one_shot_arm(case: dict, candidates: list[int]) -> dict:
+    """v030 的工具臂：每次调用起一个 wsl 进程。"""
+    module = runpy.run_path(str(V030))
+    return module["arm_b"](case, candidates)
+
+
+def gadget_report(worker: PwntoolsWorker, binary: Path) -> dict:
+    try:
+        data = worker.gadgets(binary)
+    except ToolUnavailable as error:
+        return {"error": str(error)}
+    found = {"pop rdi; ret": False, "pop rsi; pop rbp; ret": False}
+    for gadget in data.get("gadgets", []):
+        insns = gadget["insns"]
+        if insns[:2] == ["pop rdi", "ret"]:
+            found["pop rdi; ret"] = True
+        if insns[:3] == ["pop rsi", "pop rbp", "ret"]:
+            found["pop rsi; pop rbp; ret"] = True
+    return {"count": data.get("count"), "found": found}
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="适配层 vs 自研 vs 一次性调用")
+    parser.add_argument("--seed", type=int, default=20261113)
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    v030 = runpy.run_path(str(V030))
+    cases = v030["build_challenges"](args.seed)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+
+    worker = PwntoolsWorker()
+    startup_started = time.perf_counter()
+    available = worker.available(timeout=30)
+    startup_ms = round((time.perf_counter() - startup_started) * 1000, 1)
+    log(f"worker available={available} version={worker.version} 启动 {startup_ms} ms")
+
+    results = []
+    for case in cases:
+        candidates = v030["offset_candidates_for"](case["binary"])
+        self_result = v030["arm_a"](case, candidates)
+        adapter_result = adapter_arm(case, candidates, worker)
+        one_shot_result = one_shot_arm(case, candidates)
+        gadgets = gadget_report(worker, case["binary"])
+        record = {
+            "id": case["id"], "note": case["note"], "negative": case.get("negative", False),
+            "self": self_result, "adapter": adapter_result, "one_shot": one_shot_result,
+            "gadgets": gadgets,
+        }
+        record["self_ok"] = (self_result.get("error") == "protection_gate"
+                             if case.get("negative") else self_result.get("solved", False))
+        record["adapter_ok"] = (adapter_result.get("error") == "protection_gate"
+                                if case.get("negative") else adapter_result.get("solved", False))
+        record["one_shot_ok"] = (one_shot_result.get("error") == "protection_gate"
+                                 if case.get("negative") else one_shot_result.get("solved", False))
+        results.append(record)
+        log(f"{case['id']}: self={record['self_ok']} adapter={record['adapter_ok']}"
+            f" one_shot={record['one_shot_ok']}"
+            f"  adapter_ms={adapter_result.get('wall_ms', adapter_result.get('elapsed_ms'))}"
+            f" gadgets={gadgets.get('count')}")
+    worker.close()
+
+    summary = {
+        "cases": len(results),
+        "self_ok": sum(1 for item in results if item["self_ok"]),
+        "adapter_ok": sum(1 for item in results if item["adapter_ok"]),
+        "one_shot_ok": sum(1 for item in results if item["one_shot_ok"]),
+        "self_ms": round(sum(item["self"].get("elapsed_ms", 0) or 0 for item in results), 1),
+        "adapter_ms": round(sum(item["adapter"].get("wall_ms", 0) or 0 for item in results), 1),
+        "one_shot_ms": round(sum(item["one_shot"].get("elapsed_ms", 0) or 0
+                                 for item in results), 1),
+        "worker_startup_ms": startup_ms,
+    }
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0031 — 适配层（常驻 pwntools worker）A/B", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "| 题 | 自研 | 一次性 | 适配层 | gadget 总数 | 多指令 gadget |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for item in results:
+        gadgets = item["gadgets"]
+        found = gadgets.get("found", {})
+        lines.append(
+            f"| {item['id']} | {'✓' if item['self_ok'] else '✗'} "
+            f"| {'✓' if item['one_shot_ok'] else '✗'} "
+            f"| {'✓' if item['adapter_ok'] else '✗'} "
+            f"| {gadgets.get('count', '—')} "
+            f"| {'rsi_rbp' if found.get('pop rsi; pop rbp; ret') else '—'} |")
+    lines += ["", "## 说明", "",
+              "- 适配层把 pwntools 放进常驻 WSL worker，payload 构造与执行都在 worker 内完成；",
+              "- 启动成本（约首次加载 pwntools）单独统计，不计入单题耗时；",
+              "- 自研臂与 v030 相同，题目与偏移候选完全一致。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    log(f"汇总：自研 {summary['self_ok']}/{summary['cases']}，"
+        f"一次性 {summary['one_shot_ok']}/{summary['cases']}，"
+        f"适配层 {summary['adapter_ok']}/{summary['cases']}")
+
+
+if __name__ == "__main__":
+    main()
