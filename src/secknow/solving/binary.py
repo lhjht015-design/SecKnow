@@ -160,8 +160,13 @@ def _sink_input_entry(instructions: list[Any], plt: dict[int, str],
     return None
 
 
+def _in_rodata(address: int, rodata_addr: int, size: int) -> bool:
+    return 0 <= address - rodata_addr < size
+
+
 def _printf_entry(instructions: list[Any], plt: dict[int, str],
                   rodata_addr: int, rodata_data: bytes, bits: int = 64) -> int | None:
+    size = len(rodata_data)
     for index, instruction in enumerate(instructions):
         if instruction.mnemonic != "call" or not instruction.op_str.startswith("0x"):
             continue
@@ -172,43 +177,56 @@ def _printf_entry(instructions: list[Any], plt: dict[int, str],
         if plt.get(target) != "printf":
             continue
         literal = False
-        for back in range(1, 11):
+        found_source = False
+        for back in range(1, 12):
             if index - back < 0:
                 break
             previous = instructions[index - back]
-            if bits == 32:
-                address = None
-                if previous.mnemonic == "push" and previous.op_str.startswith("0x"):
-                    try:
-                        address = int(previous.op_str, 16)
-                    except ValueError:
-                        address = None
-                elif previous.mnemonic == "mov":
-                    parts = [item.strip() for item in previous.op_str.split(",")]
-                    if len(parts) == 2 and "[esp]" in parts[0] and parts[1].startswith("0x"):
-                        try:
-                            address = int(parts[1], 16)
-                        except ValueError:
-                            address = None
-                if address is None:
-                    continue
-            else:
-                if previous.mnemonic != "lea" or "rip" not in previous.op_str:
-                    continue
-                parts = [item.strip() for item in previous.op_str.split(",")]
-                match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", parts[-1])
-                if not match:
-                    continue
-                offset = int(match.group(2), 16)
-                if match.group(1) == "-":
-                    offset = -offset
-                address = previous.address + previous.size + offset
-            relative = address - rodata_addr
-            if 0 <= relative < len(rodata_data):
-                # 常量格式串就是字面量；有没有 % 都安全（printf(buf) 才是入口）
-                literal = True
+            if previous.mnemonic == "call":
                 break
-        if not literal:
+            if bits == 32:
+                if previous.mnemonic == "push":
+                    found_source = True
+                    if previous.op_str.startswith("0x"):
+                        try:
+                            literal = _in_rodata(int(previous.op_str, 16),
+                                                 rodata_addr, size)
+                        except ValueError:
+                            literal = False
+                    break
+                if previous.mnemonic == "mov":
+                    parts = [item.strip() for item in previous.op_str.split(",")]
+                    if len(parts) == 2 and "[esp]" in parts[0]:
+                        found_source = True
+                        if parts[1].startswith("0x"):
+                            try:
+                                literal = _in_rodata(int(parts[1], 16),
+                                                     rodata_addr, size)
+                            except ValueError:
+                                literal = False
+                        break
+            else:
+                if previous.mnemonic == "lea" and "rdi" in previous.op_str.split(",", 1)[0]:
+                    found_source = True
+                    match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", previous.op_str)
+                    if match:
+                        offset = int(match.group(2), 16)
+                        if match.group(1) == "-":
+                            offset = -offset
+                        literal = _in_rodata(previous.address + previous.size + offset,
+                                             rodata_addr, size)
+                    break
+                if previous.mnemonic == "mov" and previous.op_str.split(",", 1)[0].strip() \
+                        in {"rdi", "edi"}:
+                    found_source = True
+                    source = previous.op_str.split(",", 1)[1].strip()
+                    if source.startswith("0x"):
+                        try:
+                            literal = _in_rodata(int(source, 16), rodata_addr, size)
+                        except ValueError:
+                            literal = False
+                    break
+        if not found_source or not literal:
             return int(instruction.address)
     return None
 

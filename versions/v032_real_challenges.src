@@ -60,7 +60,7 @@ CASES = [
     ("ret2text", "栈溢出 → system('/bin/sh') 调用点", "auto", "PWNED"),
     ("ret2libc1", "栈溢出 → system@plt('/bin/sh')", "auto", "PWNED"),
     ("rop", "ret2syscall：无 system，需要 execve 链", "auto", "PWNED"),
-    ("contacts", "格式化字符串 + canary", "auto", "PWNED"),
+    ("contacts", "格式化字符串 + canary + 栈迁移", "contacts", "PWNED"),
     ("pwn3", "格式化字符串（题目特有口令逻辑）", "unsupported", "PWNED"),
     ("leakmemory", "格式化字符串泄漏", "fmtstr_leak", "LEAK"),
     ("overwrite", "格式化字符串写 c=16", "fmtstr_write", "modified c."),
@@ -175,6 +175,16 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
         return record
 
+    if strategy == "contacts":
+        try:
+            result = worker.contacts_chain(binary, marker)
+        except ToolUnavailable as error:
+            return finish("failed", str(error))
+        solved = bool(result.get("solved"))
+        return finish("solved" if solved else "failed",
+                      None if solved else result.get("error") or "contacts_failed",
+                      mode="contacts", leak_offset=result.get("offset"))
+
     if profile.has_canary or profile.is_pie:
         return finish("refused", "canary_present" if profile.has_canary else "pie_enabled")
 
@@ -187,6 +197,8 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
     staged_chain = next((chain for chain in chains if chain.chain_id == "staged-call"), None)
     leak_chain = next((chain for chain in chains if chain.chain_id == "ret2libc-leak"), None)
     shellcode_chain = next((chain for chain in chains if chain.chain_id == "ret2shellcode"), None)
+    staged_printf = next((chain for chain in chains
+                          if chain.chain_id == "staged-printf-leak"), None)
 
     if library_call is not None:
         payloads, offsets, error = build_libc_payloads(profile, worker)
@@ -194,6 +206,8 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
     elif syscall_chain is not None:
         payloads, offsets, error = build_syscall_payloads(profile, worker)
         mode = "syscall-execve"
+    elif staged_printf is not None:
+        return evaluate_staged_printf(worker, profile, marker, finish)
     elif staged_chain is not None:
         return evaluate_staged_call(worker, profile, marker, finish)
     elif leak_chain is not None:
@@ -218,6 +232,20 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str,
     return finish("solved", None, mode=mode,
                   offset=offsets[index] if index is not None else None,
                   attempts=result.get("attempts"))
+
+
+def evaluate_staged_printf(worker: PwntoolsWorker, profile, marker: str, finish) -> dict:
+    offsets = list(range(100, 121))
+    try:
+        result = worker.staged_printf_leak(profile.path, offsets)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    if not result.get("solved"):
+        return finish("unsupported" if result.get("error") else "failed",
+                      result.get("error") or "payload_failed",
+                      mode="staged-printf-leak")
+    return finish("solved", None, mode="staged-printf-leak",
+                  offset=result.get("offset"), leak_offset=result.get("leak_offset"))
 
 
 def evaluate_staged_call(worker: PwntoolsWorker, profile, marker: str, finish) -> dict:

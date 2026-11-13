@@ -1,9 +1,9 @@
 {
   "summary": {
     "cases": 10,
-    "solved": 7,
-    "refused": 1,
-    "unsupported": 2,
+    "solved": 9,
+    "refused": 0,
+    "unsupported": 1,
     "failed": 0
   },
   "cases": [
@@ -47,7 +47,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1475.0
+      "elapsed_ms": 1476.7
     },
     {
       "id": "ret2libc1",
@@ -88,7 +88,7 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1310.2
+      "elapsed_ms": 1318.7
     },
     {
       "id": "rop",
@@ -123,11 +123,11 @@
       "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 1906.5
+      "elapsed_ms": 1931.7
     },
     {
       "id": "contacts",
-      "note": "格式化字符串 + canary",
+      "note": "格式化字符串 + canary + 栈迁移",
       "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\contacts",
       "bits": 32,
       "pie": false,
@@ -137,12 +137,22 @@
         "fgets",
         "printf"
       ],
-      "entries": [],
-      "chains": [],
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution",
+          "reason": "需要先确定格式串偏移与写入目标，再执行验证"
+        }
+      ],
       "win_candidates": [],
-      "verdict": "refused",
-      "reason": "canary_present",
-      "elapsed_ms": 6.4
+      "mode": "contacts",
+      "leak_offset": 136473,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 5198.2
     },
     {
       "id": "pwn3",
@@ -174,7 +184,7 @@
       "win_candidates": [],
       "verdict": "unsupported",
       "reason": "challenge_specific_logic",
-      "elapsed_ms": 6.1
+      "elapsed_ms": 5.9
     },
     {
       "id": "leakmemory",
@@ -187,8 +197,16 @@
       "imports": [
         "printf"
       ],
-      "entries": [],
-      "chains": [],
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution",
+          "reason": "需要先确定格式串偏移与写入目标，再执行验证"
+        }
+      ],
       "win_candidates": [
         {
           "address": 134513781,
@@ -201,7 +219,7 @@
       "leaked": 8,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 31.3
+      "elapsed_ms": 31.7
     },
     {
       "id": "overwrite",
@@ -214,8 +232,16 @@
       "imports": [
         "printf"
       ],
-      "entries": [],
-      "chains": [],
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution",
+          "reason": "需要先确定格式串偏移与写入目标，再执行验证"
+        }
+      ],
       "win_candidates": [
         {
           "address": 134513813,
@@ -228,7 +254,7 @@
       "address": "0xffffd1cc",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 34.6
+      "elapsed_ms": 33.3
     },
     {
       "id": "ret2libc2",
@@ -270,7 +296,7 @@
       "attempts": 17,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 4033.5
+      "elapsed_ms": 4074.5
     },
     {
       "id": "ret2libc3",
@@ -312,7 +338,7 @@
       "attempts": null,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 2329.0
+      "elapsed_ms": 2383.0
     },
     {
       "id": "ret2shellcode",
@@ -331,9 +357,9 @@
       ],
       "chains": [
         {
-          "id": "ret2shellcode",
-          "status": "unsupported",
-          "reason": "NX 关闭，但需要栈地址（ASLR）；当前没有栈泄漏单元"
+          "id": "staged-printf-leak",
+          "status": "needs-execution",
+          "reason": "用 gets 写入 %s 格式串，printf 泄漏 printf@got，再算 system"
         },
         {
           "id": "pwn-ret2win",
@@ -342,9 +368,12 @@
         }
       ],
       "win_candidates": [],
-      "verdict": "unsupported",
-      "reason": "needs_stack_address",
-      "elapsed_ms": 5.1
+      "mode": "staged-printf-leak",
+      "offset": 116,
+      "leak_offset": 112,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 60689.5
     }
   ]
 }

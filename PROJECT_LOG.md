@@ -1804,3 +1804,21 @@ pwn3 与 ret2shellcode 不支持；连跑 3 次一致。
 LibcSearcher 1.1.5，worker ping 会返回版本清单。
 
 → `versions/v032_real_challenges.src`，`experiments/EXP-0032/`，`laws/LAW-0052.md`
+
+## 2026-11-13 — contacts 栈迁移 + NX 关闭的 staged printf（v032）
+
+**新增能力**：
+- contacts：`%31$p` 泄漏 libc（一次校准得到常量偏移）、`%6$p%11$p` 取 EBP/堆指针、
+  `%6$n` 把 saved EBP 改成堆地址-4，退出时 `leave; ret` 迁移到堆上的
+  `[system, 'bbbb', /bin/sh]` 链。
+- ret2shellcode：改为 `gets(buf2,'%s') → printf(buf2, printf@got)` 泄漏 libc，
+  再二次溢出调 system；不走栈地址 shellcode。
+
+**结果**：10 道真题连跑 3 次，解出 9、不支持 1（pwn3 题目特有口令）。
+
+**关键认知**：canary 只约束溢出链，不拦格式化字符串——之前把 canary 当全局拒绝，
+直接漏掉了 contacts；链的前置条件必须与链类型绑定。
+`%n` 写堆地址需要约 1.36 亿字符输出，必须完整读取，耗时约 5–6 秒。
+
+→ `versions/v032_real_challenges.src`，`tools/pwn_worker.src`，
+`src/secknow/solving/chains.py`，`experiments/EXP-0032/report.md`，`laws/LAW-0053.md`

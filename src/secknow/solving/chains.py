@@ -113,8 +113,24 @@ def _syscall_execve(profile: BinaryProfile) -> Chain | None:
 
 
 def _shellcode(profile: BinaryProfile) -> Chain | None:
+    plt = profile.plt_names
     if profile.has_nx or "gets" not in profile.imports:
         return None
+    if "printf" in plt:
+        return Chain(
+            "staged-printf-leak", "NX 关闭：staged printf 泄漏 libc", "unsafe_copy",
+            "needs-execution",
+            "用 gets 写入 %s 格式串，printf 泄漏 printf@got，再算 system",
+            (
+                ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+                _protection_step(profile),
+                ChainStep("leak", "泄漏 libc", "requires-execution",
+                          "gets(buf2, '%s') → printf(buf2, printf@got) → 返回 main"),
+                ChainStep("stage2", "二次利用", "requires-execution",
+                          "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
+                ChainStep("execute", "执行验证", "requires-execution",
+                          "产品内不执行目标程序；请在靶场环境复核"),
+            ))
     return Chain(
         "ret2shellcode", "栈上 shellcode", "unsafe_copy", "unsupported",
         "NX 关闭，但需要栈地址（ASLR）；当前没有栈泄漏单元",

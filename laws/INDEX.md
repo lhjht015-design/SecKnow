@@ -57,6 +57,7 @@
 | [LAW-0050](LAW-0050.md) | 2026-11-13 | 真题验证暴露 ABI 细节与题目映射 | 5 道真题（全 32 位）解 2、拒 1、不支持 2；连跑 3 次一致 | 已验证 |
 | [LAW-0051](LAW-0051.md) | 2026-11-13 | syscall 与格式化字符串单元：真实覆盖 5/7 | ret2text/ret2libc1/ret2syscall/leakmemory/overwrite 解出；contacts 拒绝、pwn3 特有不支持 | 已验证 |
 | [LAW-0052](LAW-0052.md) | 2026-11-13 | 真题扩到 10 道：多阶段交互、偏移漂移、环境 libc | 解 7/10；新增 staged-call / ret2libc-leak；连跑 3 次一致 | 已验证 |
+| [LAW-0053](LAW-0053.md) | 2026-11-13 | canary 不拦格式化字符串；栈迁移与 staged printf | contacts 与 ret2shellcode 解出；真题 9/10；3 次一致 | 已验证 |
 
 ## 规律之间的关系
 

@@ -230,3 +230,42 @@ def test_shellcode_chain_is_unsupported_without_stack_leak() -> None:
 
     assert chains[0].chain_id == "ret2shellcode"
     assert chains[0].status == "unsupported"
+
+
+def test_nx_off_with_printf_offers_staged_printf_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=False,
+        relro="partial",
+        imports={"gets", "printf"},
+        symbols={},
+        plt={0x80483C0: "printf", 0x80483D0: "gets"},
+        bits=32,
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "staged-printf-leak"
+    assert chains[0].status == "needs-execution"
+
+
+def test_canary_does_not_block_format_string_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=True,
+        has_nx=True,
+        relro="partial",
+        imports={"printf"},
+        symbols={},
+        plt={0x80484F0: "printf"},
+        bits=32,
+        printf_entry=0x804873A,
+    )
+
+    chains = build_chains(["format_string"], profile)
+
+    assert chains[0].chain_id == "format-string"
+    assert chains[0].status == "needs-execution"

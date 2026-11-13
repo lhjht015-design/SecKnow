@@ -193,6 +193,14 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def staged_printf_leak(self, binary: str | Path,
+                           offsets: list[int]) -> dict[str, Any]:
+        return self._request("staged_printf_leak", path=_wsl_path(binary),
+                             offsets=offsets)
+
+    def contacts_chain(self, binary: str | Path, marker: str = "PWNED") -> dict[str, Any]:
+        return self._request("contacts_chain", path=_wsl_path(binary), marker=marker)
+
     def gadgets(self, binary: str | Path) -> dict[str, Any]:
         return self._request("gadgets", path=_wsl_path(binary))
 
