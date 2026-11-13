@@ -1690,3 +1690,27 @@ TF-IDF `c50f7d5c…`、知识图 **65517 节点 / 565874 边**（纯索引 103.8
 边界：不可达但不输出的后门、或真正利用点是可达函数时会漏，必须诚实 blocked。
 
 → `versions/v029_call_graph.src`，`experiments/EXP-0029/report.md`，`laws/LAW-0047.md`
+
+## 2026-11-13 — 自研单元 vs pwntools 的 A/B（v030）
+
+**问题**：公开工具成熟，包一层是否比自研更省力、更强？
+
+**做法**：同一批 freestanding 题目，两臂各自构造并执行 exploit；
+A 臂自研（ELF + 朴素 gadget 扫描 + 每次 wsl 起进程），
+B 臂 pwntools（ELF/ROP.find_gadget/process）。
+
+| 题 | 自研 | pwntools | 说明 |
+| --- | --- | --- | --- |
+| P1 无参数 | ✓ | ✓ | 打平 |
+| P2 `pop rdi; ret` | ✓ | ✓ | 打平 |
+| P3 只有 `pop rsi; pop rbp; ret` | ✗ gadget_missing | ✓ | 朴素扫描只认 `pop X; ret` |
+| N1 canary | 拒绝 | 拒绝 | 保护闸门一致 |
+
+三组种子一致（3/4 vs 4/4）。耗时 431/459 ms vs 69/70 ms，差距主要来自
+每次尝试起一个 `wsl` 进程（约 140 ms），不是 gadget 搜索。
+
+**结论（LAW-0048）**：工具解决的是成熟子问题（多指令 gadget、ROP、进程交互），
+不解决“这题打哪个函数”；执行贴着目标进程比换工具更能提速。
+采用适配层：pwntools 当单元实现，入口/调用图/验证闸门仍归自研。
+
+→ `versions/v030_tool_ab.src`，`tools/pwntools_arm.src`，`experiments/EXP-0030/report.md`

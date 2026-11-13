@@ -34,6 +34,7 @@
 | EXP-0027 | 2026-11-13 | 二进制-only 入口发现 | 导入表+交叉引用定位入口；ret2win（含 strip）与命令注入 3/3 解出；canary/PIE 拒绝 | `EXP-0027/report.md` |
 | EXP-0028 | 2026-11-13 | 验证链面板（产品集成） | `/api/chain` 与 ELF 上传；源码 3 入口/3 链、二进制画像与后门候选；不改动执行 | `EXP-0028/report.md` |
 | EXP-0029 | 2026-11-13 | 调用图补“有入口但没链” | 无线索后门（含 strip）2/2 解出；silent / reachable 2/2 拒绝；产品接口同步 | `EXP-0029/report.md` |
+| EXP-0030 | 2026-11-13 | 自研单元 vs pwntools A/B | 简单题打平；多指令 gadget 自研漏检、工具解出；执行耗时 431→69 ms | `EXP-0030/report.md` |
 
 ---
 
@@ -1018,3 +1019,21 @@ A_mean_latency_s            6.7
 
 三个随机种子 2/2 + 2/2。产品侧 `/api/chain/binary` 同步返回调用图与候选，
 截图 `EXP-0029/call-graph-panel.jpg`。详见 `laws/LAW-0047.md`。
+
+## EXP-0030 — 自研单元 vs pwntools 的 A/B
+
+**背景**：用户提出“公开工具成熟，包一层是否比自研省力且更强”。
+
+**做法**：同一批 freestanding 题（无 CRT gadget 干扰），两臂使用同一份偏移候选与保护闸门，
+只比较 gadget 发现与利用构造。A 臂自研，B 臂 pwntools（WSL 内 `pip install --user pwntools`）。
+
+| 题 | 自研 | pwntools |
+| --- | --- | --- |
+| P1 无参数 | ✓ | ✓ |
+| P2 `pop rdi; ret` | ✓ | ✓ |
+| P3 只有 `pop rsi; pop rbp; ret` | ✗ gadget_missing | ✓ |
+| N1 canary | 拒绝 | 拒绝 |
+
+三组种子一致（3/4 vs 4/4）；执行耗时 431/459 ms vs 69/70 ms，
+差距主要来自每次尝试起一个 `wsl` 进程。结论：工具包成熟子问题，
+不替代入口/后门/验证。详见 `laws/LAW-0048.md`。

