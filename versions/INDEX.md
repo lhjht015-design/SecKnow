@@ -37,6 +37,7 @@
 | v025 | [v025_parallel_oracle.src](v025_parallel_oracle.src) | 并行探测优化：Q/Y 批量协议 + 时序/结果分流 | Python + WSL | 正样本 4/4，负样本 2/2 |
 | v026 | [v026_batch_transform.src](v026_batch_transform.src) | 变换单元全走批量 Y + 建表复用优化 | Python + WSL | 正样本 4/4 |
 | v027 | [v027_paste_to_verify.src](v027_paste_to_verify.src) | 粘贴源码 → 入口识别 → 单元链 → 真实执行验证 | Python + WSL/gcc | 正样本 3/3、负样本 2/2；3 个随机种子稳定 |
+| v028 | [v028_binary_entry.src](v028_binary_entry.src) | 二进制-only 入口发现（导入表/调用点/字符串交叉引用） | Python + WSL | 攻击题 3/3；负样本 3/3；入口识别 6/7 |
 
 ## 各版本说明
 

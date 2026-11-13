@@ -1,0 +1,388 @@
+{
+  "summary": {
+    "attack_total": 3,
+    "attack_solved": 3,
+    "negative_total": 3,
+    "negative_correctly_refused": 3,
+    "entries_detected": 6,
+    "format_entry_detected_no_chain": true,
+    "elapsed_ms": 2861.1
+  },
+  "cases": [
+    {
+      "id": "B1",
+      "kind": "overflow",
+      "negative": false,
+      "note": "有符号 ret2win",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": " 14 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccioaWiL.o: in function `main':\nb1_overflow.c:(.text+0x1d6): warning: the `gets' function is dangerous and should not be used."
+      },
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "technique": "栈溢出 / 无边界拷贝",
+          "evidence": "imports=['gets']",
+          "address": null
+        }
+      ],
+      "solved": true,
+      "refused": false,
+      "flag": "flag{binary_3c8e012112}",
+      "offset": 72,
+      "attempts": 8,
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "evidence": "imports=['gets']"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial"
+        },
+        {
+          "unit": "find_win",
+          "ok": true,
+          "address": 4198902,
+          "symbol": "grant_kkrx0y",
+          "flag_string": "/mnt/d/SecKnow/experiments/EXP-0027/chal/flag.txt",
+          "flag_string_addr": "0x402010"
+        },
+        {
+          "unit": "find_gadgets",
+          "result": "ok",
+          "ret": true
+        },
+        {
+          "unit": "offset_candidates",
+          "result": "ok",
+          "hints": [
+            280,
+            288,
+            72,
+            80
+          ],
+          "count": 28
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "offset": 72,
+          "attempts": 8,
+          "flag": "flag{binary_3c8e012112}"
+        }
+      ],
+      "elapsed_ms": 1473.9,
+      "verdict": "solved"
+    },
+    {
+      "id": "B2",
+      "kind": "overflow",
+      "negative": false,
+      "note": "strip 符号后的 ret2win",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-no-pie",
+          "-O0",
+          "-s"
+        ],
+        "rc": 0,
+        "stderr": " 14 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/cc2vFv7r.o: in function `main':\nb2_stripped.c:(.text+0x1d6): warning: the `gets' function is dangerous and should not be used."
+      },
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "technique": "栈溢出 / 无边界拷贝",
+          "evidence": "imports=['gets']",
+          "address": null
+        }
+      ],
+      "solved": true,
+      "refused": false,
+      "flag": "flag{binary_3c8e012112}",
+      "offset": 72,
+      "attempts": 8,
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "evidence": "imports=['gets']"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial"
+        },
+        {
+          "unit": "find_win",
+          "ok": true,
+          "address": 4198902,
+          "symbol": null,
+          "flag_string": "/mnt/d/SecKnow/experiments/EXP-0027/chal/flag.txt",
+          "flag_string_addr": "0x402010"
+        },
+        {
+          "unit": "find_gadgets",
+          "result": "ok",
+          "ret": true
+        },
+        {
+          "unit": "offset_candidates",
+          "result": "ok",
+          "hints": [
+            280,
+            288,
+            72,
+            80
+          ],
+          "count": 28
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "offset": 72,
+          "attempts": 8,
+          "flag": "flag{binary_3c8e012112}"
+        }
+      ],
+      "elapsed_ms": 1216.9,
+      "verdict": "solved"
+    },
+    {
+      "id": "B3",
+      "kind": "cmdinj",
+      "negative": false,
+      "note": "命令注入（gets + sprintf + system）",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "\n    8 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/cco8xvRR.o: in function `main':\nb3_cmdinj.c:(.text+0x1c): warning: the `gets' function is dangerous and should not be used."
+      },
+      "entries": [
+        {
+          "category": "command_injection",
+          "technique": "命令注入（system 家族 + 输入读取）",
+          "evidence": "imports=['system']",
+          "address": null
+        },
+        {
+          "category": "unsafe_copy",
+          "technique": "栈溢出 / 无边界拷贝",
+          "evidence": "imports=['gets', 'sprintf']",
+          "address": null
+        }
+      ],
+      "solved": true,
+      "refused": false,
+      "flag": "flag{binary_3c8e012112}",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "command_injection",
+          "evidence": "imports=['system']"
+        },
+        {
+          "unit": "craft_payload",
+          "result": "ok",
+          "payload": "127.0.0.1; cat flag.txt"
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "rc": 0,
+          "flag": "flag{binary_3c8e012112}"
+        }
+      ],
+      "elapsed_ms": 157.6,
+      "verdict": "solved"
+    },
+    {
+      "id": "B4",
+      "kind": "format",
+      "negative": false,
+      "note": "格式化字符串（只识别入口）",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "tion ‘main’:\n/mnt/d/SecKnow/experiments/EXP-0027/chal/b4_format.c:6:12: warning: format not a string literal and no format arguments [-Wformat-security]\n    6 |     printf(buf);\n      |            ^~~"
+      },
+      "entries": [
+        {
+          "category": "format_string",
+          "technique": "格式化字符串（非字面量格式参数）",
+          "evidence": "call printf at 0x401192",
+          "address": 4198802
+        }
+      ],
+      "solved": false,
+      "refused": true,
+      "reason": "needs_leak_chain_not_implemented",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "format_string",
+          "evidence": "call printf at 0x401192"
+        },
+        {
+          "unit": "chain_lookup",
+          "result": "refuse",
+          "reason": "needs_leak_chain_not_implemented"
+        }
+      ],
+      "elapsed_ms": 3.1,
+      "verdict": "refused"
+    },
+    {
+      "id": "N1",
+      "kind": "safe",
+      "negative": true,
+      "note": "安全写法",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000"
+      },
+      "entries": [],
+      "solved": false,
+      "refused": true,
+      "reason": "no_entry",
+      "elapsed_ms": 2.9,
+      "verdict": "refused"
+    },
+    {
+      "id": "N2",
+      "kind": "overflow",
+      "negative": true,
+      "note": "canary 必须拒绝",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fstack-protector-all",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "   14 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccG2qn2c.o: in function `main':\nn2_canary.c:(.text+0x1fd): warning: the `gets' function is dangerous and should not be used."
+      },
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "technique": "栈溢出 / 无边界拷贝",
+          "evidence": "imports=['gets']",
+          "address": null
+        }
+      ],
+      "solved": false,
+      "refused": true,
+      "reason": "canary_present",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "evidence": "imports=['gets']"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": true,
+          "nx": true,
+          "relro": "partial"
+        },
+        {
+          "unit": "protection_gate",
+          "result": "refuse",
+          "reason": "canary_present"
+        }
+      ],
+      "elapsed_ms": 3.4,
+      "verdict": "refused"
+    },
+    {
+      "id": "N3",
+      "kind": "overflow",
+      "negative": true,
+      "note": "PIE 必须拒绝",
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-pie",
+          "-fPIE",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "n]\n   14 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccVcignN.o: in function `main':\nn3_pie.c:(.text+0x1d6): warning: the `gets' function is dangerous and should not be used."
+      },
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "technique": "栈溢出 / 无边界拷贝",
+          "evidence": "imports=['gets']",
+          "address": null
+        }
+      ],
+      "solved": false,
+      "refused": true,
+      "reason": "pie_enabled",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "evidence": "imports=['gets']"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": true,
+          "canary": false,
+          "nx": true,
+          "relro": "full"
+        },
+        {
+          "unit": "protection_gate",
+          "result": "refuse",
+          "reason": "pie_enabled"
+        }
+      ],
+      "elapsed_ms": 3.3,
+      "verdict": "refused"
+    }
+  ]
+}

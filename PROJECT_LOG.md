@@ -1625,3 +1625,27 @@ TF-IDF `c50f7d5c…`、知识图 **65517 节点 / 565874 边**（纯索引 103.8
 入口规则是单行 + 局部窗口，跨函数数据流会漏检。
 
 → `versions/v027_paste_to_verify.src`，`experiments/EXP-0026/report.md`，`laws/LAW-0044.md`
+
+## 2026-11-13 — 二进制-only 入口发现（v028）
+
+**问题**：真实比赛常只给二进制。没有源码时，入口还能不能自己找？
+
+**做法**：入口全部来自 ELF 特征——导入表、调用点、字符串交叉引用、保护属性；
+利用仍是执行验证。
+
+| 题 | 入口来源 | 结果 |
+| --- | --- | --- |
+| B1 ret2win（有符号） | `gets` 导入 + flag 字符串 xref | ✓ 72B，8 次候选执行验证 |
+| B2 同题 `-s` strip | 无符号，xref 定位同一地址 | ✓ 72B |
+| B3 命令注入 | `system` + `gets` | ✓ `; cat flag.txt` |
+| B4 `printf(buf)` | 调用目标为 printf 且格式非常量 | 入口识别 ✓，利用链未实现 |
+| N1 安全写法 | 无 | ✓ 拒绝 |
+| N2 / N3 canary / PIE | gets | ✓ 拒绝 |
+
+三个随机种子一致：攻击题 3/3、负样本 3/3、入口识别 6/7。
+
+**结论（LAW-0045）**：strip 只去名字不去结构；识别 ≠ 利用（格式串要泄漏链）；
+静态特征必须先确认调用目标，否则会把 `puts` 误报成 printf——第一版就踩了这个坑
+（CET 构建的 PLT 桩在 `.plt.sec`）。
+
+→ `versions/v028_binary_entry.src`，`experiments/EXP-0027/report.md`，`laws/LAW-0045.md`
