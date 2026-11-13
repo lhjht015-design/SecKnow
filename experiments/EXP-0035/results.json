@@ -1,0 +1,79 @@
+{
+  "summary": {
+    "cases": 4,
+    "solved": 1,
+    "unsupported": 3,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "goodluck",
+      "note": "UIUCTF 2017：栈上 flag + 盲格式化字符串",
+      "strategy": "fmtstr_blind",
+      "bits": 64,
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "flag{11111111111111111",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 218.5
+    },
+    {
+      "id": "srop-smallest",
+      "note": "360 春秋杯 2016：SROP",
+      "strategy": "unsupported",
+      "bits": 64,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "srop_multistage_not_implemented",
+      "elapsed_ms": 1.8
+    },
+    {
+      "id": "partial-gets",
+      "note": "XNUCA 2018：partial overwrite",
+      "strategy": "unsupported",
+      "bits": 64,
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "partial_target_challenge_specific",
+      "elapsed_ms": 3.3
+    },
+    {
+      "id": "dlresolve-gets",
+      "note": "XDCTF 2015：ret2dlresolve",
+      "strategy": "unsupported",
+      "bits": 32,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "fake_reloc_rejected_by_loader",
+      "elapsed_ms": 4.7
+    }
+  ]
+}

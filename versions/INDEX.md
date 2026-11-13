@@ -44,6 +44,7 @@
 | v032 | [v032_real_challenges.src](v032_real_challenges.src) | 真实赛题验证（ctf-wiki 收录，10 题） | Python + WSL + pwntools | 解 9/10、不支持 1；连跑 3 次一致 |
 | v033 | [v033_angr.src](v033_angr.src) | angr 符号执行接入（stdin/argv、地址/输出判据） | Python + WSL + angr | 真实逆向题 2/4（ais3、r100 秒级） |
 | v034 | [v034_more_real.src](v034_more_real.src) | 第三轮真实赛题（盲 fmtstr / fgets 泄漏 / ret2csu） | Python + WSL + pwntools | 解 3/3；fgets 泄漏与 ret2csu 已补 |
+| v035 | [v035_deep_real.src](v035_deep_real.src) | 第四轮真题：盲泄漏 / SROP / partial / dlresolve | Python + WSL + pwntools | 解 1/4；三项边界如实标注 |
 
 ## 各版本说明
 

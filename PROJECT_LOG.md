@@ -1879,3 +1879,19 @@ fgets 长度限制直接淘汰一类链；ret2csu 是 64 位无 pop rdi 场景�
 
 → `tools/pwn_worker.src`，`src/secknow/solving/{binary,chains}.py`，
 `versions/v034_more_real.src`，`laws/LAW-0056.md`
+
+## 2026-11-13 — 第四轮真题回归（v035）
+
+| 题 | 结果 |
+| --- | --- |
+| goodluck（UIUCTF 2017） | ✓ 盲格式化字符串，位置参数重建栈读出 flag（末尾被题面截断） |
+| srop-smallest（360 春秋杯） | 不支持：需要多阶段 SROP + 栈泄漏 |
+| partial-gets（XNUCA 2018） | 不支持：partial overwrite 落点题目特有 |
+| dlresolve-gets（XDCTF 2015） | 不支持：fake relocation 被 loader 拒绝 |
+
+连跑 2 次一致（1 解 / 3 不支持）。
+
+**结论（LAW-0057）**：盲 fmtstr 泄漏可迁移；SROP 的门槛是栈地址泄漏；
+dlresolve 在 loader 层校验 relocation 类型，参考解法需改写 DT_STRTAB。
+
+→ `versions/v035_deep_real.src`，`experiments/EXP-0035/`，`laws/LAW-0057.md`

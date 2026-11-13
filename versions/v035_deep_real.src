@@ -1,0 +1,141 @@
+"""
+v035_deep_real.src — 第四轮真实赛题：盲泄漏、SROP、partial overwrite、dlresolve
+
+题目（ctf-wiki，附件在 experiments/EXP-0035/real）
+    goodluck        UIUCTF 2017：flag 读入栈后 printf(input)，盲格式化字符串
+    srop-smallest   360 春秋杯 2016：read+syscall 极简二进制，SROP
+    partial-gets    XNUCA 2018：gets 溢出，partial overwrite
+    dlresolve-gets  XDCTF 2015：ret2dlresolve（no-relro）
+
+流程
+    - goodluck：位置参数 %N$lx 重建栈，直接得到 flag；
+    - 其余三道如实标记不支持，并写明原因（SROP 多阶段、partial 目标题目特有、
+      dlresolve 的 fake relocation 被 loader 拒绝）。
+
+运行
+    python versions/v035_deep_real.src
+
+产出
+    experiments/EXP-0035/{results.json,report.md}
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0035"
+REAL_DIR = OUT_DIR / "real"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+CASES = [
+    {"id": "goodluck", "note": "UIUCTF 2017：栈上 flag + 盲格式化字符串",
+     "strategy": "fmtstr_blind"},
+    {"id": "srop-smallest", "note": "360 春秋杯 2016：SROP",
+     "strategy": "unsupported", "reason": "srop_multistage_not_implemented"},
+    {"id": "partial-gets", "note": "XNUCA 2018：partial overwrite",
+     "strategy": "unsupported", "reason": "partial_target_challenge_specific"},
+    {"id": "dlresolve-gets", "note": "XDCTF 2015：ret2dlresolve",
+     "strategy": "unsupported", "reason": "fake_reloc_rejected_by_loader"},
+]
+
+
+def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
+    binary = REAL_DIR / case["id"]
+    started = time.perf_counter()
+    record = {"id": case["id"], "note": case["note"], "strategy": case["strategy"]}
+    try:
+        profile = analyze(binary)
+        categories = [finding.category for finding in profile.findings()]
+        record.update({
+            "bits": profile.bits, "entries": categories,
+            "chains": [{"id": chain.chain_id, "status": chain.status}
+                       for chain in build_chains(categories, profile)],
+        })
+    except Exception as error:  # noqa: BLE001
+        record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}"})
+        record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        return record
+
+    if case["strategy"] == "unsupported":
+        record.update({"verdict": "unsupported", "reason": case["reason"]})
+    elif case["strategy"] == "fmtstr_blind":
+        try:
+            result = worker.fmtstr_blind_leak(binary)
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record["input"] = result.get("leak")
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else "leak_failed"})
+    else:
+        record.update({"verdict": "unsupported", "reason": "no_strategy"})
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    log(f"{case['id']}: {record['verdict']} ({record.get('reason') or '—'})"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "solved": sum(1 for item in results if item.get("verdict") == "solved"),
+        "unsupported": sum(1 for item in results if item.get("verdict") == "unsupported"),
+        "failed": sum(1 for item in results if item.get("verdict") == "failed"),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    lines = ["# EXP-0035 — 第四轮真实赛题（深水区）", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "| 题 | 位数 | 判定 | 说明 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        lines.append(f"| {item['id']} | {item.get('bits', '—')} | {item.get('verdict')} "
+                     f"| {item.get('input') or item.get('reason') or '—'} "
+                     f"| {item.get('elapsed_ms')} ms |")
+    lines += ["", "## 说明", "",
+              "- goodluck：flag 读入栈后 printf(input)，位置参数 %N$lx 重建栈取出；"
+              "题目只读 22 字节，flag 末尾被截断是题面行为；",
+              "- srop-smallest：需要多阶段 sigreturn 帧 + 栈泄漏，未实现；",
+              "- partial-gets：partial overwrite 的目标是题目特有隐藏地址，未自动化；",
+              "- dlresolve-gets：pwntools fake relocation 被 loader 拒绝，"
+              "参考解法要改写 DT_STRTAB 指向伪 dynstr，未实现。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    worker = PwntoolsWorker()
+    log(f"worker available={worker.available(timeout=60)} version={worker.version}")
+    results = [evaluate(worker, case) for case in CASES]
+    worker.close()
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：解出 {summary['solved']}/{summary['cases']}，"
+        f"不支持 {summary['unsupported']}，失败 {summary['failed']}")
+
+
+if __name__ == "__main__":
+    main()
