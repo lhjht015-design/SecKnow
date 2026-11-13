@@ -30,6 +30,21 @@ class SearchRequest(ApiModel):
         return value
 
 
+class ChainRequest(ApiModel):
+    source: str | None = Field(default=None, max_length=200_000)
+    filename: str | None = Field(default=None, max_length=256)
+    relative_path: str | None = Field(default=None, max_length=1024)
+    max_evidence: int = Field(default=4, ge=1, le=10)
+
+    @field_validator("source", "filename", "relative_path")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
+
 class IndexRequest(ApiModel):
     path: str = Field(default=".", min_length=1, max_length=1024)
     recursive: bool = True

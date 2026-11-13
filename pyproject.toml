@@ -85,6 +85,8 @@ packages = ["secknow"]
 [[tool.mypy.overrides]]
 module = [
   "FlagEmbedding",
+  "capstone",
+  "elftools.*",
   "PIL",
   "bleach",
   "fitz",

@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from secknow.answer.evidence import EvidenceBuilder
 from secknow.answer.llm import LocalLlmClient
 from secknow.api.schemas import (
+    ChainRequest,
     IndexRequest,
     JobAccepted,
     LlmConfigRequest,
@@ -29,6 +30,7 @@ from secknow.ingestion.discovery import MAGIC, SUPPORTED_FORMATS
 from secknow.models.bge import model_directory_ready
 from secknow.retrieval.service import RetrievalService
 from secknow.runtime import capability_report
+from secknow.solving.service import recommend as recommend_chains
 from secknow.sources.manifest import load_manifest
 from secknow.sources.snapshot import SnapshotCatalog
 from secknow.stores.milvus import MilvusStore
@@ -316,6 +318,52 @@ def get_chunk(chunk_id: str, store: StoreDependency) -> dict[str, Any]:
     if chunk is None:
         raise HTTPException(status_code=404, detail="chunk not found")
     return chunk.model_dump(mode="json")
+
+
+@router.post("/chain", tags=["search"])
+def chain_recommendation(
+    payload: ChainRequest,
+    settings: SettingsDependency,
+    store: StoreDependency,
+) -> dict[str, Any]:
+    """入口识别 + 候选验证链 + 知识证据；只做静态分析，不执行目标程序。"""
+    if payload.source is None and payload.relative_path is None:
+        raise HTTPException(status_code=422, detail="source or relative_path is required")
+    binary_path = None
+    if payload.relative_path is not None:
+        binary_path = resolve_corpus_path(settings, payload.relative_path, require_file=True)
+    return recommend_chains(
+        store,
+        source=payload.source,
+        filename=payload.filename,
+        binary_path=binary_path,
+        max_evidence=payload.max_evidence,
+    )
+
+
+@router.post("/chain/binary", tags=["search"])
+async def chain_binary_analysis(
+    file: Annotated[UploadFile, File(description="ELF binary")],
+    settings: SettingsDependency,
+    store: StoreDependency,
+) -> dict[str, Any]:
+    """上传 ELF 做只读分析；文件只落到临时目录，分析后删除，不执行。"""
+    limit = 64 * 1024 * 1024
+    contents = await file.read(limit + 1)
+    if not contents:
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(contents) > limit:
+        raise HTTPException(status_code=413, detail="binary exceeds 64 MiB")
+    if contents[:4] != b"ELF":
+        raise HTTPException(status_code=415, detail="only ELF binaries are supported")
+    directory = settings.data_root / "analysis"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"upload-{uuid.uuid4().hex}"
+    path.write_bytes(contents)
+    try:
+        return recommend_chains(store, filename=file.filename, binary_path=path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @router.post("/search", tags=["search"])

@@ -1,0 +1,62 @@
+.chain-page { max-width: 1120px; }
+.chain-form { margin-top: 22px; padding: 19px; border: 1px solid #dce5e8; border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
+.chain-source { display: grid; gap: 8px; color: #5b6f7a; font-size: 10px; font-weight: 650; }
+.chain-source textarea { width: 100%; min-height: 150px; resize: vertical; border: 1px solid #d8e2e5; border-radius: 9px; padding: 12px 14px; color: #2d414c; background: #fbfdfd; font: 11px/1.6 "JetBrains Mono", Consolas, monospace; }
+.chain-source textarea:focus { outline: none; border-color: #64b8be; box-shadow: 0 0 0 3px rgba(100, 184, 190, .14); }
+.chain-inline { display: grid; grid-template-columns: 1fr 1fr 1fr auto; align-items: end; gap: 12px; margin-top: 13px; }
+.chain-inline label { display: grid; gap: 7px; color: #5b6f7a; font-size: 10px; font-weight: 650; }
+.chain-inline input { border: 1px solid #d8e2e5; border-radius: 8px; padding: 9px 11px; color: #2d414c; background: #fbfdfd; font: inherit; }
+.chain-inline input:focus { outline: none; border-color: #64b8be; }
+.chain-file input[type=file] { padding: 6px 8px; font-size: 9px; }
+.chain-file small { color: #9aa6ad; font-size: 8px; }
+.chain-submit { display: flex; align-items: center; gap: 7px; border: 1px solid #bfdadd; border-radius: 8px; padding: 10px 16px; color: #237d84; background: #eff8f8; font-size: 10px; font-weight: 700; cursor: pointer; }
+.chain-submit:hover:not(:disabled) { border-color: #6eb2b8; background: #e5f5f5; }
+.chain-submit:disabled { cursor: wait; opacity: .72; }
+.chain-error { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 11px 14px; border: 1px solid #ecd4d0; border-radius: 9px; color: #9b4a3d; background: #fdf5f3; font-size: 10px; }
+.chain-results { display: grid; gap: 14px; margin-top: 16px; }
+.chain-binary { padding: 16px 18px; border: 1px solid #dce5e8; border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
+.chain-binary-head { display: flex; align-items: baseline; justify-content: space-between; }
+.chain-binary-head strong { color: #334852; font-size: 12px; }
+.chain-binary-head span { color: #8a979f; font-size: 9px; }
+.chain-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 11px; }
+.chain-badges span { border: 1px solid #e0e7e9; border-radius: 6px; padding: 5px 8px; color: #7c8b93; background: #f8fafb; font-size: 9px; font-weight: 650; }
+.chain-badges span.on { border-color: #cfe4dc; color: #367b62; background: #eff8f4; }
+.chain-wins { display: grid; gap: 6px; margin: 12px 0 0; padding: 0; list-style: none; }
+.chain-wins li { display: flex; align-items: center; gap: 10px; color: #5f7079; font-size: 9px; }
+.chain-wins code { color: #237d84; font-size: 10px; }
+.chain-wins em { color: #9aa6ad; font-style: normal; }
+.chain-hints { margin: 10px 0 0; color: #8a979f; font-size: 9px; }
+.chain-entries { display: flex; flex-wrap: wrap; gap: 7px; }
+.chain-entry { display: grid; gap: 2px; border: 1px solid #d9e7ea; border-radius: 8px; padding: 8px 11px; background: #f4f9fa; }
+.chain-entry b { color: #2f6f78; font-size: 10px; }
+.chain-entry small { max-width: 320px; overflow: hidden; color: #8a979f; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.chain-empty { margin: 0; color: #8a979f; font-size: 10px; }
+.chain-card { padding: 17px 19px; border: 1px solid #dce5e8; border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
+.chain-card > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.chain-card h2 { margin: 0 0 5px; color: #2d414c; font-size: 14px; }
+.chain-card header p { margin: 0; color: #8a979f; font-size: 9px; line-height: 1.6; }
+.chain-status { flex: 0 0 auto; border: 1px solid #e0e7e9; border-radius: 7px; padding: 6px 9px; color: #6f7f88; background: #f7fafb; font-size: 8px; font-weight: 750; letter-spacing: .4px; }
+.chain-status.needs-execution, .chain-status.needs-binary { border-color: #e8dfc8; color: #8a6d2f; background: #fffaf0; }
+.chain-status.needs-leak-chain, .chain-status.needs-oracle, .chain-status.blocked { border-color: #ecd9cf; color: #9a5a3c; background: #fdf6f1; }
+.chain-status.refused { border-color: #e6d3d0; color: #9b4a3d; background: #fdf4f2; }
+.chain-steps { display: grid; gap: 2px; margin: 14px 0 0; padding: 0; list-style: none; }
+.chain-steps li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: start; gap: 11px; padding: 8px 0; border-top: 1px solid #f0f4f5; }
+.chain-steps li:first-child { border-top: none; }
+.chain-step-dot { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: #4b9c79; }
+.chain-steps li.blocked .chain-step-dot { background: #b45f4a; }
+.chain-steps li.requires-execution .chain-step-dot { background: #c3973f; }
+.chain-steps li.unknown .chain-step-dot { background: #a7b2b8; }
+.chain-steps b { display: block; color: #3b4f5a; font-size: 10px; }
+.chain-steps small { display: block; margin-top: 3px; color: #8a979f; font-size: 9px; line-height: 1.55; }
+.chain-steps em { color: #9aa6ad; font-size: 8px; font-style: normal; font-weight: 700; }
+.chain-evidence { margin-top: 13px; padding-top: 12px; border-top: 1px solid #eef2f4; }
+.chain-evidence h3 { margin: 0 0 9px; color: #7c8b93; font-size: 9px; font-weight: 750; letter-spacing: .6px; }
+.chain-evidence-item { padding: 9px 0; border-top: 1px dashed #edf1f2; }
+.chain-evidence-item:first-of-type { border-top: none; }
+.chain-evidence-item > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.chain-evidence-item strong { color: #3b4f5a; font-size: 9px; }
+.chain-evidence-item span { overflow: hidden; color: #9aa6ad; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.chain-evidence-item p { margin: 5px 0 0; color: #6f7f88; font-size: 9px; line-height: 1.6; }
+.chain-warnings { margin: 0; padding: 10px 14px; border: 1px solid #e9dfc8; border-radius: 9px; color: #7d704c; background: #fffcf4; font-size: 9px; list-style: none; }
+.chain-note { margin: 0; color: #9aa6ad; font-size: 9px; line-height: 1.6; }
+.spin { animation: spin 1s linear infinite; }

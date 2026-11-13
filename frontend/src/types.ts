@@ -216,4 +216,63 @@ export interface SearchRequest {
   use_llm: boolean
 }
 
-export type ViewId = 'search' | 'sources' | 'settings'
+export interface ChainRequest {
+  source?: string
+  filename?: string
+  relative_path?: string
+  max_evidence?: number
+}
+
+export interface SourceEntryInfo {
+  category: string
+  technique: string
+  line?: number | null
+  text: string
+  confidence: string
+}
+
+export interface ChainStepInfo {
+  unit: string
+  title: string
+  status: string
+  detail: string
+}
+
+export interface ChainEvidence {
+  chunk_id: string
+  score: number
+  title: string
+  relative_path?: string | null
+  page_start?: number | null
+  section_path: string[]
+  text: string
+}
+
+export interface ChainRecommendation {
+  chain_id: string
+  title: string
+  category: string
+  status: string
+  reason: string
+  steps: ChainStepInfo[]
+  evidence: ChainEvidence[]
+}
+
+export interface BinarySummary {
+  is_pie: boolean
+  has_canary: boolean
+  has_nx: boolean
+  relro: string
+  imports: number
+  win_candidates: Array<{ address: number; symbol?: string | null; source: string }>
+  stack_hints: number[]
+}
+
+export interface ChainResponse {
+  entries: SourceEntryInfo[]
+  chains: ChainRecommendation[]
+  binary?: BinarySummary | null
+  warnings: string[]
+}
+
+export type ViewId = 'search' | 'chain' | 'sources' | 'settings'

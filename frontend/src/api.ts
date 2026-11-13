@@ -1,4 +1,6 @@
 import type {
+  ChainRequest,
+  ChainResponse,
   Citation,
   DocumentPageAudit,
   DocumentSummary,
@@ -470,6 +472,48 @@ export async function searchKnowledge(
     throw new Error(await errorMessage(response))
   }
   return decodeResponse(await response.json())
+}
+
+function decodeChainResponse(raw: Partial<ChainResponse>): ChainResponse {
+  return {
+    entries: Array.isArray(raw.entries) ? raw.entries : [],
+    chains: Array.isArray(raw.chains) ? raw.chains : [],
+    binary: raw.binary ?? null,
+    warnings: Array.isArray(raw.warnings) ? raw.warnings : [],
+  }
+}
+
+export async function recommendChain(
+  request: ChainRequest,
+  signal?: AbortSignal,
+): Promise<ChainResponse> {
+  const response = await fetch('/api/chain', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(request),
+    signal,
+  })
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  return decodeChainResponse(await response.json() as Partial<ChainResponse>)
+}
+
+export async function analyzeBinary(
+  file: File,
+  signal?: AbortSignal,
+): Promise<ChainResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  const response = await fetch('/api/chain/binary', {
+    method: 'POST',
+    body: form,
+    signal,
+  })
+  if (!response.ok) {
+    throw new Error(await errorMessage(response))
+  }
+  return decodeChainResponse(await response.json() as Partial<ChainResponse>)
 }
 
 export async function fetchChunk(chunkId: string, signal?: AbortSignal): Promise<SearchHit> {

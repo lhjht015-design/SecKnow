@@ -38,6 +38,7 @@ import {
   searchKnowledge,
   uploadDocuments,
 } from './api'
+import { ChainView } from './components/ChainView'
 import type {
   Citation,
   DocumentPageAudit,
@@ -91,6 +92,7 @@ const MODE_CAPABILITY: Record<RuntimeMode, number> = {
 
 const NAV_ITEMS: { id: ViewId; label: string; icon: typeof Search }[] = [
   { id: 'search', label: '知识检索', icon: Search },
+  { id: 'chain', label: '验证链', icon: ShieldCheck },
   { id: 'sources', label: '知识源', icon: Database },
   { id: 'settings', label: '运行设置', icon: Settings2 },
 ]
@@ -316,6 +318,7 @@ function App() {
               onSearch={runSearch}
             />
           )}
+          {view === 'chain' && <ChainView />}
           {view === 'sources' && <SourcesView />}
           {view === 'settings' && (
             <SettingsView

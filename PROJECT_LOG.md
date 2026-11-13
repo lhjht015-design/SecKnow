@@ -1649,3 +1649,23 @@ TF-IDF `c50f7d5c…`、知识图 **65517 节点 / 565874 边**（纯索引 103.8
 （CET 构建的 PLT 桩在 `.plt.sec`）。
 
 → `versions/v028_binary_entry.src`，`experiments/EXP-0027/report.md`，`laws/LAW-0045.md`
+
+## 2026-11-13 — 验证链面板接入产品
+
+**做了什么**：把 v027/v028 的入口发现与链推荐接成产品接口与界面。
+
+- `POST /api/chain`：粘贴源码 / 语料内路径 → 入口、候选链、逐链知识证据。
+- `POST /api/chain/binary`：上传 ELF（≤64 MiB）→ 二进制画像 + 入口 + 后门候选；
+  文件只落到临时目录，分析后删除。
+- 前端新增「验证链」面板：源码、文件名、语料内路径、ELF 上传四个入口。
+
+**验证**：源码含 `strcpy` + `printf(buf)` + `system(input)`，返回 3 个入口与
+3 条链（需执行验证 / 需泄漏链 / 需要二进制），每条链 4 条证据；
+上传 B1 后识别 `unsafe_copy`，后门 `grant_kkrx0y @ 0x4011f6`，PIE 关 / canary 关 / NX 开。
+`pytest` 全绿，前端 typecheck / lint / build 通过。截图 `experiments/EXP-0028/chain-panel.jpg`。
+
+**边界**：产品内不执行目标程序，执行验证步骤标为「需执行」，留在靶场；
+入口识别是规则/静态特征，未命中时会明确返回「未识别到入口」。
+
+→ `src/secknow/solving/`，`src/secknow/api/routes.py`，`frontend/src/components/ChainView.tsx`，
+`laws/LAW-0046.md`
