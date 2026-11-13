@@ -1,0 +1,79 @@
+{
+  "summary": {
+    "cases": 3,
+    "solved": 2,
+    "unsupported": 1,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "echo",
+      "note": "picoCTF 2018：栈上 flag 盲泄漏",
+      "strategy": "fmtstr_blind",
+      "bits": 32,
+      "pie": false,
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "flag{fla",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 3224.9
+    },
+    {
+      "id": "ret2csu",
+      "note": "ROP Emporium：csu 设置参数调 ret2win",
+      "strategy": "csu",
+      "bits": 64,
+      "pie": false,
+      "entries": [
+        "command_injection",
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "command-injection",
+          "status": "needs-execution"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "ird argument (rdx) must be 0xdeadcafebabebeef\n\n> flag{flag}",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 377.1
+    },
+    {
+      "id": "greeting",
+      "note": "TWCTF 2016：格式串在堆上，%n 不可达",
+      "strategy": "unsupported",
+      "bits": 32,
+      "pie": false,
+      "entries": [
+        "format_string",
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution"
+        },
+        {
+          "id": "pwn-ret2win",
+          "status": "refused"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "fmt_buffer_not_on_stack",
+      "elapsed_ms": 5.8
+    }
+  ]
+}

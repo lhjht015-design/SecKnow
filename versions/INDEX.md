@@ -46,6 +46,7 @@
 | v034 | [v034_more_real.src](v034_more_real.src) | 第三轮真实赛题（盲 fmtstr / fgets 泄漏 / ret2csu） | Python + WSL + pwntools | 解 3/3；fgets 泄漏与 ret2csu 已补 |
 | v035 | [v035_deep_real.src](v035_deep_real.src) | 第四轮真题：盲泄漏 / SROP / partial / dlresolve | Python + WSL + pwntools | 解 3/4（goodluck、srop、dlresolve）；partial-gets 镜像不匹配 |
 | v036 | [v036_partial_overwrite.src](v036_partial_overwrite.src) | partial overwrite（PIE 低字节覆盖） | Python + WSL + pwntools | 真实题 2/3（pwn2、vuln-chat2.0） |
+| v037 | [v037_more_real.src](v037_more_real.src) | 第五轮：fmt 泄漏 / csu 调用 / fmt 写边界 | Python + WSL + pwntools | 解 2/3（echo、ret2csu） |
 
 ## 各版本说明
 

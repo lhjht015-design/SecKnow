@@ -41,6 +41,7 @@
 | EXP-0034 | 2026-11-13 | 第三轮真实赛题回归 | 3/3：盲 fmtstr、fgets 版 libc 泄漏、ret2csu 全部解出 | `EXP-0034/report.md` |
 | EXP-0035 | 2026-11-13 | 第四轮真题（盲泄漏/SROP/partial/dlresolve） | 解 3/4：goodluck、srop-smallest、dlresolve-gets；partial-gets 镜像不匹配；2 次一致 | `EXP-0035/report.md` |
 | EXP-0036 | 2026-11-13 | partial overwrite 真实赛题 | pwn2、vuln-chat2.0 低字节覆盖解出；partial-gets 镜像不匹配；2 次一致 | `EXP-0036/report.md` |
+| EXP-0037 | 2026-11-13 | 第五轮真题（fmt 泄漏/csu/fmt 写） | echo、ret2csu 解出；greeting 堆上格式串不可达；2 次一致 | `EXP-0037/report.md` |
 
 ---
 

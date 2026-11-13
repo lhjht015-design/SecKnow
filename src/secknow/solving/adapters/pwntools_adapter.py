@@ -195,6 +195,23 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def fmtstr_write_chain(self, binary: str | Path, offset: int,
+                           writes: dict[int, int], follow: bytes = b"",
+                           marker: str = "PWNED",
+                           write_size: str = "short") -> dict[str, Any]:
+        return self._request("fmtstr_write_chain", path=_wsl_path(binary),
+                             offset=offset,
+                             writes={str(k): v for k, v in writes.items()},
+                             follow=follow.hex(), marker=marker,
+                             write_size=write_size)
+
+    def csu_call(self, binary: str | Path, offset: int, pointer: int,
+                 after: int, rdi: int = 0, rsi: int = 0, rdx: int = 0,
+                 marker: str = "flag") -> dict[str, Any]:
+        return self._request("csu_call", path=_wsl_path(binary), offset=offset,
+                             pointer=pointer, after=after, rdi=rdi, rsi=rsi,
+                             rdx=rdx, marker=marker)
+
     def dlresolve_strtab(self, binary: str | Path,
                          offsets: list[int]) -> dict[str, Any]:
         return self._request("dlresolve_strtab", path=_wsl_path(binary),

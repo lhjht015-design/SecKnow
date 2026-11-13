@@ -1937,3 +1937,16 @@ partial overwrite 与 ret2dlresolve 仍是明确边界。
 
 → `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
 `versions/v035_deep_real.src`，`laws/LAW-0060.md`
+
+## 2026-11-13 — 第五轮真题：fmt 泄漏与 csu 调用（v037，2/3）
+
+- echo（picoCTF 2018）：栈上 flag，位置参数盲泄漏，解出；
+- ret2csu（ROP Emporium）：csu 两段 gadget 设置 rdi/rsi/rdx 后跳 ret2win，
+  解出 flag{flag}；修了 csu helper 写死映射的问题——这题映射是
+  rdx←r15、rsi←r14、edi←r13d，与 pwn100 不同；
+- greeting（TWCTF 2016）：格式串在堆上，栈参数扫不到地址，%n 不可达，标边界。
+
+结果：EXP-0037 **2/3**（2 次一致）。
+
+→ `tools/pwn_worker.src`，`src/secknow/solving/adapters/pwntools_adapter.py`，
+`versions/v037_more_real.src`，`laws/LAW-0061.md`
