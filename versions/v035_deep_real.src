@@ -52,7 +52,7 @@ CASES = [
     {"id": "goodluck", "note": "UIUCTF 2017：栈上 flag + 盲格式化字符串",
      "strategy": "fmtstr_blind"},
     {"id": "srop-smallest", "note": "360 春秋杯 2016：SROP",
-     "strategy": "unsupported", "reason": "srop_multistage_not_implemented"},
+     "strategy": "srop"},
     {"id": "partial-gets", "note": "XNUCA 2018：partial overwrite",
      "strategy": "unsupported", "reason": "partial_target_challenge_specific"},
     {"id": "dlresolve-gets", "note": "XDCTF 2015：ret2dlresolve",
@@ -79,6 +79,15 @@ def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
 
     if case["strategy"] == "unsupported":
         record.update({"verdict": "unsupported", "reason": case["reason"]})
+    elif case["strategy"] == "srop":
+        try:
+            result = worker.srop(binary)
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record["input"] = hex(result.get("stack", 0))
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else result.get("error")})
     elif case["strategy"] == "fmtstr_blind":
         try:
             result = worker.fmtstr_blind_leak(binary)

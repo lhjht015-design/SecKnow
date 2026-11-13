@@ -63,7 +63,11 @@ def build_chains(
         elif category == "blackbox_check":
             chains.append(_blackbox(profile))
     if not chains and profile is not None:
-        chains.append(_symbolic(profile))
+        srop = _srop(profile)
+        if srop is not None:
+            chains.append(srop)
+        else:
+            chains.append(_symbolic(profile))
     return chains
 
 
@@ -211,6 +215,22 @@ def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
                       "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
+def _srop(profile: BinaryProfile) -> Chain | None:
+    if profile.bits != 64 or profile.instruction_count > 20:
+        return None
+    return Chain(
+        "srop", "SROP：多阶段 sigreturn", "unsafe_copy", "needs-execution",
+        "极简 syscall 二进制；先泄漏栈地址，再用 rt_sigreturn 读帧执行 execve",
+        (
+            ChainStep("leak", "泄漏栈地址", "requires-execution",
+                      "利用 read 返回长度与低字节改写，触发 write 打印栈"),
+            ChainStep("sigframe", "构造 sigreturn 帧", "requires-execution",
+                      "read 帧 + rax=15 触发 rt_sigreturn"),
+            ChainStep("execve", "execve('/bin/sh')", "requires-execution",
+                      "第二帧设置 execve 参数并再次触发"),
         ))
 
 

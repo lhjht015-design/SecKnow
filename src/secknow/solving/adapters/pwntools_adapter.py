@@ -195,6 +195,9 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def srop(self, binary: str | Path) -> dict[str, Any]:
+        return self._request("srop", path=_wsl_path(binary))
+
     def ret2csu(self, binary: str | Path, offsets: list[int],
                 reentry: str = "main") -> dict[str, Any]:
         return self._request("ret2csu", path=_wsl_path(binary),

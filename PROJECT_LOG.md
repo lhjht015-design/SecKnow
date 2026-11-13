@@ -1895,3 +1895,16 @@ fgets 长度限制直接淘汰一类链；ret2csu 是 64 位无 pop rdi 场景�
 dlresolve 在 loader 层校验 relocation 类型，参考解法需改写 DT_STRTAB。
 
 → `versions/v035_deep_real.src`，`experiments/EXP-0035/`，`laws/LAW-0057.md`
+
+## 2026-11-13 — 补 SROP（v035，2/4）
+
+srop-smallest（360 春秋杯 2016）只有 `read(0,rsp,0x400); ret`：
+连发 3 个 start 停住 → 1 字节 `\xb3` 改低字节为 start+3，read 返回 1（rax=1）
+→ 触发 write 泄漏栈 → read 的 sigreturn 帧 → rt_sigreturn → execve("/bin/sh")。
+worker 新增 op=srop，2.0 秒拿到 shell；产品链对极小 64 位 syscall 二进制给出 srop。
+
+第四轮回归从 1/4 提升到 **2/4**（goodluck + srop-smallest），连跑 2 次一致；
+partial overwrite 与 ret2dlresolve 仍是明确边界。
+
+→ `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
+`versions/v035_deep_real.src`，`laws/LAW-0058.md`

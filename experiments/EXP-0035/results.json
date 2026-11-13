@@ -1,8 +1,8 @@
 {
   "summary": {
     "cases": 4,
-    "solved": 1,
-    "unsupported": 3,
+    "solved": 2,
+    "unsupported": 2,
     "failed": 0
   },
   "cases": [
@@ -23,23 +23,24 @@
       "input": "flag{11111111111111111",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 218.5
+      "elapsed_ms": 234.3
     },
     {
       "id": "srop-smallest",
       "note": "360 春秋杯 2016：SROP",
-      "strategy": "unsupported",
+      "strategy": "srop",
       "bits": 64,
       "entries": [],
       "chains": [
         {
-          "id": "symbolic-execution",
+          "id": "srop",
           "status": "needs-execution"
         }
       ],
-      "verdict": "unsupported",
-      "reason": "srop_multistage_not_implemented",
-      "elapsed_ms": 1.8
+      "input": "0x7ffe8e6053f0",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 2059.8
     },
     {
       "id": "partial-gets",
@@ -57,7 +58,7 @@
       ],
       "verdict": "unsupported",
       "reason": "partial_target_challenge_specific",
-      "elapsed_ms": 3.3
+      "elapsed_ms": 4.2
     },
     {
       "id": "dlresolve-gets",
@@ -73,7 +74,7 @@
       ],
       "verdict": "unsupported",
       "reason": "fake_reloc_rejected_by_loader",
-      "elapsed_ms": 4.7
+      "elapsed_ms": 4.6
     }
   ]
 }

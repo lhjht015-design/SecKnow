@@ -282,6 +282,7 @@ def test_profile_without_pwn_entry_offers_symbolic_chain() -> None:
         symbols={},
         plt={},
         bits=64,
+        instruction_count=1000,
     )
 
     chains = build_chains([], profile)
@@ -325,4 +326,24 @@ def test_ret2libc_leak_chain_works_with_fgets_binary() -> None:
     chains = build_chains(["unsafe_copy"], profile)
 
     assert chains[0].chain_id == "ret2libc-leak"
+    assert chains[0].status == "needs-execution"
+
+
+def test_tiny_syscall_binary_offers_srop_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports=set(),
+        symbols={},
+        plt={},
+        bits=64,
+        instruction_count=6,
+    )
+
+    chains = build_chains([], profile)
+
+    assert chains[0].chain_id == "srop"
     assert chains[0].status == "needs-execution"

