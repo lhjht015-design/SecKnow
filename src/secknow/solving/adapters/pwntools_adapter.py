@@ -195,6 +195,11 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def dlresolve_strtab(self, binary: str | Path,
+                         offsets: list[int]) -> dict[str, Any]:
+        return self._request("dlresolve_strtab", path=_wsl_path(binary),
+                             offsets=offsets)
+
     def partial_overwrite(self, binary: str | Path, offset: int, patch: bytes,
                           prompt: bytes | None = None, attempts: int = 1,
                           newline: bool = True, marker: str = "PWNED",

@@ -368,3 +368,23 @@ def test_pie_with_win_offers_partial_overwrite_chain() -> None:
 
     assert chains[0].chain_id == "partial-overwrite"
     assert chains[0].status == "needs-execution"
+
+
+def test_i386_partial_relro_offers_dlresolve_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"read", "write"},
+        symbols={},
+        plt={0x8048370: "read", 0x80483A0: "write"},
+        bits=32,
+        instruction_count=500,
+    )
+
+    chains = build_chains([], profile)
+
+    assert chains[0].chain_id == "ret2dlresolve"
+    assert chains[0].status == "needs-execution"

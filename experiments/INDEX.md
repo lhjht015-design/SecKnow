@@ -39,7 +39,7 @@
 | EXP-0032 | 2026-11-13 | 真实赛题验证（10 题，全 32 位） | 解 9（含 contacts 栈迁移、ret2shellcode staged printf）、不支持 1；连跑 3 次一致 | `EXP-0032/report.md` |
 | EXP-0033 | 2026-11-13 | angr 符号执行真实逆向题 | ais3_crackme 4.4s、defcamp_r100 2.2s 解出；wyvern/rev100 限时未解 | `EXP-0033/report.md` |
 | EXP-0034 | 2026-11-13 | 第三轮真实赛题回归 | 3/3：盲 fmtstr、fgets 版 libc 泄漏、ret2csu 全部解出 | `EXP-0034/report.md` |
-| EXP-0035 | 2026-11-13 | 第四轮真题（盲泄漏/SROP/partial/dlresolve） | 解 2/4：goodluck、srop-smallest；partial/dlresolve 如实不支持；2 次一致 | `EXP-0035/report.md` |
+| EXP-0035 | 2026-11-13 | 第四轮真题（盲泄漏/SROP/partial/dlresolve） | 解 3/4：goodluck、srop-smallest、dlresolve-gets；partial-gets 镜像不匹配；2 次一致 | `EXP-0035/report.md` |
 | EXP-0036 | 2026-11-13 | partial overwrite 真实赛题 | pwn2、vuln-chat2.0 低字节覆盖解出；partial-gets 镜像不匹配；2 次一致 | `EXP-0036/report.md` |
 
 ---

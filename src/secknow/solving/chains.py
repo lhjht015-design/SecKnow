@@ -68,8 +68,11 @@ def build_chains(
             chains.append(_blackbox(profile))
     if not chains and profile is not None:
         srop = _srop(profile)
+        dlresolve = _dlresolve(profile) if srop is None else None
         if srop is not None:
             chains.append(srop)
+        elif dlresolve is not None:
+            chains.append(dlresolve)
         else:
             chains.append(_symbolic(profile))
     return chains
@@ -219,6 +222,24 @@ def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
                       "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
+def _dlresolve(profile: BinaryProfile) -> Chain | None:
+    if profile.bits != 32 or "read" not in profile.plt_names:
+        return None
+    if profile.relro == "full":
+        return None
+    return Chain(
+        "ret2dlresolve", "ret2dlresolve：改写 DT_STRTAB", "unsafe_copy",
+        "needs-execution",
+        "32 位、非 full RELRO；把 DT_STRTAB 指向伪 dynstr，让 read 解析成 system",
+        (
+            ChainStep("dynamic", "定位 DT_STRTAB", "ok", "读 .dynamic 找到 strtab 指针"),
+            ChainStep("fake_strtab", "伪 dynstr", "requires-execution",
+                      "复制原 dynstr 并把 read 替换成 system"),
+            ChainStep("call", "触发解析", "requires-execution",
+                      "跳 read@plt+6，让 resolver 解析 system 并传入 /bin/sh"),
         ))
 
 

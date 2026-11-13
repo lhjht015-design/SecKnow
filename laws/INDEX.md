@@ -64,6 +64,7 @@
 | [LAW-0057](LAW-0057.md) | 2026-11-13 | 第四轮真题：盲泄漏可迁移，SROP/partial/dlresolve 是边界 | goodluck 解出；其余 3 道如实不支持；2 次一致 | 已验证 |
 | [LAW-0058](LAW-0058.md) | 2026-11-13 | SROP：栈地址泄漏是关键；read 返回值当 rax | srop-smallest 2.0s 解出；第四轮 2/4；2 次一致 | 已验证 |
 | [LAW-0059](LAW-0059.md) | 2026-11-13 | partial overwrite：保留高位只改低字节；镜像要先对齐 | pwn2、vuln-chat2.0 解出；partial-gets 镜像不匹配；2 次一致 | 已验证 |
+| [LAW-0060](LAW-0060.md) | 2026-11-13 | dlresolve 改 DT_STRTAB；常驻 worker 的 arch/bits 要复位 | dlresolve-gets 0.56s 解出；第四轮 3/4；2 次一致 | 已验证 |
 
 ## 规律之间的关系
 

@@ -56,7 +56,7 @@ CASES = [
     {"id": "partial-gets", "note": "XNUCA 2018：partial overwrite",
      "strategy": "unsupported", "reason": "partial_target_challenge_specific"},
     {"id": "dlresolve-gets", "note": "XDCTF 2015：ret2dlresolve",
-     "strategy": "unsupported", "reason": "fake_reloc_rejected_by_loader"},
+     "strategy": "dlresolve"},
 ]
 
 
@@ -79,6 +79,14 @@ def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
 
     if case["strategy"] == "unsupported":
         record.update({"verdict": "unsupported", "reason": case["reason"]})
+    elif case["strategy"] == "dlresolve":
+        try:
+            result = worker.dlresolve_strtab(binary, [108, 112, 116])
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else result.get("error")})
     elif case["strategy"] == "srop":
         try:
             result = worker.srop(binary)

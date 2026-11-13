@@ -5,18 +5,18 @@
 ```json
 {
   "cases": 4,
-  "solved": 2,
-  "unsupported": 2,
+  "solved": 3,
+  "unsupported": 1,
   "failed": 0
 }
 ```
 
 | 题 | 位数 | 判定 | 说明 | 耗时 |
 | --- | --- | --- | --- | --- |
-| goodluck | 64 | solved | flag{11111111111111111 | 234.3 ms |
-| srop-smallest | 64 | solved | 0x7ffe8e6053f0 | 2059.8 ms |
-| partial-gets | 64 | unsupported | partial_target_challenge_specific | 4.2 ms |
-| dlresolve-gets | 32 | unsupported | fake_reloc_rejected_by_loader | 4.6 ms |
+| goodluck | 64 | solved | flag{11111111111111111 | 203.1 ms |
+| srop-smallest | 64 | solved | 0x7ffc0e3803f0 | 2049.8 ms |
+| partial-gets | 64 | unsupported | partial_target_challenge_specific | 3.4 ms |
+| dlresolve-gets | 32 | solved | — | 574.3 ms |
 
 ## 说明
 
@@ -25,17 +25,17 @@
 - partial-gets：partial overwrite 的目标是题目特有隐藏地址，未自动化；
 - dlresolve-gets：pwntools fake relocation 被 loader 拒绝，参考解法要改写 DT_STRTAB 指向伪 dynstr，未实现。
 
-## SROP 补齐（srop-smallest）
+## dlresolve 补齐（dlresolve-gets）
 
-- 二进制只有 `read(0,rsp,0x400); ret`。利用步骤：
-  1. 连发三个 `start` 地址，让程序停留在 read；
-  2. 发一个 `\xb3` 改低字节，把返回地址改成 `start+3`（跳过 `xor rax`），
-     read 返回 1 → rax=1，触发 `write(1, rsp, 0x400)` 泄漏栈；
-  3. 从泄漏里取栈地址，构造 read 的 sigreturn 帧（rax=15 触发 rt_sigreturn）；
-  4. 第二个帧设置 execve("/bin/sh") 参数，再次触发；
-- worker 的 `srop` op 固化这套流程，2.0 秒拿到 shell；
-- 产品链：极小 64 位 syscall 二进制给出 `srop`（needs-execution）。
+- 不使用 pwntools 的 fake relocation（会被 loader 以 `r_info` 类型不符拒绝）；
+  改用参考路线：改写 `.dynamic` 里的 `DT_STRTAB` 指向 `.bss` 上的伪 dynstr，
+  把原 dynstr 中的 `read` 替换成 `system`；
+- ROP 链：read 写入新的 strtab 指针 → read 写入伪 dynstr → read 写入 `/bin/sh`
+  → 跳 `read@plt+6` 让解析器按伪造 strtab 解析出 `system` 并调用。
+- 结果：0.56 秒拿到 shell；产品链对“32 位、非 full RELRO、导入 read”的二进制
+  给出 `ret2dlresolve`（needs-execution）。
 
 ## 稳定性
 
-连跑 2 次结果一致：解出 2（goodluck、srop-smallest）、不支持 2（partial、dlresolve）。
+连跑 2 次结果一致：解出 3（goodluck、srop-smallest、dlresolve-gets）、
+不支持 1（partial-gets 镜像不匹配）。

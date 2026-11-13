@@ -1922,3 +1922,18 @@ partial overwrite 与 ret2dlresolve 仍是明确边界。
 
 → `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
 `versions/v036_partial_overwrite.src`，`laws/LAW-0059.md`
+
+## 2026-11-13 — ret2dlresolve 单元（v035，3/4）
+
+- dlresolve-gets（XDCTF 2015，i386 no-relro）：pwntools 的 fake relocation
+  被 loader 拒绝；改用“改写 DT_STRTAB 指向伪 dynstr（read→system）+ read 链
+  + read@plt+6”路线，0.56 秒拿到 shell；
+- 产品链：32 位、非 full RELRO、导入 read → ret2dlresolve（needs-execution）；
+- 修了一个常驻 worker 的隐式依赖：SROP 之后 context.arch 留在 amd64，
+  下一条 i386 链报 `Invalid arch/bits combination`；
+  现在 `_elf()` 切换二进制时同步 arch 与 bits。
+
+第四轮回归从 2/4 提升到 **3/4**（仅 partial-gets 镜像不匹配），2 次一致。
+
+→ `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
+`versions/v035_deep_real.src`，`laws/LAW-0060.md`

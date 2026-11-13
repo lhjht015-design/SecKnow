@@ -1,8 +1,8 @@
 {
   "summary": {
     "cases": 4,
-    "solved": 2,
-    "unsupported": 2,
+    "solved": 3,
+    "unsupported": 1,
     "failed": 0
   },
   "cases": [
@@ -23,7 +23,7 @@
       "input": "flag{11111111111111111",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 234.3
+      "elapsed_ms": 203.1
     },
     {
       "id": "srop-smallest",
@@ -37,10 +37,10 @@
           "status": "needs-execution"
         }
       ],
-      "input": "0x7ffe8e6053f0",
+      "input": "0x7ffc0e3803f0",
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 2059.8
+      "elapsed_ms": 2049.8
     },
     {
       "id": "partial-gets",
@@ -58,23 +58,23 @@
       ],
       "verdict": "unsupported",
       "reason": "partial_target_challenge_specific",
-      "elapsed_ms": 4.2
+      "elapsed_ms": 3.4
     },
     {
       "id": "dlresolve-gets",
       "note": "XDCTF 2015：ret2dlresolve",
-      "strategy": "unsupported",
+      "strategy": "dlresolve",
       "bits": 32,
       "entries": [],
       "chains": [
         {
-          "id": "symbolic-execution",
+          "id": "ret2dlresolve",
           "status": "needs-execution"
         }
       ],
-      "verdict": "unsupported",
-      "reason": "fake_reloc_rejected_by_loader",
-      "elapsed_ms": 4.6
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 574.3
     }
   ]
 }
