@@ -1669,3 +1669,24 @@ TF-IDF `c50f7d5c…`、知识图 **65517 节点 / 565874 边**（纯索引 103.8
 
 → `src/secknow/solving/`，`src/secknow/api/routes.py`，`frontend/src/components/ChainView.tsx`，
 `laws/LAW-0046.md`
+
+## 2026-11-13 — 调用图补“有入口但没链”（v029）
+
+**问题**：v028 的后门定位依赖 flag 字符串交叉引用和可疑符号名；
+后门名随机、flag 以异或字节数组嵌入时，就落到 `win_not_found`。
+
+**做法**：从 ELF 入口、main（符号或 `__libc_start_main` 参数）、输入读取函数出发
+做函数级可达性；不可达且调用 puts/printf/system 的函数 = 后门候选。
+
+| 题 | 线索 | 结果 |
+| --- | --- | --- |
+| D1 无线索后门（有符号） | 调用图 dead output | ✓ 72B 执行验证拿 flag |
+| D2 同题 strip | main 从 _start 反推 | ✓ 72B |
+| N1 死函数不输出 | 无候选 | ✓ 链 blocked |
+| N2 会输出的 banner 可达 | 可达性排除 | ✓ 不误判 |
+
+三个随机种子一致（2/2 + 2/2）。产品接口同步返回 `call_graph` 与
+`source=call-graph-dead-output` 候选，面板展示调用图统计。
+边界：不可达但不输出的后门、或真正利用点是可达函数时会漏，必须诚实 blocked。
+
+→ `versions/v029_call_graph.src`，`experiments/EXP-0029/report.md`，`laws/LAW-0047.md`

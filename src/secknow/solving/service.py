@@ -81,6 +81,7 @@ def recommend(
             "imports": len(profile.imports),
             "win_candidates": profile.win_candidates[:5],
             "stack_hints": profile.stack_hints,
+            "call_graph": profile.call_graph,
         }
 
     if not detected:

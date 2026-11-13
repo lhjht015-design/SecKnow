@@ -266,6 +266,13 @@ export interface BinarySummary {
   imports: number
   win_candidates: Array<{ address: number; symbol?: string | null; source: string }>
   stack_hints: number[]
+  call_graph?: {
+    functions: number
+    edges: number
+    dead: number
+    dead_output: number
+    main?: string | null
+  }
 }
 
 export interface ChainResponse {

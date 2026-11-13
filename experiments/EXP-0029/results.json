@@ -1,0 +1,221 @@
+{
+  "summary": {
+    "positive_total": 2,
+    "positive_solved": 2,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "elapsed_ms": 419.6
+  },
+  "cases": [
+    {
+      "id": "D1",
+      "negative": false,
+      "note": "符号在，但后门名随机、无 flag 字符串",
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "   16 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccogQp8E.o: in function `main':\nd1_deadwin.c:(.text+0x95): warning: the `gets' function is dangerous and should not be used."
+      },
+      "call_graph": {
+        "functions": 7,
+        "edges": 0,
+        "dead": 5,
+        "dead_output": 1,
+        "main": "0x401212"
+      },
+      "candidates": [
+        {
+          "address": 4198806,
+          "symbol": "fn_kkrx0y",
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "chain_status": "needs-execution",
+      "chain_reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证",
+      "steps": [
+        {
+          "unit": "entry",
+          "status": "ok",
+          "detail": "导入表中存在无边界拷贝函数"
+        },
+        {
+          "unit": "protection_gate",
+          "status": "ok",
+          "detail": "PIE=关，canary=关，NX=开，RELRO=partial"
+        },
+        {
+          "unit": "call_graph",
+          "status": "ok",
+          "detail": "7 个函数 / 0 条边；主流程不可达 5 个，其中会输出 1 个"
+        },
+        {
+          "unit": "find_win",
+          "status": "ok",
+          "detail": "fn_kkrx0y @ 0x401196（call-graph-dead-output）"
+        },
+        {
+          "unit": "offset_candidates",
+          "status": "requires-execution",
+          "detail": "静态提示：72, 80"
+        },
+        {
+          "unit": "execute",
+          "status": "requires-execution",
+          "detail": "产品内不执行目标二进制；请在靶场环境复核"
+        }
+      ],
+      "solved": true,
+      "offset": 64,
+      "attempts": 1,
+      "flag": "flag{3c8e012112}",
+      "verdict": "solved",
+      "elapsed_ms": 252.3
+    },
+    {
+      "id": "D2",
+      "negative": false,
+      "note": "strip 符号，main 需从 _start 反推",
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "   gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccogOlDv.o: in function `main':\nd2_deadwin_stripped.c:(.text+0x95): warning: the `gets' function is dangerous and should not be used."
+      },
+      "call_graph": {
+        "functions": 7,
+        "edges": 0,
+        "dead": 5,
+        "dead_output": 1,
+        "main": null
+      },
+      "candidates": [
+        {
+          "address": 4198806,
+          "symbol": null,
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "chain_status": "needs-execution",
+      "chain_reason": "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证",
+      "steps": [
+        {
+          "unit": "entry",
+          "status": "ok",
+          "detail": "导入表中存在无边界拷贝函数"
+        },
+        {
+          "unit": "protection_gate",
+          "status": "ok",
+          "detail": "PIE=关，canary=关，NX=开，RELRO=partial"
+        },
+        {
+          "unit": "call_graph",
+          "status": "ok",
+          "detail": "7 个函数 / 0 条边；主流程不可达 5 个，其中会输出 1 个"
+        },
+        {
+          "unit": "find_win",
+          "status": "ok",
+          "detail": "未命名函数 @ 0x401196（call-graph-dead-output）"
+        },
+        {
+          "unit": "offset_candidates",
+          "status": "requires-execution",
+          "detail": "静态提示：72, 80"
+        },
+        {
+          "unit": "execute",
+          "status": "requires-execution",
+          "detail": "产品内不执行目标二进制；请在靶场环境复核"
+        }
+      ],
+      "solved": true,
+      "offset": 64,
+      "attempts": 1,
+      "flag": "flag{3c8e012112}",
+      "verdict": "solved",
+      "elapsed_ms": 158.4
+    },
+    {
+      "id": "N1",
+      "negative": true,
+      "note": "死函数不输出，不应给链",
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": "\n    9 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/cczJVnVV.o: in function `main':\nn1_silent.c:(.text+0x32): warning: the `gets' function is dangerous and should not be used."
+      },
+      "call_graph": {
+        "functions": 7,
+        "edges": 0,
+        "dead": 5,
+        "dead_output": 0,
+        "main": "0x40114f"
+      },
+      "candidates": [],
+      "chain_status": "blocked",
+      "chain_reason": "win_not_found",
+      "steps": [
+        {
+          "unit": "entry",
+          "status": "ok",
+          "detail": "导入表中存在无边界拷贝函数"
+        },
+        {
+          "unit": "protection_gate",
+          "status": "ok",
+          "detail": "PIE=关，canary=关，NX=开，RELRO=partial"
+        },
+        {
+          "unit": "find_win",
+          "status": "blocked",
+          "detail": "未找到引用 flag 字符串或名称可疑的函数"
+        }
+      ],
+      "solved": false,
+      "refused": true,
+      "verdict": "refused",
+      "elapsed_ms": 3.9
+    },
+    {
+      "id": "N2",
+      "negative": true,
+      "note": "会输出的 banner 可达，不能误判",
+      "compile": {
+        "result": "ok",
+        "rc": 0,
+        "stderr": " 10 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/cc8HR8EC.o: in function `main':\nn2_reachable.c:(.text+0x38): warning: the `gets' function is dangerous and should not be used."
+      },
+      "call_graph": {
+        "functions": 7,
+        "edges": 1,
+        "dead": 4,
+        "dead_output": 0,
+        "main": "0x401170"
+      },
+      "candidates": [],
+      "chain_status": "blocked",
+      "chain_reason": "win_not_found",
+      "steps": [
+        {
+          "unit": "entry",
+          "status": "ok",
+          "detail": "导入表中存在无边界拷贝函数"
+        },
+        {
+          "unit": "protection_gate",
+          "status": "ok",
+          "detail": "PIE=关，canary=关，NX=开，RELRO=partial"
+        },
+        {
+          "unit": "find_win",
+          "status": "blocked",
+          "detail": "未找到引用 flag 字符串或名称可疑的函数"
+        }
+      ],
+      "solved": false,
+      "refused": true,
+      "verdict": "refused",
+      "elapsed_ms": 5.0
+    }
+  ]
+}

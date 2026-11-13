@@ -38,6 +38,7 @@
 | v026 | [v026_batch_transform.src](v026_batch_transform.src) | 变换单元全走批量 Y + 建表复用优化 | Python + WSL | 正样本 4/4 |
 | v027 | [v027_paste_to_verify.src](v027_paste_to_verify.src) | 粘贴源码 → 入口识别 → 单元链 → 真实执行验证 | Python + WSL/gcc | 正样本 3/3、负样本 2/2；3 个随机种子稳定 |
 | v028 | [v028_binary_entry.src](v028_binary_entry.src) | 二进制-only 入口发现（导入表/调用点/字符串交叉引用） | Python + WSL | 攻击题 3/3；负样本 3/3；入口识别 6/7 |
+| v029 | [v029_call_graph.src](v029_call_graph.src) | 调用图补后门候选：不可达且会输出的死函数 | Python + WSL | 正样本 2/2、负样本 2/2；3 个种子稳定 |
 
 ## 各版本说明
 

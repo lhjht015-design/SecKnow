@@ -96,19 +96,29 @@ def _overflow(profile: BinaryProfile | None) -> Chain:
             ))
     symbol = win.get("symbol") or "未命名函数"
     hints = profile.stack_hints or []
-    return Chain(
-        "pwn-ret2win", "栈溢出 → ret2win", "unsafe_copy", "needs-execution",
-        "静态条件满足；偏移与利用需在目标环境执行验证",
-        (
-            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
-            _protection_step(profile),
-            ChainStep("find_win", "后门定位", "ok",
-                      f"{symbol} @ {hex(win['address'])}（{win['source']}）"),
-            ChainStep("offset_candidates", "偏移候选", "requires-execution",
-                      "静态提示：" + (", ".join(str(h) for h in hints) or "无")),
-            ChainStep("execute", "执行验证", "requires-execution",
-                      "产品内不执行目标二进制；请在靶场环境复核"),
-        ))
+    steps = [
+        ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+        _protection_step(profile),
+    ]
+    graph = profile.call_graph
+    if graph:
+        steps.append(ChainStep(
+            "call_graph", "调用图", "ok",
+            f"{graph.get('functions', 0)} 个函数 / {graph.get('edges', 0)} 条边；"
+            f"主流程不可达 {graph.get('dead', 0)} 个，其中会输出 {graph.get('dead_output', 0)} 个"))
+    steps.extend([
+        ChainStep("find_win", "后门定位", "ok",
+                  f"{symbol} @ {hex(win['address'])}（{win['source']}）"),
+        ChainStep("offset_candidates", "偏移候选", "requires-execution",
+                  "静态提示：" + (", ".join(str(h) for h in hints) or "无")),
+        ChainStep("execute", "执行验证", "requires-execution",
+                  "产品内不执行目标二进制；请在靶场环境复核"),
+    ])
+    reason = "静态条件满足；偏移与利用需在目标环境执行验证"
+    if win.get("source") == "call-graph-dead-output":
+        reason = "后门来自调用图（主流程不可达且会输出）；偏移与利用需执行验证"
+    return Chain("pwn-ret2win", "栈溢出 → ret2win", "unsafe_copy", "needs-execution",
+                 reason, tuple(steps))
 
 
 def _command_injection(profile: BinaryProfile | None) -> Chain:

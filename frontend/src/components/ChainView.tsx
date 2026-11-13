@@ -171,6 +171,14 @@ export function ChainView() {
                   栈缓冲候选：{result.binary.stack_hints.join(' / ')} 字节
                 </p>
               )}
+              {result.binary.call_graph && (
+                <p className="chain-hints">
+                  调用图：{result.binary.call_graph.functions} 个函数 /{' '}
+                  {result.binary.call_graph.edges} 条边；主流程不可达{' '}
+                  {result.binary.call_graph.dead} 个，其中会输出{' '}
+                  {result.binary.call_graph.dead_output} 个
+                </p>
+              )}
             </div>
           )}
 
