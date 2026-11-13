@@ -43,6 +43,7 @@
 | v031 | [v031_adapter_ab.src](v031_adapter_ab.src) | 适配层（常驻 pwntools worker）vs 自研 vs 一次性 | Python + WSL + pwntools | 自研 3/4、一次性 4/4、适配层 4/4；耗时 921→131 ms |
 | v032 | [v032_real_challenges.src](v032_real_challenges.src) | 真实赛题验证（ctf-wiki 收录，10 题） | Python + WSL + pwntools | 解 9/10、不支持 1；连跑 3 次一致 |
 | v033 | [v033_angr.src](v033_angr.src) | angr 符号执行接入（stdin/argv、地址/输出判据） | Python + WSL + angr | 真实逆向题 2/4（ais3、r100 秒级） |
+| v034 | [v034_more_real.src](v034_more_real.src) | 第三轮真实赛题（盲 fmtstr / fgets 溢出 / ret2csu） | Python + WSL + pwntools | 解 1/3；两个缺口如实标注 |
 
 ## 各版本说明
 

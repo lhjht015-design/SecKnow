@@ -193,6 +193,11 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def fmtstr_blind_leak(self, binary: str | Path, count: int = 150,
+                          marker: str = "flag{") -> dict[str, Any]:
+        return self._request("fmtstr_blind_leak", path=_wsl_path(binary),
+                             count=count, marker=marker)
+
     def angr_solve(self, binary: str | Path, find_output: str = "WIN",
                    avoid_output: str = "FAIL", stdin_len: int = 32,
                    timeout: float = 120.0, input_mode: str = "stdin",

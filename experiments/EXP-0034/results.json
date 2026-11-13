@@ -1,0 +1,70 @@
+{
+  "summary": {
+    "cases": 3,
+    "solved": 1,
+    "unsupported": 2,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "blind",
+      "note": "64 位盲格式化字符串，flag 在栈上",
+      "strategy": "fmtstr_blind",
+      "bits": 64,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "entries": [
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "format-string",
+          "status": "needs-execution"
+        }
+      ],
+      "input": "flag{this_is_flag}",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 387.0
+    },
+    {
+      "id": "b0verfl0w",
+      "note": "X-CTF 2016：fgets(50) + jmp esp",
+      "strategy": "unsupported",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": false,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "fgets_limit_blocks_jmp_esp",
+      "elapsed_ms": 4.7
+    },
+    {
+      "id": "pwn100",
+      "note": "2016 XDCTF：ret2csu + libc 泄漏",
+      "strategy": "unsupported",
+      "bits": 64,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "entries": [],
+      "chains": [
+        {
+          "id": "symbolic-execution",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "ret2csu_not_implemented",
+      "elapsed_ms": 3.5
+    }
+  ]
+}

@@ -1845,3 +1845,20 @@ LibcSearcher 1.1.5，worker ping 会返回版本清单。
 
 → `versions/v033_angr.src`，`tools/pwn_worker.src`，`experiments/EXP-0033/`，
 `laws/LAW-0054.md`
+
+## 2026-11-13 — 第三轮真题回归（v034）
+
+新增 3 道真实赛题：
+
+| 题 | 结果 |
+| --- | --- |
+| blind（64 位盲格式化字符串） | ✓ 位置参数 `%N$lx` 重建栈，解出 `flag{this_is_flag}` |
+| b0verfl0w（X-CTF 2016） | 不支持：fgets 49 字节上限放不下 jmp-esp shellcode |
+| pwn100（XDCTF 2016） | 不支持：需要 ret2csu 链，未实现 |
+
+连跑 2 次一致（1 解 / 2 不支持）。
+
+**结论（LAW-0055）**：盲 fmtstr 用位置参数比 `%p` 可靠（零值不会变 `(nil)` 打乱对齐）；
+fgets 长度限制直接淘汰一类链；ret2csu 是 64 位无 pop rdi 场景的必备单元，缺口显式记录。
+
+→ `versions/v034_more_real.src`，`experiments/EXP-0034/`，`laws/LAW-0055.md`
