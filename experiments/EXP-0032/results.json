@@ -1,9 +1,9 @@
 {
   "summary": {
-    "cases": 5,
-    "solved": 2,
+    "cases": 7,
+    "solved": 5,
     "refused": 1,
-    "unsupported": 2,
+    "unsupported": 1,
     "failed": 0
   },
   "cases": [
@@ -42,12 +42,12 @@
           "source": "call-graph-dead-output"
         }
       ],
-      "solved": true,
-      "attempts": 5,
+      "mode": "libc-call",
       "offset": 112,
+      "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 642.3
+      "elapsed_ms": 485.2
     },
     {
       "id": "ret2libc1",
@@ -83,12 +83,12 @@
           "source": "call-graph-dead-output"
         }
       ],
-      "solved": true,
-      "attempts": 5,
+      "mode": "libc-call",
       "offset": 112,
+      "attempts": 5,
       "verdict": "solved",
       "reason": null,
-      "elapsed_ms": 330.9
+      "elapsed_ms": 326.6
     },
     {
       "id": "rop",
@@ -107,15 +107,23 @@
       ],
       "chains": [
         {
+          "id": "syscall-execve",
+          "status": "needs-execution",
+          "reason": "无 system；需要 execve gadget，执行前确认"
+        },
+        {
           "id": "pwn-ret2win",
           "status": "blocked",
           "reason": "win_not_found"
         }
       ],
       "win_candidates": [],
-      "verdict": "unsupported",
-      "reason": "no_chain_for_this_class",
-      "elapsed_ms": 464.1
+      "mode": "syscall-execve",
+      "offset": 112,
+      "attempts": 5,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 930.4
     },
     {
       "id": "contacts",
@@ -134,11 +142,11 @@
       "win_candidates": [],
       "verdict": "refused",
       "reason": "canary_present",
-      "elapsed_ms": 5.0
+      "elapsed_ms": 5.5
     },
     {
       "id": "pwn3",
-      "note": "格式化字符串",
+      "note": "格式化字符串（题目特有口令逻辑）",
       "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\pwn3",
       "bits": 32,
       "pie": false,
@@ -154,8 +162,8 @@
       "chains": [
         {
           "id": "format-string",
-          "status": "needs-leak-chain",
-          "reason": "需要泄漏链（栈偏移 → 读 → 写），当前单元库未实现"
+          "status": "needs-execution",
+          "reason": "需要先确定格式串偏移与写入目标，再执行验证"
         },
         {
           "id": "pwn-ret2win",
@@ -165,8 +173,62 @@
       ],
       "win_candidates": [],
       "verdict": "unsupported",
-      "reason": "needs_leak_chain",
-      "elapsed_ms": 5.4
+      "reason": "challenge_specific_logic",
+      "elapsed_ms": 5.6
+    },
+    {
+      "id": "leakmemory",
+      "note": "格式化字符串泄漏",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\leakmemory",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "printf"
+      ],
+      "entries": [],
+      "chains": [],
+      "win_candidates": [
+        {
+          "address": 134513781,
+          "symbol": null,
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "mode": "fmtstr-leak",
+      "offset": 4,
+      "leaked": 8,
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 27.9
+    },
+    {
+      "id": "overwrite",
+      "note": "格式化字符串写 c=16",
+      "binary": "D:\\SecKnow\\experiments\\EXP-0032\\real\\overwrite",
+      "bits": 32,
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "imports": [
+        "printf"
+      ],
+      "entries": [],
+      "chains": [],
+      "win_candidates": [
+        {
+          "address": 134513813,
+          "symbol": null,
+          "source": "call-graph-dead-output"
+        }
+      ],
+      "mode": "fmtstr-write",
+      "offset": 6,
+      "address": "0xffffd1cc",
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 29.2
     }
   ]
 }

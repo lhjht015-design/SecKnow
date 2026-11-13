@@ -133,3 +133,43 @@ def test_binary_profile_offers_libc_call_chain() -> None:
     assert chains[0].chain_id == "libc-call"
     assert chains[0].status == "needs-execution"
     assert any(step.unit == "string" and "/bin/sh" in step.detail for step in chains[0].steps)
+
+
+def test_binary_profile_offers_syscall_chain_without_system() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"gets"},
+        symbols={},
+        plt={},
+        bits=32,
+        strings={"/bin/sh": [0x80BE408]},
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "syscall-execve"
+    assert chains[0].status == "needs-execution"
+
+
+def test_format_string_chain_requires_execution() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=False,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"printf"},
+        symbols={},
+        plt={},
+        bits=32,
+        printf_entry=0x80486BA,
+    )
+
+    chains = build_chains(["format_string"], profile)
+
+    assert chains[0].status == "needs-execution"
+    assert any(step.unit == "fmt_offset" for step in chains[0].steps)

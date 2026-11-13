@@ -36,6 +36,10 @@ def build_chains(
             libc = _libc_call(profile)
             if libc is not None:
                 chains.append(libc)
+            else:
+                syscall_chain = _syscall_execve(profile)
+                if syscall_chain is not None:
+                    chains.append(syscall_chain)
         if category == "command_injection":
             chains.append(_command_injection(profile))
         elif category == "format_string":
@@ -74,6 +78,24 @@ def _libc_call(profile: BinaryProfile) -> Chain | None:
                       f"/bin/sh @ {hex(shell[0])}"),
             ChainStep("system_call", "调用 system", "requires-execution",
                       f"system @ {hex(plt['system'])}；按 ABI 构造返回地址与参数"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标二进制；请在靶场环境复核"),
+        ))
+
+
+def _syscall_execve(profile: BinaryProfile) -> Chain | None:
+    shell = profile.strings.get("/bin/sh") or profile.strings.get("/bin/bash")
+    if not shell or "system" in profile.plt_names:
+        return None
+    return Chain(
+        "syscall-execve", "execve('/bin/sh', 0, 0) 系统调用", "unsafe_copy",
+        "needs-execution", "无 system；需要 execve gadget，执行前确认",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("string", "字符串定位", "ok", f"/bin/sh @ {hex(shell[0])}"),
+            ChainStep("execve_chain", "构造 execve 链", "requires-execution",
+                      "按位数选择 pop 寄存器 gadget + int 0x80 / syscall"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标二进制；请在靶场环境复核"),
         ))
@@ -168,11 +190,15 @@ def _format_string(profile: BinaryProfile | None) -> Chain:
         detail = f"非字面量 printf 调用 @ {hex(profile.printf_entry)}"
     return Chain(
         "format-string", "格式化字符串 → 泄漏 / 覆写", "format_string",
-        "needs-leak-chain", "需要泄漏链（栈偏移 → 读 → 写），当前单元库未实现",
+        "needs-execution", "需要先确定格式串偏移与写入目标，再执行验证",
         (
             ChainStep("entry", "入口确认", "ok", detail),
-            ChainStep("leak_chain", "泄漏链", "unknown", "未实现"),
-            ChainStep("overwrite", "覆写 / 执行", "unknown", "未实现"),
+            ChainStep("fmt_offset", "偏移探测", "requires-execution",
+                      "发送标记串定位参数位置"),
+            ChainStep("leak_or_write", "泄漏 / 覆写", "requires-execution",
+                      "按偏移构造 %s / %n 载荷"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标程序；请在靶场环境复核"),
         ))
 
 

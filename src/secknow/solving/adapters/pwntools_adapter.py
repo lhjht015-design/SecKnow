@@ -150,6 +150,31 @@ class PwntoolsWorker:
     def version(self) -> str | None:
         return self._version
 
+    def execve_chain(self, binary: str | Path, shell: int, offset: int) -> dict[str, Any]:
+        return self._request("execve_chain", path=_wsl_path(binary),
+                             shell=shell, offset=offset)
+
+    def fmtstr_offset(self, binary: str | Path, timeout: float = 3.0) -> dict[str, Any]:
+        return self._request("fmtstr", path=_wsl_path(binary), mode="offset",
+                             timeout=timeout)
+
+    def fmtstr_leak(self, binary: str | Path, payload: bytes,
+                    timeout: float = 3.0) -> dict[str, Any]:
+        return self._request("fmtstr", path=_wsl_path(binary), mode="leak",
+                             payload=payload.hex(), timeout=timeout)
+
+    def fmtstr_write(self, binary: str | Path, offset: int, writes: dict[int, int],
+                     timeout: float = 3.0, write_size: str = "byte") -> dict[str, Any]:
+        return self._request("fmtstr", path=_wsl_path(binary), mode="write",
+                             offset=offset,
+                             writes={str(key): value for key, value in writes.items()},
+                             timeout=timeout, write_size=write_size)
+
+    def fmtstr_auto(self, binary: str | Path, offset: int, value: int = 16,
+                    address: int | None = None, timeout: float = 3.0) -> dict[str, Any]:
+        return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
+                             value=value, address=address, timeout=timeout)
+
     def gadgets(self, binary: str | Path) -> dict[str, Any]:
         return self._request("gadgets", path=_wsl_path(binary))
 

@@ -1757,3 +1757,30 @@ worker 初始化约 0.3 s，一次性成本。
 并新增 `libc-call` 链：真实 ret2text 没有 win，正确单元是调用 `system('/bin/sh')`。
 
 → `versions/v032_real_challenges.src`，`experiments/EXP-0032/`，`laws/LAW-0050.md`
+
+## 2026-11-13 — syscall 与格式化字符串单元（v032 扩展）
+
+**做了什么**：补两类真实赛题原语，并把真题集扩到 7 道。
+
+- **syscall-execve**：无 system 时，按位数选 gadget 构造 `execve("/bin/sh",0,0)`；
+  bamboofox ret2syscall 真拿到 shell（偏移 112）。
+- **format-string**：偏移探测（`AAAA.%p...` → 0x41414141）→ 泄漏 / `%n` 写入；
+  目标地址必须在同一进程内读取（ASLR）。
+
+**真题回归**（ctf-wiki，全 32 位）：
+
+| 题 | 结果 |
+| --- | --- |
+| ret2text / ret2libc1 | ✓ |
+| ret2syscall | ✓ syscall 链 |
+| leakmemory | ✓ 泄漏 8 个地址 |
+| overwrite | ✓ 写入 c=16（modified c.） |
+| contacts | 拒绝（canary + 多阶段堆布局） |
+| pwn3 | 不支持（题目特有口令变换） |
+
+连跑 3 次一致：解 5/7、拒 1、不支持 1。
+
+**结论（LAW-0051）**：新增单元按原语拆分（偏移 / 泄漏 / 写 / syscall），
+由链选择器组合；剩余缺口是多阶段布局与题目特有逻辑。
+
+→ `versions/v032_real_challenges.src`，`experiments/EXP-0032/report.md`，`laws/LAW-0051.md`

