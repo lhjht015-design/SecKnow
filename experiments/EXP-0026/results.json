@@ -1,0 +1,262 @@
+{
+  "summary": {
+    "positive_total": 3,
+    "positive_solved": 3,
+    "negative_total": 2,
+    "negative_correctly_refused": 2,
+    "detected_entries": 4,
+    "elapsed_ms": 4639.1
+  },
+  "cases": [
+    {
+      "id": "C1",
+      "kind": "overflow",
+      "note": "gets 栈溢出 + 后门读 flag",
+      "negative": false,
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "line": 15,
+          "text": "gets(buf);",
+          "technique": "栈溢出 / 无边界拷贝",
+          "confidence": "high"
+        }
+      ],
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fno-stack-protector",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": " 15 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccXOPiUO.o: in function `main':\nc1_overflow.c:(.text+0x1d6): warning: the `gets' function is dangerous and should not be used.",
+        "elapsed_ms": 1030.5
+      },
+      "solved": true,
+      "refused": false,
+      "flag": "flag{overflow_211266aeaf}",
+      "offset": 72,
+      "attempts": 8,
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "line": 15,
+          "text": "gets(buf);"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": false,
+          "nx": true,
+          "relro": "partial"
+        },
+        {
+          "unit": "find_win",
+          "result": "ok",
+          "symbol": "grant_g4nwac",
+          "addr": "0x4011f6"
+        },
+        {
+          "unit": "find_gadgets",
+          "result": "ok",
+          "ret": true
+        },
+        {
+          "unit": "offset_candidates",
+          "result": "ok",
+          "hints": [
+            280,
+            288,
+            72,
+            80
+          ],
+          "count": 28
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "offset": 72,
+          "attempts": 8,
+          "flag": "flag{overflow_211266aeaf}"
+        }
+      ],
+      "elapsed_ms": 1346.5,
+      "verdict": "solved"
+    },
+    {
+      "id": "C2",
+      "kind": "blackbox",
+      "note": "置换 + 常量异或的校验器",
+      "negative": false,
+      "entries": [
+        {
+          "category": "blackbox_check",
+          "line": 11,
+          "text": "if (read(0, in, 16) != 16) return 1;",
+          "technique": "黑盒变换 / 校验器",
+          "confidence": "medium"
+        }
+      ],
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000",
+        "elapsed_ms": 402.6
+      },
+      "solved": true,
+      "refused": false,
+      "flag": "flag{blackbox_e3df9fd130}",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "blackbox_check",
+          "line": 11,
+          "text": "if (read(0, in, 16) != 16) return 1;"
+        },
+        {
+          "unit": "probe_determinism",
+          "result": "ok"
+        },
+        {
+          "unit": "classify",
+          "result": "ok",
+          "label": "permutation"
+        },
+        {
+          "unit": "invert_permutation",
+          "result": "ok",
+          "probes": 18
+        },
+        {
+          "unit": "verify_execute",
+          "result": "solved",
+          "flag": "flag{blackbox_e3df9fd130}"
+        }
+      ],
+      "elapsed_ms": 3119.8,
+      "verdict": "solved"
+    },
+    {
+      "id": "C3",
+      "kind": "cmdinj",
+      "note": "os.system 拼接用户输入",
+      "negative": false,
+      "entries": [
+        {
+          "category": "command_injection",
+          "line": 5,
+          "text": "os.system(\"echo pinging \" + host)",
+          "technique": "命令注入",
+          "confidence": "high"
+        }
+      ],
+      "compile": null,
+      "solved": true,
+      "refused": false,
+      "flag": "flag{cmdinj_fcd0eadcf2}",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "command_injection",
+          "line": 5,
+          "text": "os.system(\"echo pinging \" + host)"
+        },
+        {
+          "unit": "craft_payload",
+          "result": "ok",
+          "payload": "127.0.0.1; cat flag3.txt"
+        },
+        {
+          "unit": "execute",
+          "result": "solved",
+          "rc": 0
+        }
+      ],
+      "elapsed_ms": 169.5,
+      "verdict": "solved"
+    },
+    {
+      "id": "N1",
+      "kind": "safe",
+      "note": "边界检查 + 字面量格式串",
+      "negative": true,
+      "entries": [],
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": "w\u0000s\u0000l\u0000:\u0000 \u0000�hKm0R \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006tM�n\f�FO*g\\��P0R \u0000W\u0000S\u0000L\u0000\u00020N\u0000A\u0000T\u0000 \u0000!j\u000f_\u000bN�v \u0000W\u0000S\u0000L\u0000 \u0000\rN/e\u0001c \u0000l\u0000o\u0000c\u0000a\u0000l\u0000h\u0000o\u0000s\u0000t\u0000 \u0000�N\u0006t\u00020\r\u0000\n\u0000",
+        "elapsed_ms": 400.5
+      },
+      "solved": false,
+      "refused": true,
+      "reason": "no_entry",
+      "elapsed_ms": 0.0,
+      "verdict": "refused"
+    },
+    {
+      "id": "N2",
+      "kind": "overflow",
+      "note": "溢出入口存在，但 canary 必须拒绝",
+      "negative": true,
+      "entries": [
+        {
+          "category": "unsafe_copy",
+          "line": 15,
+          "text": "gets(buf);",
+          "technique": "栈溢出 / 无边界拷贝",
+          "confidence": "high"
+        }
+      ],
+      "compile": {
+        "unit": "compile",
+        "result": "ok",
+        "flags": [
+          "-fstack-protector-all",
+          "-no-pie",
+          "-O0"
+        ],
+        "rc": 0,
+        "stderr": " 15 |     gets(buf);\n      |     ^~~~\n      |     fgets\n/usr/bin/ld: /tmp/ccqVYWGz.o: in function `main':\nc1_overflow.c:(.text+0x1fd): warning: the `gets' function is dangerous and should not be used.",
+        "elapsed_ms": 387.9
+      },
+      "solved": false,
+      "refused": true,
+      "reason": "canary_present",
+      "steps": [
+        {
+          "unit": "entry",
+          "result": "unsafe_copy",
+          "line": 15,
+          "text": "gets(buf);"
+        },
+        {
+          "unit": "elf_info",
+          "result": "ok",
+          "pie": false,
+          "canary": true,
+          "nx": true,
+          "relro": "partial"
+        },
+        {
+          "unit": "protection_gate",
+          "result": "refuse",
+          "reason": "canary_present"
+        }
+      ],
+      "elapsed_ms": 3.3,
+      "verdict": "refused"
+    }
+  ]
+}

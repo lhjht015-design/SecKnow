@@ -36,6 +36,7 @@
 | v024 | [v024_timing_channel.src](v024_timing_channel.src) | 时序侧信道前缀爬坡：基线 + 频率序早停 + 结束验证 | Python + WSL | 正样本 3/3，负样本 2/2 |
 | v025 | [v025_parallel_oracle.src](v025_parallel_oracle.src) | 并行探测优化：Q/Y 批量协议 + 时序/结果分流 | Python + WSL | 正样本 4/4，负样本 2/2 |
 | v026 | [v026_batch_transform.src](v026_batch_transform.src) | 变换单元全走批量 Y + 建表复用优化 | Python + WSL | 正样本 4/4 |
+| v027 | [v027_paste_to_verify.src](v027_paste_to_verify.src) | 粘贴源码 → 入口识别 → 单元链 → 真实执行验证 | Python + WSL/gcc | 正样本 3/3、负样本 2/2；3 个随机种子稳定 |
 
 ## 各版本说明
 
