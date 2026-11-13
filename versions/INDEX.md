@@ -45,6 +45,7 @@
 | v033 | [v033_angr.src](v033_angr.src) | angr 符号执行接入（stdin/argv、地址/输出判据） | Python + WSL + angr | 真实逆向题 2/4（ais3、r100 秒级） |
 | v034 | [v034_more_real.src](v034_more_real.src) | 第三轮真实赛题（盲 fmtstr / fgets 泄漏 / ret2csu） | Python + WSL + pwntools | 解 3/3；fgets 泄漏与 ret2csu 已补 |
 | v035 | [v035_deep_real.src](v035_deep_real.src) | 第四轮真题：盲泄漏 / SROP / partial / dlresolve | Python + WSL + pwntools | 解 2/4（goodluck、srop）；partial/dlresolve 边界 |
+| v036 | [v036_partial_overwrite.src](v036_partial_overwrite.src) | partial overwrite（PIE 低字节覆盖） | Python + WSL + pwntools | 真实题 2/3（pwn2、vuln-chat2.0） |
 
 ## 各版本说明
 

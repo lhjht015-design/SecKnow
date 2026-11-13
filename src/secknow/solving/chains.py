@@ -33,6 +33,10 @@ def build_chains(
     chains: list[Chain] = []
     for category in categories:
         if category == "unsafe_copy" and profile is not None:
+            partial = _partial_overwrite(profile)
+            if partial is not None:
+                chains.append(partial)
+                continue
             libc = _libc_call(profile)
             if libc is not None:
                 chains.append(libc)
@@ -213,6 +217,26 @@ def _ret2libc_leak(profile: BinaryProfile) -> Chain | None:
                       f"返回 {symbol}@{hex(plt[symbol])} 打印 GOT 表项，再返回 main"),
             ChainStep("stage2", "二次利用", "requires-execution",
                       "按泄漏地址计算 system 与 /bin/sh，第二次溢出调用"),
+            ChainStep("execute", "执行验证", "requires-execution",
+                      "产品内不执行目标程序；请在靶场环境复核"),
+        ))
+
+
+def _partial_overwrite(profile: BinaryProfile) -> Chain | None:
+    if not profile.is_pie or not profile.win_candidates:
+        return None
+    target = profile.win_candidates[0]
+    return Chain(
+        "partial-overwrite", "PIE：半覆盖返回地址到目标函数", "unsafe_copy",
+        "needs-execution",
+        "只改写返回地址低位字节，保留 PIE 高位；目标函数的低字节需已知",
+        (
+            ChainStep("entry", "入口确认", "ok", "导入表中存在无边界拷贝函数"),
+            _protection_step(profile),
+            ChainStep("target", "目标函数", "ok",
+                      f"{target.get('symbol') or hex(target['address'])}"),
+            ChainStep("partial", "半覆盖", "requires-execution",
+                      "payload = 填充 + 目标地址低字节（可能需按 1/16 重试）"),
             ChainStep("execute", "执行验证", "requires-execution",
                       "产品内不执行目标程序；请在靶场环境复核"),
         ))

@@ -1908,3 +1908,17 @@ partial overwrite 与 ret2dlresolve 仍是明确边界。
 
 → `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
 `versions/v035_deep_real.src`，`laws/LAW-0058.md`
+
+## 2026-11-13 — partial overwrite 单元（v036，2/3）
+
+- pwn2（TAMUctf 2019，32 位 PIE）：偏移 0x1e + 单字节 0xd8，命中 printFlag；
+- vuln-chat2.0（TUCTF 2017）：用户名后偏移 0x2b + 0x72，命中 printFlag；
+- partial-gets（XNUCA 2018）：镜像 `.text` 从 0x400420 开始，
+  参考落点 0x400216 不存在 → 镜像不匹配，标不支持；
+- 产品链：PIE + 后门候选 → partial-overwrite（needs-execution）优先。
+
+结果：EXP-0036 **2/3**（2 次一致）。教训：镜像地址要先对齐，
+不能把“参考脚本跑不通”记成能力缺失。
+
+→ `tools/pwn_worker.src`，`src/secknow/solving/{adapters,chains}.py`，
+`versions/v036_partial_overwrite.src`，`laws/LAW-0059.md`

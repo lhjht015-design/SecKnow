@@ -195,6 +195,18 @@ class PwntoolsWorker:
         return self._request("fmtstr_auto", path=_wsl_path(binary), offset=offset,
                              value=value, address=address, timeout=timeout)
 
+    def partial_overwrite(self, binary: str | Path, offset: int, patch: bytes,
+                          prompt: bytes | None = None, attempts: int = 1,
+                          newline: bool = True, marker: str = "PWNED",
+                          pre_prompt: bytes | None = None,
+                          pre_send: bytes | None = None) -> dict[str, Any]:
+        return self._request("partial_overwrite", path=_wsl_path(binary),
+                             offset=offset, patch=patch.hex(),
+                             prompt=prompt.hex() if prompt else None,
+                             attempts=attempts, newline=newline, marker=marker,
+                             pre_prompt=pre_prompt.hex() if pre_prompt else None,
+                             pre_send=pre_send.hex() if pre_send else None)
+
     def srop(self, binary: str | Path) -> dict[str, Any]:
         return self._request("srop", path=_wsl_path(binary))
 
